@@ -1,0 +1,102 @@
+.agents {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.agents-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.agents-header h2 {
+  font-size: 28px;
+  color: #333;
+}
+
+.refresh-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.refresh-btn:hover {
+  transform: scale(1.05);
+}
+
+.agents-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.agents-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.agents-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  position: sticky;
+  top: 0;
+}
+
+.agents-table th {
+  padding: 15px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agents-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  transition: background-color 0.2s ease;
+}
+
+.agents-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.agents-table td {
+  padding: 12px 15px;
+}
+
+.agents-table td.percentage {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.agents-table .empty-state {
+  text-align: center;
+  color: #999;
+  padding: 40px 15px !important;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-size: 16px;
+}
+
+.error {
+  margin: 20px;
+  background-color: #fee;
+  border-left: 4px solid #c33;
+  padding: 15px;
+  border-radius: 4px;
+  color: #c33;
+  font-size: 14px;
+}

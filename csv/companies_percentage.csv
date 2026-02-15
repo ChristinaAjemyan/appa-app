@@ -1,0 +1,3 @@
+id,company,agent_code_in,agent_code_not,region_in,region_not,bm_min,bm_max,bm_exact,brand_in,period,hp_min,hp_max,percentage
+1,Nairi,NULL,NULL,YR,NULL,NULL,NULL,10,NULL,Long,NULL,NULL,0
+2,Nairi,NULL,"768-101,768-105,768-106,768-125,768-181,768-186,768-187",NULL,NULL,10,17,NULL,"BMW,OPEL,NISSAN,MERCEDES-BENZ",Long,NULL,NULL,0

@@ -1,0 +1,49 @@
+.settings {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.settings-header {
+  margin-bottom: 20px;
+}
+
+.settings-header h2 {
+  font-size: 28px;
+  color: #333;
+  margin: 0;
+}
+
+.submenu-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 20px;
+}
+
+.submenu-tab {
+  padding: 12px 24px;
+  color: #666;
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  position: relative;
+  margin-bottom: -2px;
+}
+
+.submenu-tab:hover {
+  color: #333;
+  background-color: #f5f5f5;
+}
+
+.submenu-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.submenu-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
