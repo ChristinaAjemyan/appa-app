@@ -100,7 +100,13 @@ async function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT,
       name TEXT,
-      phone_number TEXT
+      phone_number TEXT,
+      NAIRI TEXT,
+      REGO TEXT,
+      ARMENIA TEXT,
+      SIL TEXT,
+      INGO TEXT,
+      LIGA TEXT
     )
   `);
 

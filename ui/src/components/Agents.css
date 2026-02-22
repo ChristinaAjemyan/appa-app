@@ -15,7 +15,13 @@
   color: #333;
 }
 
-.refresh-btn {
+.header-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.refresh-btn,
+.add-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
@@ -26,7 +32,8 @@
   transition: transform 0.2s ease;
 }
 
-.refresh-btn:hover {
+.refresh-btn:hover,
+.add-btn:hover {
   transform: scale(1.05);
 }
 
@@ -76,6 +83,39 @@
 .agents-table td.percentage {
   font-weight: 600;
   color: #667eea;
+}
+
+.agents-table td.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.btn-edit,
+.btn-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-edit {
+  color: #667eea;
+}
+
+.btn-edit:hover {
+  background-color: #e8e8ff;
+}
+
+.btn-delete {
+  color: #ff6b6b;
+}
+
+.btn-delete:hover {
+  background-color: #ffe8e8;
 }
 
 .agents-table .empty-state {
