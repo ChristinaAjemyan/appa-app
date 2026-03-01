@@ -1,152 +1,48 @@
-const sqlite3 = require('sqlite3');
-const sqlite = require('sqlite');
-const path = require('path');
+const { Sequelize } = require('sequelize');
 
-const dbPath = path.join(__dirname, '../database.db');
-
-let db = null;
-
-// Enable verbose logging for sqlite3
-// Uncomment the line below to see all SQL statements
-// sqlite3.verbose();
-
-async function getDatabase() {
-  if (!db) {
-    db = await sqlite.open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    });
-
-    console.log('Connected to SQLite database');
-    
-    // Enable query logging
-    enableQueryLogging(db);
-    
-    await initializeDatabase();
+const sequelize = new Sequelize({
+  dialect: 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  username: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'password',
+  database: process.env.DB_NAME || 'appa',
+  logging: process.env.DB_LOGGING === 'true' ? console.log : false,
+  define: {
+    timestamps: false
   }
-  return db;
-}
+});
+
+const db = {};
+
+// Import models
+db.Agent = require('./models/Agent')(sequelize);
+db.AgentPercentage = require('./models/AgentPercentage')(sequelize);
+db.Company = require('./models/Company')(sequelize);
+db.CompanyPercentage = require('./models/CompanyPercentage')(sequelize);
+db.InsurancePolicy = require('./models/InsurancePolicy')(sequelize);
+db.User = require('./models/User')(sequelize);
+
+db.sequelize = sequelize;
+db.Sequelize = Sequelize;
 
 /**
- * Wraps db.get() and db.run() to log SQL queries
+ * Initialize database connection and sync models
  */
-function enableQueryLogging(dbInstance) {
-  const originalGet = dbInstance.get.bind(dbInstance);
-  const originalRun = dbInstance.run.bind(dbInstance);
-  const originalAll = dbInstance.all.bind(dbInstance);
-  
-  dbInstance.get = function(sql, params, ...args) {
-    console.log('[SQL GET]', sql, params);
-    return originalGet(sql, params, ...args);
-  };
-  
-  dbInstance.run = function(sql, params, ...args) {
-    console.log('[SQL RUN]', sql, params);
-    return originalRun(sql, params, ...args);
-  };
-  
-  dbInstance.all = function(sql, params, ...args) {
-    console.log('[SQL ALL]', sql, params);
-    return originalAll(sql, params, ...args);
-  };
-}
-
-async function initializeDatabase() {
-  const database = await getDatabase();
-
-  // Create agents_percentage table
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS agents_percentage (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company TEXT NOT NULL,
-      agent_code_in TEXT,
-      agent_code_not TEXT,
-      region_in TEXT,
-      region_not TEXT,
-      bm_min INTEGER,
-      bm_max INTEGER,
-      bm_exact INTEGER,
-      brand_in TEXT,
-      hp_min INTEGER,
-      hp_max INTEGER,
-      period TEXT,
-      percentage REAL NOT NULL
-    )
-  `);
-
-  // Create companies_percentage table
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS companies_percentage (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company TEXT NOT NULL,
-      agent_code_in TEXT,
-      agent_code_not TEXT,
-      region_in TEXT,
-      region_not TEXT,
-      bm_min INTEGER,
-      bm_max INTEGER,
-      bm_exact INTEGER,
-      brand_in TEXT,
-      hp_min INTEGER,
-      hp_max INTEGER,
-      period TEXT,
-      percentage REAL NOT NULL
-    )
-  `);
-
-  // Create agents table
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS agents (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT,
-      name TEXT,
-      phone_number TEXT,
-      NAIRI TEXT,
-      REGO TEXT,
-      ARMENIA TEXT,
-      SIL TEXT,
-      INGO TEXT,
-      LIGA TEXT
-    )
-  `);
-
-  // Create insurance_policies table
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS insurance_policies (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company TEXT,
-      agent_company_code TEXT,
-      agent_inner_code TEXT,
-      agent_name TEXT,
-      polis_number TEXT,
-      owner_name TEXT,
-      start_date TEXT,
-      end_date TEXT,
-      region TEXT,
-      phone_number TEXT,
-      bm_class TEXT,
-      car_model TEXT,
-      car_number TEXT,
-      hp TEXT,
-      period TEXT,
-      info TEXT,
-      price REAL,
-      agent_percent REAL,
-      company_percent REAL,
-      agent_income REAL,
-      income REAL
-    )
-  `);
-
-  // Create company table
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS company (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      company_percent REAL,
-      agent_percent REAL
-    )
-  `);
+async function getDatabase() {
+  try {
+    await sequelize.authenticate();
+    console.log('✓ PostgreSQL connection successful');
+    
+    // Sync models with database
+    await sequelize.sync({ alter: true });
+    console.log('✓ Database models synchronized');
+    
+    return db;
+  } catch (err) {
+    console.error('✗ Error connecting to database:', err.message);
+    throw err;
+  }
 }
 
 // Initialize database on module load
@@ -154,5 +50,11 @@ getDatabase().catch(err => {
   console.error('Error initializing database:', err);
 });
 
-module.exports = { getDatabase };
+// Graceful shutdown
+process.on('exit', async () => {
+  await sequelize.close();
+  console.log('Database connection closed');
+});
+
+module.exports = { getDatabase, db, sequelize };
 

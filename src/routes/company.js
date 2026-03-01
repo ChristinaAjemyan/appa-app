@@ -1,13 +1,19 @@
 const express = require('express');
-const { getDatabase } = require('../database');
+const { CompanyService } = require('../services');
 const router = express.Router();
 
 // Get all companies
 router.get('/', async (req, res) => {
   try {
-    const db = await getDatabase();
-    const rows = await db.all('SELECT * FROM company');
-    res.json(rows);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    const { total, companies } = await CompanyService.findAllWithCount({ limit, offset });
+    res.json({
+      data: companies,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -17,14 +23,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const row = await db.get('SELECT * FROM company WHERE id = ?', [id]);
-    
-    if (!row) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    res.json(row);
+    const company = await CompanyService.findById(id);
+    res.json(company);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -40,13 +40,10 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'INSERT INTO company (name, company_percent, agent_percent) VALUES (?, ?, ?)',
-      [name, company_percent, agent_percent]
-    );
-    
-    res.status(201).json({ id: result.lastID, name, company_percent, agent_percent });
+    const company = await CompanyService.create({
+      name, company_percent, agent_percent
+    });
+    res.status(201).json(company);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -58,18 +55,10 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, company_percent, agent_percent } = req.body;
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'UPDATE company SET name = ?, company_percent = ?, agent_percent = ? WHERE id = ?',
-      [name, company_percent, agent_percent, id]
-    );
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    
-    res.json({ id, name, company_percent, agent_percent });
+    const company = await CompanyService.update(id, {
+      name, company_percent, agent_percent
+    });
+    res.json(company);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -79,17 +68,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const result = await db.run('DELETE FROM company WHERE id = ?', [id]);
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    
-    res.json({ message: 'Company deleted successfully' });
+    const result = await CompanyService.delete(id);
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('not found') ? 404 : 500).json({ error: err.message });
   }
 });
 

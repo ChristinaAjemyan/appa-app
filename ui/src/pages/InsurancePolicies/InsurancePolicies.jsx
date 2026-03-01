@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import InsurancePolicyForm from '../../components/InsurancePolicyForm'
 import './InsurancePolicies.css'
 
 function InsurancePolicies() {
@@ -27,6 +28,9 @@ function InsurancePolicies() {
     minPrice: '',
     maxPrice: ''
   })
+
+  // Form state
+  const [showForm, setShowForm] = useState(false)
 
   useEffect(() => {
     fetchPolicies()
@@ -94,8 +98,24 @@ function InsurancePolicies() {
     <div className="insurance-policies">
       <div className="page-header">
         <h2>Պայմանագրեր</h2>
-        <button onClick={fetchPolicies} className="refresh-btn">🔄 Թարմացնել</button>
+        <div className="header-buttons">
+          <button onClick={fetchPolicies} className="refresh-btn">🔄 Թարմացնել</button>
+          <button 
+            onClick={() => setShowForm(!showForm)} 
+            className="add-policy-btn"
+          >
+            {showForm ? '✕ Փակել' : '➕ Ավելացնել նոր'}
+          </button>
+        </div>
       </div>
+
+      {/* Add Policy Form */}
+      {showForm && (
+        <InsurancePolicyForm 
+          onClose={() => setShowForm(false)}
+          onSuccess={fetchPolicies}
+        />
+      )}
 
       {/* Filters */}
       <div className="filters-section">

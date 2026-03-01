@@ -1,35 +1,35 @@
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
-const { getDatabase } = require('./src/database');
+const { AgentService, AgentPercentageService, CompanyService, CompanyPercentageService } = require('./src/services');
 
 const csvDir = path.join(__dirname, 'csv');
 
-// Map of CSV filenames to their corresponding database tables
+// Map of CSV filenames to their corresponding services
 const csvMapping = {
   'agents.csv': {
-    table: 'agents',
-    idColumn: 'id'
+    service: AgentService,
+    name: 'agents'
   },
   'agents_percentage.csv': {
-    table: 'agents_percentage',
-    idColumn: 'id'
+    service: AgentPercentageService,
+    name: 'agents_percentage'
   },
   'companies_percentage.csv': {
-    table: 'companies_percentage',
-    idColumn: 'id'
+    service: CompanyPercentageService,
+    name: 'companies_percentage'
   },
   'companies.csv': {
-    table: 'company',
-    idColumn: 'id'
+    service: CompanyService,
+    name: 'companies'
   },
 };
 
 /**
  * Import CSV file into database
- * Updates existing records with same id, inserts new ones
+ * Inserts all records using the appropriate service
  */
-async function importCsvFile(filename, tableConfig) {
+async function importCsvFile(filename, config) {
   const filePath = path.join(csvDir, filename);
   
   if (!fs.existsSync(filePath)) {
@@ -47,11 +47,10 @@ async function importCsvFile(filename, tableConfig) {
       })
       .on('end', async () => {
         try {
-          const stats = await processRecords(records, tableConfig);
+          const stats = await processRecords(records, config);
           console.log(`✅ ${filename} import complete:`);
           console.log(`   - Processed: ${stats.processed}`);
           console.log(`   - Inserted: ${stats.inserted}`);
-          console.log(`   - Updated: ${stats.updated}`);
           console.log(`   - Errors: ${stats.errors}`);
           resolve();
         } catch (err) {
@@ -66,19 +65,16 @@ async function importCsvFile(filename, tableConfig) {
 }
 
 /**
- * Process records and insert/update them
+ * Process records and insert them using the service
  */
-async function processRecords(records, tableConfig) {
+async function processRecords(records, config) {
   let processed = 0;
   let inserted = 0;
-  let updated = 0;
   let errors = 0;
 
   if (records.length === 0) {
-    return { processed: 0, inserted: 0, updated: 0, errors: 0 };
+    return { processed: 0, inserted: 0, errors: 0 };
   }
-
-  const db = await getDatabase();
 
   for (const record of records) {
     // Convert NULL strings to actual null
@@ -87,75 +83,18 @@ async function processRecords(records, tableConfig) {
       cleanRecord[key] = value === 'NULL' ? null : value;
     }
 
-    const recordId = cleanRecord[tableConfig.idColumn];
-
     try {
-      // Check if record exists
-      const existingRecord = await db.get(
-        `SELECT id FROM ${tableConfig.table} WHERE ${tableConfig.idColumn} = ?`,
-        [recordId]
-      );
-
-      if (existingRecord) {
-        // Update existing record
-        const success = await updateRecord(db, tableConfig.table, cleanRecord, tableConfig.idColumn);
-        if (success) updated++;
-        else errors++;
-      } else {
-        // Insert new record
-        const success = await insertRecord(db, tableConfig.table, cleanRecord);
-        if (success) inserted++;
-        else errors++;
-      }
+      await config.service.upsert(cleanRecord, cleanRecord);
+      inserted++;
     } catch (err) {
-      console.error(`Error processing record in ${tableConfig.table}:`, err.message);
+      console.error(`Error processing record in ${config.name}:`, err);
       errors++;
     }
     
     processed++;
   }
 
-  return { processed, inserted, updated, errors };
-}
-
-/**
- * Insert a new record
- */
-async function insertRecord(db, table, record) {
-  const columns = Object.keys(record);
-  const placeholders = columns.map(() => '?').join(', ');
-  const values = columns.map(col => record[col]);
-
-  const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
-
-  try {
-    await db.run(sql, values);
-    return true;
-  } catch (err) {
-    console.error(`Error inserting into ${table}:`, err.message);
-    return false;
-  }
-}
-
-/**
- * Update an existing record
- */
-async function updateRecord(db, table, record, idColumn) {
-  const recordId = record[idColumn];
-  const columns = Object.keys(record).filter(col => col !== idColumn);
-  const setClause = columns.map(col => `${col} = ?`).join(', ');
-  const values = columns.map(col => record[col]);
-  values.push(recordId);
-
-  const sql = `UPDATE ${table} SET ${setClause} WHERE ${idColumn} = ?`;
-
-  try {
-    await db.run(sql, values);
-    return true;
-  } catch (err) {
-    console.error(`Error updating ${table}:`, err.message);
-    return false;
-  }
+  return { processed, inserted, errors };
 }
 
 /**
@@ -165,8 +104,8 @@ async function runImports() {
   console.log('🚀 Starting CSV import process...\n');
 
   try {
-    for (const [filename, tableConfig] of Object.entries(csvMapping)) {
-      await importCsvFile(filename, tableConfig);
+    for (const [filename, config] of Object.entries(csvMapping)) {
+      await importCsvFile(filename, config);
     }
     console.log('\n✨ All imports completed successfully!');
     process.exit(0);

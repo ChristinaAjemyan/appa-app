@@ -1,13 +1,19 @@
 const express = require('express');
-const { getDatabase } = require('../database');
+const { AgentService } = require('../services');
 const router = express.Router();
 
 // Get all agents
 router.get('/', async (req, res) => {
   try {
-    const db = await getDatabase();
-    const rows = await db.all('SELECT * FROM agents');
-    res.json(rows);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const offset = (page - 1) * limit;
+    console.log(`Fetching agents - Page: ${page}, Limit: ${limit}, Offset: ${offset}`);
+    const { total, agents } = await AgentService.findAllWithCount({ limit, offset });
+    res.json({
+      data: agents,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -17,14 +23,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const row = await db.get('SELECT * FROM agents WHERE id = ?', [id]);
-    
-    if (!row) {
-      res.status(404).json({ error: 'Agent not found' });
-      return;
-    }
-    res.json(row);
+    const agent = await AgentService.findById(id);
+    res.json(agent);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -40,13 +40,10 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'INSERT INTO agents (code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA]
-    );
-    
-    res.status(201).json({ id: result.lastID, code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA });
+    const agent = await AgentService.create({
+      code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA
+    });
+    res.status(201).json(agent);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -58,18 +55,10 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA } = req.body;
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'UPDATE agents SET code = ?, name = ?, phone_number = ?, NAIRI = ?, REGO = ?, ARMENIA = ?, SIL = ?, INGO = ?, LIGA = ? WHERE id = ?',
-      [code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA, id]
-    );
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Agent not found' });
-      return;
-    }
-    
-    res.json({ id, code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA });
+    const agent = await AgentService.update(id, {
+      code, name, phone_number, NAIRI, REGO, ARMENIA, SIL, INGO, LIGA
+    });
+    res.json(agent);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -79,17 +68,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const result = await db.run('DELETE FROM agents WHERE id = ?', [id]);
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Agent not found' });
-      return;
-    }
-    
-    res.json({ message: 'Agent deleted successfully' });
+    const result = await AgentService.delete(id);
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('not found') ? 404 : 500).json({ error: err.message });
   }
 });
 

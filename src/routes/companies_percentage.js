@@ -1,13 +1,19 @@
 const express = require('express');
-const { getDatabase } = require('../database');
+const { CompanyPercentageService } = require('../services');
 const router = express.Router();
 
 // Get all companies percentage records
 router.get('/', async (req, res) => {
   try {
-    const db = await getDatabase();
-    const rows = await db.all('SELECT * FROM companies_percentage');
-    res.json(rows);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    const { total, records } = await CompanyPercentageService.findAllWithCount({ limit, offset });
+    res.json({
+      data: records,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -17,14 +23,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const row = await db.get('SELECT * FROM companies_percentage WHERE id = ?', [id]);
-    
-    if (!row) {
-      res.status(404).json({ error: 'Record not found' });
-      return;
-    }
-    res.json(row);
+    const record = await CompanyPercentageService.findById(id);
+    res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -40,13 +40,11 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'INSERT INTO companies_percentage (company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage]
-    );
-    
-    res.status(201).json({ id: result.lastID, company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage });
+    const record = await CompanyPercentageService.create({
+      company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact,
+      brand_in, hp_min, hp_max, period, percentage
+    });
+    res.status(201).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -58,18 +56,11 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage } = req.body;
 
-    const db = await getDatabase();
-    const result = await db.run(
-      'UPDATE companies_percentage SET company = ?, agent_code_in = ?, agent_code_not = ?, region_in = ?, region_not = ?, bm_min = ?, bm_max = ?, bm_exact = ?, brand_in = ?, hp_min = ?, hp_max = ?, period = ?, percentage = ? WHERE id = ?',
-      [company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage, id]
-    );
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Record not found' });
-      return;
-    }
-    
-    res.json({ id, company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact, brand_in, hp_min, hp_max, period, percentage });
+    const record = await CompanyPercentageService.update(id, {
+      company, agent_code_in, agent_code_not, region_in, region_not, bm_min, bm_max, bm_exact,
+      brand_in, hp_min, hp_max, period, percentage
+    });
+    res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -79,17 +70,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await getDatabase();
-    const result = await db.run('DELETE FROM companies_percentage WHERE id = ?', [id]);
-
-    if (result.changes === 0) {
-      res.status(404).json({ error: 'Record not found' });
-      return;
-    }
-    
-    res.json({ message: 'Record deleted successfully' });
+    const result = await CompanyPercentageService.delete(id);
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('not found') ? 404 : 500).json({ error: err.message });
   }
 });
 

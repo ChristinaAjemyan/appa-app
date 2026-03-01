@@ -14,6 +14,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'ui', 'dist')));
 
 // Routes
+app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/agents-percentage', require('./src/routes/agents_percentage'));
 app.use('/api/companies-percentage', require('./src/routes/companies_percentage'));
 app.use('/api/agents', require('./src/routes/agents'));

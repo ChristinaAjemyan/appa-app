@@ -1,25 +1,34 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import './Sidebar.css'
 
 function Sidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [expandedItems, setExpandedItems] = useState({})
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
 
-  const menuItems = [
-    { path: '/', label: 'Հաշվարկ', icon: '📊' },
-    { path: '/agents', label: 'Գործակալներ', icon: '💰' },
-    { path: '/insurance-policies', label: 'Պայմանագրեր', icon: '📋' },
+  // Define all menu items with role restrictions
+  const allMenuItems = [
+    { path: '/', label: 'Հաշվարկ', icon: '📊', roles: ['admin'] },
+    { path: '/agents', label: 'Գործակալներ', icon: '💰', roles: ['admin'] },
+    { path: '/insurance-policies', label: 'Պայմանագրեր', icon: '📋', roles: ['admin', 'employee'] },
     { 
       path: '/settings', 
       label: 'Կարգավորումներ', 
       icon: '⚙️',
+      roles: ['admin'],
       children: [
         { path: '/settings/agents-percentages', label: 'Գործակալների տոկոսներ', icon: '📈' },
         { path: '/settings/companies', label: 'Ընկերություններ', icon: '🏢' }
       ]
     },
   ]
+
+  // Filter menu items based on user role
+  const menuItems = allMenuItems.filter(item => 
+    item.roles.includes(user.role || 'employee')
+  )
 
   const toggleExpand = (path) => {
     setExpandedItems(prev => ({
@@ -29,6 +38,12 @@ function Sidebar() {
   }
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/')
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    navigate('/login')
+  }
 
   return (
     <aside className="sidebar">
@@ -75,6 +90,18 @@ function Sidebar() {
           ))}
         </ul>
       </nav>
+      <div className="sidebar-footer">
+        <div className="user-info">
+          <div className="user-avatar">{user.name?.charAt(0) || 'U'}</div>
+          <div className="user-details">
+            <p className="user-name">{user.name || 'User'}</p>
+            <p className="user-role">{user.role || 'employee'}</p>
+          </div>
+        </div>
+        <button className="logout-button" onClick={handleLogout}>
+          Դուրս գալ
+        </button>
+      </div>
     </aside>
   )
 }

@@ -31,6 +31,28 @@
   transform: scale(1.05);
 }
 
+/* Header Buttons */
+.header-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.add-policy-btn {
+  background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.add-policy-btn:hover {
+  transform: scale(1.05);
+}
+
 /* Filters Section */
 .filters-section {
   background: white;
