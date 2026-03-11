@@ -221,7 +221,7 @@ function InsurancePolicies() {
               <table className="policies-table">
                 <thead>
                   <tr>
-                    <th onClick={() => handleSortChange('id')} className={sortBy === 'id' ? 'sortable active' : 'sortable'}>ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                    {/* <th onClick={() => handleSortChange('id')} className={sortBy === 'id' ? 'sortable active' : 'sortable'}>ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}</th> */}
                     <th onClick={() => handleSortChange('company')} className={sortBy === 'company' ? 'sortable active' : 'sortable'}>Ընկերություն {sortBy === 'company' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSortChange('polis_number')} className={sortBy === 'polis_number' ? 'sortable active' : 'sortable'}>Պոլիս {sortBy === 'polis_number' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSortChange('owner_name')} className={sortBy === 'owner_name' ? 'sortable active' : 'sortable'}>Անուն {sortBy === 'owner_name' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
@@ -231,7 +231,7 @@ function InsurancePolicies() {
                     <th onClick={() => handleSortChange('region')} className={sortBy === 'region' ? 'sortable active' : 'sortable'}>Շրջան {sortBy === 'region' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
                     <th>BM</th>
                     <th>Մոդել</th>
-                    <th>Համարակ.</th>
+                    <th>Համար</th>
                     <th>HP</th>
                     <th>Ժամանակաշրջան</th>
                     <th onClick={() => handleSortChange('price')} className={sortBy === 'price' ? 'sortable active' : 'sortable'}>Գինը {sortBy === 'price' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
@@ -245,7 +245,7 @@ function InsurancePolicies() {
                   {policies.length > 0 ? (
                     policies.map((item) => (
                       <tr key={item.id}>
-                        <td>{item.id}</td>
+                        {/* <td>{item.id}</td> */}
                         <td>{item.company}</td>
                         <td>{item.polis_number}</td>
                         <td>{item.owner_name}</td>

@@ -58,6 +58,24 @@
   cursor: pointer;
 }
 
+.form-input.input-error {
+  border-color: #c62828;
+  background-color: #ffebee;
+}
+
+.form-input.input-error:focus {
+  outline: none;
+  border-color: #c62828;
+  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
+}
+
+.error-message {
+  color: #c62828;
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 .form-message {
   padding: 12px 15px;
   border-radius: 4px;

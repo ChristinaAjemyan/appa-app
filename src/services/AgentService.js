@@ -4,12 +4,9 @@ class AgentService {
   /**
    * Get all agents with optional pagination
    */
-  static async findAll(options = {}) {
+  static async findAll() {
     try {
-      const { limit = 10, offset = 0 } = options;
       const agents = await db.Agent.findAll({
-        limit,
-        offset,
         order: [['id', 'ASC']]
       });
       return agents;

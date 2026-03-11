@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
+const { Op } = require('sequelize');
 const { InsurancePolicyService, CompanyService, AgentPercentageService, CompanyPercentageService } = require('../services');
 const { db } = require('../database');
 const router = express.Router();
@@ -65,11 +66,12 @@ router.post('/', upload.single('file'), async (req, res) => {
  */
 async function calculateAgentPercent(record) {
   try {
-    const { company, agent_inner_code, region, bm_class, car_model, hp, period } = record;
+    const { company, agent_company_code, region, bm_class, car_model, hp, period } = record;
     // console.log('Calculating agent_percent for record:', record);
     if (!company) {
       return null;
     }
+    let { agent_inner_code } = record
 
     // Get default agent_percent from company table
     const companyData = await CompanyService.findByName(company);
@@ -205,8 +207,7 @@ async function insertRecords(records) {
 
       const {
         company,
-        agent_company_code,
-        agent_inner_code,
+        agent_code,
         agent_name,
         polis_number,
         owner_name,
@@ -222,6 +223,25 @@ async function insertRecords(records) {
         info,
         price
       } = cleanRecord;
+
+      if (agent_code) {
+        const agent = await db.Agent.findOne({
+          where: {
+            [Op.or]: [
+              { code: agent_code },
+              { nairi: agent_company_code },
+              { rego: agent_company_code },
+              { armenia: agent_company_code },
+              { sil: agent_company_code },
+              { ingo: agent_company_code },
+              { liga: agent_company_code }
+            ]
+          }
+        });
+        if (agent) {
+          cleanRecord.agent_inner_code = agent.code;
+        }
+      }
 
       // Calculate agent_percent and company_percent
       const agent_percent = await calculateAgentPercent(cleanRecord);

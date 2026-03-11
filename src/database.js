@@ -22,6 +22,7 @@ db.Company = require('./models/Company')(sequelize);
 db.CompanyPercentage = require('./models/CompanyPercentage')(sequelize);
 db.InsurancePolicy = require('./models/InsurancePolicy')(sequelize);
 db.User = require('./models/User')(sequelize);
+db.Region = require('./models/Region')(sequelize);
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
@@ -37,6 +38,26 @@ async function getDatabase() {
     // Sync models with database
     await sequelize.sync({ alter: true });
     console.log('✓ Database models synchronized');
+    
+    // Seed regions data if table is empty
+    const regionCount = await db.Region.count();
+    if (regionCount === 0) {
+      const regionsData = [
+        { region_code: 'SH', name: 'Շիրակ' },
+        { region_code: 'YR', name: 'Երևան' },
+        { region_code: 'KT', name: 'Կոտայք' },
+        { region_code: 'AR', name: 'Արարատ' },
+        { region_code: 'AM', name: 'Արմավիր' },
+        { region_code: 'AG', name: 'Արագածոտն' },
+        { region_code: 'LR', name: 'Լոռի' },
+        { region_code: 'TV', name: 'Տավուշ' },
+        { region_code: 'SY', name: 'Սյունիք' },
+        { region_code: 'VD', name: 'Վայոց Ձոր' },
+        { region_code: 'GE', name: 'Գեղարքունիկ' }
+      ];
+      await db.Region.bulkCreate(regionsData);
+      console.log('✓ Regions seeded successfully');
+    }
     
     return db;
   } catch (err) {

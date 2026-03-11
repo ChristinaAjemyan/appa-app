@@ -19,6 +19,7 @@ app.use('/api/agents-percentage', require('./src/routes/agents_percentage'));
 app.use('/api/companies-percentage', require('./src/routes/companies_percentage'));
 app.use('/api/agents', require('./src/routes/agents'));
 app.use('/api/company', require('./src/routes/company'));
+app.use('/api/regions', require('./src/routes/regions'));
 app.use('/api/import', require('./src/routes/import'));
 app.use('/api/calculate', require('./src/routes/calculate'));
 app.use('/api/insurance-policies', require('./src/routes/insurance_policies'));
