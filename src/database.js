@@ -4,6 +4,7 @@ const { Sequelize } = require('sequelize');
 console.log('Initializing database connection...', process.env.DATABASE_URL);
 const sequelize = new Sequelize(process.env.DATABASE_URL || {
   dialect: 'postgres',
+  dialectModule: require('pg'),
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   username: process.env.DB_USER || 'postgres',
