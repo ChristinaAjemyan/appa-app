@@ -96,6 +96,16 @@ class InsurancePolicyService {
           where.price = { [db.Sequelize.Op.lte]: parseFloat(filters.maxPrice) };
         }
       }
+      if (filters.startDate) {
+        where.start_date = { [db.Sequelize.Op.gte]: filters.startDate };
+      }
+      if (filters.endDate) {
+        if (where.start_date) {
+          where.start_date[db.Sequelize.Op.lte] = filters.endDate;
+        } else {
+          where.start_date = { [db.Sequelize.Op.lte]: filters.endDate };
+        }
+      }
 
       const allowedColumns = ['id', 'company', 'agent_inner_code', 'polis_number', 'owner_name',
         'start_date', 'end_date', 'region', 'price', 'agent_income', 'income'];

@@ -4,6 +4,7 @@ import './PercentageForm.css'
 function PercentageForm({ item, onSave, onCancel, isLoading }) {
   const [formData, setFormData] = useState({
     company: '',
+    product_type: '',
     agent_code_in: '',
     agent_code_not: '',
     region_in: '',
@@ -52,6 +53,17 @@ function PercentageForm({ item, onSave, onCancel, isLoading }) {
           onChange={handleChange}
           placeholder="Company name"
           required
+        />
+      </div>
+
+      <div className="form-group">
+        <label>Պրոդուկտի Տեսակ</label>
+        <input
+          type="text"
+          name="product_type"
+          value={formData.product_type}
+          onChange={handleChange}
+          placeholder="Product type(APPA,APKA)"
         />
       </div>
 

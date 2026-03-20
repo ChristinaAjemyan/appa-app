@@ -26,7 +26,9 @@ function InsurancePolicies() {
     region: '',
     owner_name: '',
     minPrice: '',
-    maxPrice: ''
+    maxPrice: '',
+    startDate: '',
+    endDate: ''
   })
 
   // Form state
@@ -51,7 +53,9 @@ function InsurancePolicies() {
         ...(filters.region && { region: filters.region }),
         ...(filters.owner_name && { owner_name: filters.owner_name }),
         ...(filters.minPrice && { minPrice: filters.minPrice }),
-        ...(filters.maxPrice && { maxPrice: filters.maxPrice })
+        ...(filters.maxPrice && { maxPrice: filters.maxPrice }),
+        ...(filters.startDate && { startDate: filters.startDate }),
+        ...(filters.endDate && { endDate: filters.endDate })
       })
       
       const response = await axios.get(`/api/insurance-policies?${params}`)
@@ -89,7 +93,9 @@ function InsurancePolicies() {
       region: '',
       owner_name: '',
       minPrice: '',
-      maxPrice: ''
+      maxPrice: '',
+      startDate: '',
+      endDate: ''
     })
     setPage(1)
   }
@@ -119,7 +125,7 @@ function InsurancePolicies() {
 
       {/* Filters */}
       <div className="filters-section">
-        <div className="filters-grid">
+        <div className="filters-flex">
           <input
             type="text"
             placeholder="Ընկերություն"
@@ -168,6 +174,22 @@ function InsurancePolicies() {
               placeholder="Մաքս. գինը"
               value={filters.maxPrice}
               onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+              className="filter-input"
+            />
+          </div>
+          <div className="date-range">
+            <input
+              type="date"
+              placeholder="Մեկնարկ ամսաթիվ"
+              value={filters.startDate}
+              onChange={(e) => handleFilterChange('startDate', e.target.value)}
+              className="filter-input"
+            />
+            <input
+              type="date"
+              placeholder="Ավարտ ամսաթիվ"
+              value={filters.endDate}
+              onChange={(e) => handleFilterChange('endDate', e.target.value)}
               className="filter-input"
             />
           </div>
