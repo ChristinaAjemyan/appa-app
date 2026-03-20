@@ -1,12 +1,21 @@
 const { Sequelize } = require('sequelize');
 
-const sequelize = new Sequelize({
+// Use DATABASE_URL if available (for Neon), otherwise use individual credentials
+console.log('Initializing database connection...', process.env.DATABASE_URL);
+const sequelize = new Sequelize(process.env.DATABASE_URL || {
   dialect: 'postgres',
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'password',
   database: process.env.DB_NAME || 'appa',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
+  }
+}, {
   logging: process.env.DB_LOGGING === 'true' ? console.log : false,
   define: {
     timestamps: false
