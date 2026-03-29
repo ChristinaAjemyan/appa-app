@@ -66,7 +66,7 @@ router.post('/', upload.single('file'), async (req, res) => {
  */
 async function calculateAgentPercent(record) {
   try {
-    const { company, agent_company_code, region, bm_class, car_model, hp, period } = record;
+    const { company, region, bm_class, car_model, hp, period } = record;
     // console.log('Calculating agent_percent for record:', record);
     if (!company) {
       return null;
@@ -229,20 +229,21 @@ async function insertRecords(records) {
           where: {
             [Op.or]: [
               { code: agent_code },
-              { nairi: agent_company_code },
-              { rego: agent_company_code },
-              { armenia: agent_company_code },
-              { sil: agent_company_code },
-              { ingo: agent_company_code },
-              { liga: agent_company_code }
+              { nairi: agent_code },
+              { rego: agent_code },
+              { armenia: agent_code },
+              { sil: agent_code },
+              { ingo: agent_code },
+              { liga: agent_code }
             ]
           }
         });
         if (agent) {
           cleanRecord.agent_inner_code = agent.code;
+          cleanRecord.agent_company_code = agent[company.toLowerCase()] || null;
         }
       }
-
+      const { agent_inner_code, agent_company_code } = cleanRecord;
       // Calculate agent_percent and company_percent
       const agent_percent = await calculateAgentPercent(cleanRecord);
       const company_percent = await calculateCompanyPercent(cleanRecord);

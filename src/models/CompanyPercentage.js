@@ -65,7 +65,9 @@ module.exports = (sequelize) => {
     {
       tableName: 'companies_percentage',
       freezeTableName: true,
-      timestamps: false
+      timestamps: true,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
     }
   );
 

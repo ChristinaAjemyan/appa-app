@@ -7,8 +7,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [file, setFile] = useState(null)
-  const [year, setYear] = useState(new Date().getFullYear())
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [uploadSuccess, setUploadSuccess] = useState(null)
@@ -52,8 +50,6 @@ function Dashboard() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('year', year)
-    formData.append('month', month)
 
     try {
       setUploadLoading(true)
@@ -73,22 +69,7 @@ function Dashboard() {
     }
   }
 
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 10 }, (_, i) => currentYear - i)
-  const months = [
-    { value: 1, label: 'Հունվար' },
-    { value: 2, label: 'Փետրվար' },
-    { value: 3, label: 'Մարտ' },
-    { value: 4, label: 'Ապրիլ' },
-    { value: 5, label: 'Մայիս' },
-    { value: 6, label: 'Հունիս' },
-    { value: 7, label: 'Հուլիս' },
-    { value: 8, label: 'Օգոստոս' },
-    { value: 9, label: 'Սեպտեմբեր' },
-    { value: 10, label: 'Հոկտեմբեր' },
-    { value: 11, label: 'Նոյեմբեր' },
-    { value: 12, label: 'Դեկեմբեր' },
-  ]
+
 
   return (
     <div className="dashboard">
@@ -120,40 +101,6 @@ function Dashboard() {
                 disabled={uploadLoading}
               />
               {file && <p className="file-info">✓ {file.name}</p>}
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="year">Տարի:</label>
-                <select
-                  id="year"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  disabled={uploadLoading}
-                >
-                  {years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="month">Ամիս:</label>
-                <select
-                  id="month"
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                  disabled={uploadLoading}
-                >
-                  {months.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <button

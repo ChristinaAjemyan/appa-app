@@ -21,7 +21,9 @@ module.exports = (sequelize) => {
     },
     {
       tableName: 'regions',
-      timestamps: false
+      timestamps: true,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
     }
   );
 

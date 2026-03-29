@@ -2,12 +2,37 @@ const { db } = require('../database');
 
 class InsurancePolicyService {
   /**
+   * Format date fields in policy object
+   */
+  static formatPolicy(policy) {
+    if (!policy) return policy;
+    
+    const formatted = policy.toJSON ? policy.toJSON() : { ...policy };
+    
+    if (formatted.start_date && formatted.start_date instanceof Date) {
+      formatted.start_date = formatted.start_date.toISOString().split('T')[0];
+    }
+    if (formatted.end_date && formatted.end_date instanceof Date) {
+      formatted.end_date = formatted.end_date.toISOString().split('T')[0];
+    }
+    
+    return formatted;
+  }
+
+  /**
+   * Format array of policies
+   */
+  static formatPolicies(policies) {
+    return policies.map(policy => this.formatPolicy(policy));
+  }
+
+  /**
    * Get all insurance policies with optional pagination and sorting
    */
   static async findAll(options = {}) {
     try {
       const { limit = 10, offset = 0, sortBy = 'id', sortOrder = 'ASC' } = options;
-      
+
       const allowedColumns = ['id', 'company', 'agent_inner_code', 'polis_number', 'owner_name',
         'start_date', 'end_date', 'region', 'price', 'agent_income', 'income'];
       const validSortBy = allowedColumns.includes(sortBy) ? sortBy : 'id';
@@ -18,7 +43,7 @@ class InsurancePolicyService {
         offset,
         order: [[validSortBy, validSortOrder]]
       });
-      return policies;
+      return this.formatPolicies(policies);
     } catch (error) {
       throw new Error(`Error fetching insurance policies: ${error.message}`);
     }
@@ -41,7 +66,7 @@ class InsurancePolicyService {
         offset,
         order: [[validSortBy, validSortOrder]]
       });
-      return { total: count, policies: rows };
+      return { total: count, policies: this.formatPolicies(rows) };
     } catch (error) {
       throw new Error(`Error fetching insurance policies: ${error.message}`);
     }
@@ -56,7 +81,7 @@ class InsurancePolicyService {
       if (!policy) {
         throw new Error('Insurance policy not found');
       }
-      return policy;
+      return this.formatPolicy(policy);
     } catch (error) {
       throw new Error(`Error fetching insurance policy: ${error.message}`);
     }
@@ -69,7 +94,6 @@ class InsurancePolicyService {
     try {
       const { limit = 10, offset = 0, sortBy = 'id', sortOrder = 'ASC' } = options;
       const where = {};
-
       // Build where clause from filters
       if (filters.company) {
         where.company = { [db.Sequelize.Op.iLike]: `%${filters.company}%` };
@@ -111,6 +135,7 @@ class InsurancePolicyService {
         'start_date', 'end_date', 'region', 'price', 'agent_income', 'income'];
       const validSortBy = allowedColumns.includes(sortBy) ? sortBy : 'id';
       const validSortOrder = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      console.log('Search filters:', where)
 
       const { count, rows } = await db.InsurancePolicy.findAndCountAll({
         where,
@@ -119,7 +144,7 @@ class InsurancePolicyService {
         order: [[validSortBy, validSortOrder]]
       });
 
-      return { total: count, policies: rows };
+      return { total: count, policies: this.formatPolicies(rows) };
     } catch (error) {
       throw new Error(`Error searching insurance policies: ${error.message}`);
     }
@@ -137,7 +162,7 @@ class InsurancePolicyService {
       }
 
       const policy = await db.InsurancePolicy.create(data);
-      return policy;
+      return this.formatPolicy(policy);
     } catch (error) {
       throw new Error(`Error creating insurance policy: ${error.message}`);
     }
@@ -149,7 +174,7 @@ class InsurancePolicyService {
   static async createBulk(dataArray) {
     try {
       const policies = await db.InsurancePolicy.bulkCreate(dataArray);
-      return { created: policies.length, policies };
+      return { created: policies.length, policies: this.formatPolicies(policies) };
     } catch (error) {
       throw new Error(`Error creating insurance policies: ${error.message}`);
     }
@@ -160,9 +185,12 @@ class InsurancePolicyService {
    */
   static async update(id, data) {
     try {
-      const policy = await this.findById(id);
+      const policy = await db.InsurancePolicy.findByPk(id);
+      if (!policy) {
+        throw new Error('Insurance policy not found');
+      }
       const updated = await policy.update(data);
-      return updated;
+      return this.formatPolicy(updated);
     } catch (error) {
       throw new Error(`Error updating insurance policy: ${error.message}`);
     }
@@ -182,7 +210,7 @@ class InsurancePolicyService {
         await policy.update(data);
       }
 
-      return { policy, created };
+      return { policy: this.formatPolicy(policy), created };
     } catch (error) {
       throw new Error(`Error upserting insurance policy: ${error.message}`);
     }
@@ -219,7 +247,7 @@ class InsurancePolicyService {
         offset,
         order: [['id', 'ASC']]
       });
-      return policies;
+      return this.formatPolicies(policies);
     } catch (error) {
       throw new Error(`Error fetching policies by company: ${error.message}`);
     }
@@ -238,40 +266,13 @@ class InsurancePolicyService {
         limit,
         offset
       });
-      return policies;
+      return this.formatPolicies(policies);
     } catch (error) {
       throw new Error(`Error fetching policies by agent: ${error.message}`);
     }
   }
 
-  /**
-   * Get aggregate statistics for policies
-   */
-  static async getStatistics(filters = {}) {
-    try {
-      const where = {};
 
-      if (filters.company) {
-        where.company = { [db.Sequelize.Op.iLike]: `%${filters.company}%` };
-      }
-
-      const stats = await db.InsurancePolicy.findAll({
-        attributes: [
-          [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'total_policies'],
-          [db.Sequelize.fn('SUM', db.Sequelize.col('price')), 'total_price'],
-          [db.Sequelize.fn('AVG', db.Sequelize.col('price')), 'avg_price'],
-          [db.Sequelize.fn('SUM', db.Sequelize.col('agent_income')), 'total_agent_income'],
-          [db.Sequelize.fn('SUM', db.Sequelize.col('income')), 'total_income']
-        ],
-        where,
-        raw: true
-      });
-
-      return stats[0];
-    } catch (error) {
-      throw new Error(`Error getting statistics: ${error.message}`);
-    }
-  }
 }
 
 module.exports = InsurancePolicyService;

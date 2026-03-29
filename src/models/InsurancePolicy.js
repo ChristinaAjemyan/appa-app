@@ -34,11 +34,11 @@ module.exports = (sequelize) => {
         allowNull: true
       },
       start_date: {
-        type: DataTypes.TEXT,
+        type: DataTypes.DATE,
         allowNull: true
       },
       end_date: {
-        type: DataTypes.TEXT,
+        type: DataTypes.DATE,
         allowNull: true
       },
       region: {

@@ -21,6 +21,8 @@ router.get('/', async (req, res) => {
     if (req.query.owner_name) filters.owner_name = req.query.owner_name;
     if (req.query.minPrice !== undefined) filters.minPrice = req.query.minPrice;
     if (req.query.maxPrice !== undefined) filters.maxPrice = req.query.maxPrice;
+    if (req.query.startDate) filters.startDate = req.query.startDate;
+    if (req.query.endDate) filters.endDate = req.query.endDate;
     
     const { total, policies } = await InsurancePolicyService.search(filters, 
       { limit, offset, sortBy, sortOrder });

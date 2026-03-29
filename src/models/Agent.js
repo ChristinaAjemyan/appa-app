@@ -49,7 +49,9 @@ module.exports = (sequelize) => {
     {
       tableName: 'agents',
       freezeTableName: true,
-      timestamps: false
+      timestamps: true,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
     }
   );
 

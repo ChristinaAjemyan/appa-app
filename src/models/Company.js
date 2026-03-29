@@ -25,7 +25,9 @@ module.exports = (sequelize) => {
     {
       tableName: 'company',
       freezeTableName: true,
-      timestamps: false
+      timestamps: true,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
     }
   );
 

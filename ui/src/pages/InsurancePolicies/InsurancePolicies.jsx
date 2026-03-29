@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import * as XLSX from 'xlsx'
 import InsurancePolicyForm from '../../components/InsurancePolicyForm'
 import './InsurancePolicies.css'
 
@@ -100,12 +101,75 @@ function InsurancePolicies() {
     setPage(1)
   }
 
+  const exportToExcel = () => {
+    if (policies.length === 0) {
+      alert('No data to export')
+      return
+    }
+
+    // Prepare data for export
+    const exportData = policies.map(item => ({
+      'Ընկերություն': item.company,
+      'Պոլիս': item.polis_number,
+      'Անուն': item.owner_name,
+      'Գործակալ': item.agent_inner_code,
+      'Մեկնարկ': item.start_date,
+      'Ավարտ': item.end_date,
+      'Շրջան': item.region,
+      'BM': item.bm_class,
+      'Մոդել': item.car_model,
+      'Համար': item.car_number,
+      'HP': item.hp,
+      'Ժամանակաշրջան': item.period,
+      'Գինը': item.price,
+      'Գործակ. %': item.agent_percent,
+      'Ընկ. %': item.company_percent,
+      'Գործակ. եկամուտը': item.agent_income,
+      'Եկամուտը': item.income
+    }))
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Պայմանագրեր')
+
+    // Set column widths
+    const colWidths = [
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 8 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 8 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 }
+    ]
+    ws['!cols'] = colWidths
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 10)
+    const filename = `insurance-policies-${timestamp}.xlsx`
+
+    // Export
+    XLSX.writeFile(wb, filename)
+  }
+
   return (
     <div className="insurance-policies">
       <div className="page-header">
         <h2>Պայմանագրեր</h2>
         <div className="header-buttons">
           <button onClick={fetchPolicies} className="refresh-btn">🔄 Թարմացնել</button>
+          <button onClick={exportToExcel} className="export-btn">📥 Արտահանել XLSX</button>
           <button 
             onClick={() => setShowForm(!showForm)} 
             className="add-policy-btn"

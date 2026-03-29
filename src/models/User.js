@@ -40,7 +40,9 @@ module.exports = (sequelize) => {
     {
       tableName: 'users',
       freezeTableName: true,
-      timestamps: false
+      timestamps: true,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
     }
   );
 
