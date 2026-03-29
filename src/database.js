@@ -2,7 +2,7 @@ const { Sequelize } = require('sequelize');
 
 // Use DATABASE_URL if available (for Neon), otherwise use individual credentials
 console.log('Initializing database connection...', process.env.DATABASE_URL);
-const sequelize = new Sequelize({
+const sequelize = new Sequelize(process.env.DATABASE_URL || {
   dialect: 'postgres',
   dialectModule: require('pg'),
   host: process.env.DB_HOST || 'localhost',
@@ -88,4 +88,3 @@ process.on('exit', async () => {
 });
 
 module.exports = { getDatabase, db, sequelize };
-
