@@ -23,6 +23,7 @@ app.use('/api/regions', require('./src/routes/regions'));
 app.use('/api/import', require('./src/routes/import'));
 app.use('/api/calculate', require('./src/routes/calculate'));
 app.use('/api/insurance-policies', require('./src/routes/insurance_policies'));
+app.use('/api/calc-result-storage', require('./src/routes/calc_result_storage'));
 
 // Health check route
 app.get('/api/health', (req, res) => {

@@ -33,6 +33,7 @@ db.CompanyPercentage = require('./models/CompanyPercentage')(sequelize);
 db.InsurancePolicy = require('./models/InsurancePolicy')(sequelize);
 db.User = require('./models/User')(sequelize);
 db.Region = require('./models/Region')(sequelize);
+db.CalcResultStorage = require('./models/CalcResultStorage')(sequelize);
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

@@ -10,12 +10,14 @@ import Companies from './pages/Settings/Companies/Companies'
 import Login from './pages/Login/Login'
 import Register from './pages/Register/Register'
 import ProtectedRoute from './components/ProtectedRoute'
+import Calculator from './pages/Calculator/calculator'
 import './App.css'
 
 function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/calculator" element={<Calculator />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
