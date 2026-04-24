@@ -1,6 +1,8 @@
-import{useState,useMemo,useEffect,useRef}from"react";
+import{useState,useMemo,useEffect,useRef,Fragment}from"react";
 import{calcStorage as supabaseStorage}from"./calcStorage";
 import * as XLSX from "xlsx";
+import XLSXStyle from "xlsx-js-style";
+import JSZip from "jszip";
 
 const COMPANIES=["Nairi","Ingo","Liga","Sil","Rego"];
 const ALL_COMPANIES=["Nairi","Ingo","Liga","Sil","Rego","Armenia"];
@@ -34,6 +36,9 @@ const DEFAULT_EXCEPTIONS=[
 const FIELDS=[{key:"region",label:"Регион",type:"string"},{key:"bm",label:"БМ",type:"number"},{key:"power",label:"Мощность",type:"number"},{key:"term",label:"Срок",type:"string"},{key:"car",label:"Марка авто",type:"string"}];
 const OPS_NUM=[{key:"eq",label:"="},{key:"gte",label:"≥"},{key:"lte",label:"≤"},{key:"between",label:"от–до"}];
 const OPS_STR=[{key:"eq",label:"="},{key:"neq",label:"≠"},{key:"contains",label:"содержит"}];
+
+const POL_STATUSES=[{k:"",l:"Обычный"},{k:"taxi",l:"🚕 Такси"},{k:"ot",l:"ОТ"},{k:"ok",l:"ОК"},{k:"yr_kt",l:"YR-KT"},{k:"restricted",l:"С ограничением"}];
+const fmtPolStatus=k=>(POL_STATUSES.find(s=>s.k===k)||POL_STATUSES[0]).l;
 
 const SEED_AGENTS=(()=>{
   const d=[
@@ -155,7 +160,8 @@ const HMAP={
   endDate:["enddate","endDate"],
   carPlate:["carplate","carPlate"],
   phone:["phone"],
-  productName:["productname","productName"],
+  productName:["productname","productName","Product","продукт","наименование","название","вид","тип","product","продукты"],
+  company:["company","Company","компания","страховая","страховщик"],
 };
 
 function detectCols(headers,dataRows){
@@ -225,9 +231,19 @@ function parseCoRows(rows,company){
 function parseVolRows(rows){
   if(!rows.length)return[];
   const cm=detectCols(rows[0],rows.slice(1));
+  // Fallback: if company column not detected by header, scan data for company names
+  let coIdx=cm.company;
+  if(coIdx===undefined){
+    const testRows=rows.slice(1,Math.min(6,rows.length));
+    rows[0].forEach((_,i)=>{
+      if(coIdx!==undefined)return;
+      if(testRows.some(r=>!!detectCo(String(r[i]||""))))coIdx=i;
+    });
+  }
   return rows.slice(1).filter(r=>r.some(c=>c!=="")).map((row,idx)=>{
     const get=f=>cm[f]!==undefined?String(row[cm[f]]||"").trim():"";
-    return{_id:`vol-${idx}`,productName:get("productName"),company:get("company")||"",
+    const company=coIdx!==undefined?String(row[coIdx]||"").trim():get("company");
+    return{_id:`vol-${idx}`,productName:get("productName"),company,
       agentCode:get("agentCode"),policyNum:get("policyNum"),
       amount:parseFloat(String(get("amount")).replace(/\s/g,"").replace(",","."))||0,
       insuredName:get("insuredName")};
@@ -478,27 +494,86 @@ export default function App(){
   const[newCodes,setNewCodes]=useState(Object.fromEntries(ALL_COMPANIES.map(c=>[c,""])));
   const[editUid,setEditUid]=useState(null);
   const[uploadingFor,setUploadingFor]=useState(null);
+  const[payrollIC,setPayrollIC]=useState("");
+  const[payrollUID,setPayrollUID]=useState(null);
+  const[showAllPayroll,setShowAllPayroll]=useState(false);
+  const[officeCodes,setOfficeCodes]=useState([]);
+  const[newOfficeCode,setNewOfficeCode]=useState("");
   const fileRef=useRef();const backRef=useRef();const officeFileRef=useRef();
+  const[role,setRole]=useState("employee");
+  const[pinModal,setPinModal]=useState(false);
+  const[pinInput,setPinInput]=useState("");
+  const[pinError,setPinError]=useState("");
+  const[adminPin,setAdminPin]=useState(null);
+  const[newPinA,setNewPinA]=useState("");
+  const[newPinB,setNewPinB]=useState("");
+  const[pinChangeMsg,setPinChangeMsg]=useState("");
+  const[opCurrentMonth,setOpCurrentMonth]=useState([]);
+  const[opPrevUnpaid,setOpPrevUnpaid]=useState([]);
+  const[opLoaded,setOpLoaded]=useState(false);
+  const[opFormOpen,setOpFormOpen]=useState(false);
+  const[opEditPol,setOpEditPol]=useState(null);
+  const[opFD,setOpFD]=useState({});
+  const[opPayPol,setOpPayPol]=useState(null);
+  const[opPayData,setOpPayData]=useState({});
+  const[opSearch,setOpSearch]=useState("");
+  const[opStatusFilter,setOpStatusFilter]=useState("all");
+  const[cashDays,setCashDays]=useState({});
+  const[cashLoaded,setCashLoaded]=useState(false);
+  const[cashExpandDay,setCashExpandDay]=useState(null);
+  const[cashCloseModal,setCashCloseModal]=useState(null);
+  const[cashReopenModal,setCashReopenModal]=useState(null);
+  const[cashMonthPols,setCashMonthPols]=useState([]);
+  const[officeStaff,setOfficeStaff]=useState(["768-101","768-105","768-106"]);
+  const[newStaffCode,setNewStaffCode]=useState("");
 
   useEffect(()=>{(async()=>{
     try{const r=await supabaseStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);supabaseStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
     try{const r=await supabaseStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
     try{const r=await supabaseStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await supabaseStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
+    try{const r=await supabaseStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
   })();},[]);
 
   useEffect(()=>{
-    setUploadedFiles([]);setVolSession([]);setOfficeSession(null);setActiveAgent(null);
+    setUploadedFiles([]);setVolSession([]);setOfficeSession(null);setActiveAgent(null);setOfficeCodes([]);setNewOfficeCode("");
     (async()=>{
       try{const r=await supabaseStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
       try{const r=await supabaseStorage.get("officeStore:"+selMonth).catch(()=>null);if(r&&r.value)setStoredOffice(JSON.parse(r.value));else setStoredOffice({profit:0,rows:[]});}catch{setStoredOffice({profit:0,rows:[]});}
+      try{const r=await supabaseStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
     })();
   },[selMonth]);
 
+  useEffect(()=>{if(role==="employee"&&tab==="commissions")setTab("policydb");},[role]);
   const saveDir=d=>{setAgentDir(d);supabaseStorage.set("agentDirectory",JSON.stringify(d)).catch(()=>{});};
+  const saveOfficeCodes=codes=>{setOfficeCodes(codes);supabaseStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
+  const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
+  const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
   const saveRates=r=>{setRates(r);supabaseStorage.set("ratesConfig",JSON.stringify(r)).catch(()=>{});};
   const saveVR=r=>{setVolRates(r);supabaseStorage.set("volRates",JSON.stringify(r)).catch(()=>{});};
   const saveExcs=e=>{setExceptions(e);supabaseStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
+  const isAdmin=role==="admin";
+  const tryAdminLogin=()=>{
+    const p=pinInput.trim();
+    if(!p){setPinError("Введите PIN");return;}
+    if(!adminPin){
+      const s={adminPin:p,officeStaff};
+      supabaseStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
+      setAdminPin(p);setRole("admin");setPinModal(false);setPinInput("");setPinError("");
+    } else {
+      if(p===adminPin){setRole("admin");setPinModal(false);setPinInput("");setPinError("");}
+      else setPinError("Неверный PIN");
+    }
+  };
+  const saveOfficeStaff=(list)=>{setOfficeStaff(list);supabaseStorage.set("appSettings",JSON.stringify({adminPin:adminPin||"",officeStaff:list})).catch(()=>{});};
+  const changePin=()=>{
+    if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
+    if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
+    const s={adminPin:newPinA.trim(),officeStaff};
+    supabaseStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
+    setAdminPin(newPinA.trim());setNewPinA("");setNewPinB("");
+    setPinChangeMsg("✓ PIN изменён");setTimeout(()=>setPinChangeMsg(""),3000);
+  };
   const getName=id=>{const a=agentDir[id];return a?(a.name+" "+a.surname).trim():"";};
 
   const addAgent=()=>{
@@ -512,7 +587,14 @@ export default function App(){
   const codeLookup=useMemo(()=>{
     const map={};
     Object.entries(agentDir).forEach(([aUid,agent])=>{
-      Object.entries(agent.codes||{}).forEach(([co,code])=>{if(code&&code.trim())map[co+":"+code.replace(/\s+/g,"").trim()]=aUid;});
+      Object.entries(agent.codes||{}).forEach(([co,code])=>{
+        if(code&&code.trim()){
+          const c=code.replace(/\s+/g,"").trim();
+          map[co+":"+c]=aUid;
+          if(!map[c])map[c]=aUid; // без привязки к компании (первый найденный)
+        }
+      });
+      if(agent.internalCode&&agent.internalCode.trim())map[agent.internalCode.trim()]=aUid;
     });
     return map;
   },[agentDir]);
@@ -574,7 +656,10 @@ export default function App(){
   const effVol=useMemo(()=>{
     const vols=volSession.length>0?volSession:storedVol;
     return vols.map(v=>{
-      const aUid=codeLookup[v.company+":"+v.agentCode]||null;
+      const _ac=(v.agentCode||"").replace(/\s+/g,"").trim();
+      const aUid=codeLookup[v.company+":"+_ac]||codeLookup[_ac]
+        ||Object.keys(agentDir).find(uid=>Object.values(agentDir[uid].codes||{}).some(c=>c&&c.replace(/\s+/g,"").trim()===_ac))
+        ||null;
       const vr=(volRates.rates||[]).find(r=>r.name===v.productName);
       const oR=vr?vr.officeRate:0;const aR=vr?vr.agentRate:0;
       return{...v,agentUid:aUid,officeRate:oR,agentRate:aR,officeComm:Math.round(v.amount*oR/100),agentComm:Math.round(v.amount*aR/100)};
@@ -642,6 +727,98 @@ export default function App(){
     }).catch(()=>{setDbPols([]);setDbLoaded(true);});
   };
 
+  const loadOfficeSales=async()=>{
+    setOpLoaded(false);
+    const mk=selMonth;
+    try{const r=await supabaseStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
+    try{
+      const res=await supabaseStorage.list("officePol:").catch(()=>({keys:[]}));
+      const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
+      if(!otherKeys.length){setOpPrevUnpaid([]);setOpLoaded(true);return;}
+      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await supabaseStorage.get(key).catch(()=>null);return r&&r.value?JSON.parse(r.value):[];}catch{return[];}}));
+      setOpPrevUnpaid(results.flat().filter(p=>!p.paid).sort((a,b)=>new Date(a.date)-new Date(b.date)));
+    }catch{setOpPrevUnpaid([]);}
+    setOpLoaded(true);
+  };
+  useEffect(()=>{if(tab==="officesales")loadOfficeSales();},[tab,selMonth]);
+
+  const loadCashBook=async()=>{
+    setCashLoaded(false);
+    try{const r=await supabaseStorage.get("cashBook:"+selMonth).catch(()=>null);setCashDays(r&&r.value?JSON.parse(r.value):{});}catch{setCashDays({});}
+    try{const r=await supabaseStorage.get("officePol:"+selMonth).catch(()=>null);setCashMonthPols(r&&r.value?JSON.parse(r.value):[]);}catch{setCashMonthPols([]);}
+    setCashLoaded(true);
+  };
+  useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
+  const closeCashDay=(date)=>{
+    const pols=cashMonthPols.filter(p=>p.paid&&p.paidDate===date);
+    const snapshot=pols.map(p=>({_id:p._id,insuredName:p.insuredName,polType:p.polType,productName:p.productName,car:p.car,carPlate:p.carPlate,policyNum:p.policyNum,company:p.company,phone:p.phone,date:p.date,amount:p.amount,discount:p.discount,paidAmount:p.paidAmount,paymentType:p.paymentType,paidDate:p.paidDate,agentUid:p.agentUid,comment:p.comment}));
+    const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const ineco=pols.filter(p=>p.paymentType==="ineco").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const updated={...cashDays,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(cashDays[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,total:cash+acba+ineco}}};
+    setCashDays(updated);
+    supabaseStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
+    setCashCloseModal(null);
+  };
+  const reopenCashDay=(date)=>{
+    const updated={...cashDays,[date]:{...cashDays[date],closed:false,reopenedAt:new Date().toISOString()}};
+    setCashDays(updated);
+    supabaseStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
+    setCashReopenModal(null);
+  };
+
+  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);supabaseStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
+  const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:""});
+  const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);};
+  const saveEditPol=async(pol,updates)=>{
+    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?{...p,...updates}:p));}
+    else{
+      const updated={...pol,...updates};
+      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const pols=r&&r.value?JSON.parse(r.value):[];
+      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      setOpPrevUnpaid(prev=>prev.map(p=>p._id===pol._id?updated:p));
+    }
+  };
+  const acceptOpPayment=async(pol,payData)=>{
+    const updated={...pol,...payData,paid:true,paidAt:new Date().toISOString()};
+    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
+    else{
+      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const pols=r&&r.value?JSON.parse(r.value):[];
+      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
+    }
+    setOpPayPol(null);
+  };
+  const deleteOfficePol=async(pol)=>{
+    if(!window.confirm("Удалить полис "+pol.insuredName+"?"))return;
+    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
+    else{
+      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const pols=r&&r.value?JSON.parse(r.value):[];
+      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
+      setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
+    }
+  };
+  const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormOpen(true);};
+  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:""});setOpFormOpen(true);};
+  const openOpPay=(pol)=>{setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:new Date().toISOString().slice(0,10)});};
+  const submitOpForm=()=>{
+    if(!opFD.insuredName||!opFD.insuredName.trim()||!opFD.amount)return;
+    const today=new Date().toISOString().slice(0,10);
+    const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim()};
+    const typeData=opFD.polType==="voluntary"
+      ?{productName:(opFD.productName||"").trim()}
+      :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:(opFD.carPlate||"").trim(),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
+    const payData=(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType)
+      ?{paid:true,paidAt:new Date().toISOString(),paidAmount:parseFloat(opFD.amount||0)-(parseFloat(opFD.discount)||0),paymentType:opFD.paymentType,paidDate:today}
+      :{};
+    const data={...base,...typeData,...payData};
+    if(opEditPol)saveEditPol(opEditPol,data);else addOfficePol(data);
+    setOpFormOpen(false);
+  };
+
   const filteredDB=useMemo(()=>{
     if(!expiryF)return dbPols;
     return dbPols.filter(p=>{if(!p.endDate)return false;const d=new Date(p.endDate);return!isNaN(d.getTime())&&getMonthKey(d)===expiryF;});
@@ -676,29 +853,151 @@ export default function App(){
     XLSX.utils.book_append_sheet(wb,ws,"Начисления "+fmtMonth(month));
     XLSX.writeFile(wb,"Начисления_"+month+".xlsx");
   };
+
+  const polCols=["№ полиса","Компания","Страхователь","Марка","Рег.номер","Телефон","Начало","Окончание","Регион","БМ","Сумма","Ставка %","Начислено"];
+  const polRow=p=>[p.policyNum,p.company,p.insuredName,p.car,p.carPlate,p.phone,p.startDateFmt,p.endDateFmt,p.region,p.bm,p.amount,p.exception?0:(p.agentRate||0),p.exception?0:p.agentComm];
+
+  const exportAgentValid=(uid,pols,month)=>{
+    const wb=XLSX.utils.book_new();
+    const rows=[polCols,...pols.map(polRow)];
+    rows.push(["ИТОГО","","","","","","","","","",pols.reduce((s,p)=>s+p.amount,0),"",pols.reduce((s,p)=>s+p.agentComm,0)]);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Зачётные");
+    const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
+    XLSX.writeFile(wb,"Зачётные_"+ic+"_"+month+".xlsx");
+  };
+
+  const exportAgentExc=(uid,pols,month)=>{
+    const wb=XLSX.utils.book_new();
+    const rows=[polCols,...pols.map(polRow)];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Незачётные");
+    const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
+    XLSX.writeFile(wb,"Незачётные_"+ic+"_"+month+".xlsx");
+  };
+
+  const exportAgentAll=(uid,validPols,excPols,month)=>{
+    const wb=XLSX.utils.book_new();
+    const vRows=[polCols,...validPols.map(polRow)];
+    vRows.push(["ИТОГО","","","","","","","","","",validPols.reduce((s,p)=>s+p.amount,0),"",validPols.reduce((s,p)=>s+p.agentComm,0)]);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(vRows),"Зачётные");
+    if(excPols.length>0){
+      const eRows=[polCols,...excPols.map(polRow)];
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(eRows),"Незачётные");
+    }
+    const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
+    XLSX.writeFile(wb,"Полисы_"+ic+"_"+month+".xlsx");
+  };
+
+  const buildAllPayrollRows=(agentData,effVol,agentDir,excludeCodes=[])=>{
+    const icNum=ic=>{const m=(ic||"").match(/(\d+)$/);return m?parseInt(m[1]):99999;};
+    const excSet=new Set(excludeCodes.map(c=>c.trim().toLowerCase()));
+    const allUids=new Set([
+      ...agentData.filter(a=>a.policies.length>0).map(a=>a.uid),
+      ...effVol.filter(v=>v.agentUid).map(v=>v.agentUid),
+    ]);
+    return [...allUids].map(uid=>{
+      const agData=agentData.find(a=>a.uid===uid);
+      const volDebt=effVol.filter(v=>v.agentUid===uid).reduce((s,v)=>s+(v.amount-v.agentComm),0);
+      const accrued=agData?agData.totalAgent:0;
+      const polCount=agData?agData.policies.length:0;
+      const net=accrued-volDebt;
+      const ic=(agentDir[uid]&&agentDir[uid].internalCode)||"";
+      const name=agentDir[uid]?(agentDir[uid].name+" "+agentDir[uid].surname).trim():uid;
+      return{uid,name,ic,polCount,accrued,volDebt:Math.round(volDebt),net:Math.round(net)};
+    })
+    .filter(r=>!excSet.has(r.ic.trim().toLowerCase()))
+    .sort((a,b)=>icNum(a.ic)-icNum(b.ic));
+  };
+
+  const exportAllPayrollXlsx=(agentData,effVol,agentDir,month)=>{
+    const rows=buildAllPayrollRows(agentData,effVol,agentDir,officeCodes);
+    const wb=XLSX.utils.book_new();
+    const header=["Имя агента","768-код","Кол-во полисов","Начислено (ОСАГО)","К оплате офису (доброволь.)","К выплате","Примечание","Подпись"];
+    const data=[header,...rows.map(r=>[r.name,r.ic,r.polCount,r.accrued,r.volDebt>0?r.volDebt:"",r.net,"",""])];
+    const totPols=rows.reduce((s,r)=>s+r.polCount,0);
+    const totAcc=rows.reduce((s,r)=>s+r.accrued,0);
+    const totVol=rows.reduce((s,r)=>s+r.volDebt,0);
+    const totNet=rows.reduce((s,r)=>s+r.net,0);
+    data.push(["ИТОГО","",totPols,totAcc,totVol>0?totVol:"",totNet,"",""]);
+    const ws=XLSX.utils.aoa_to_sheet(data);
+    ws["!cols"]=[{wch:28},{wch:12},{wch:14},{wch:18},{wch:24},{wch:16},{wch:20},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,ws,"Начисления "+fmtMonth(month));
+    XLSX.writeFile(wb,"Все_начисления_"+month+".xlsx");
+  };
+
+  const exportRenewalsZip=async(pols,expiryLabel)=>{
+    const zip=new JSZip();
+    const byAgent={};
+    pols.forEach(p=>{const k=p.agentUid||"__unknown__";if(!byAgent[k])byAgent[k]=[];byAgent[k].push(p);});
+    const HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Агент","Регион","Сумма","БМ","Мощность"];
+    const PHONE_COL=4;
+    const br={style:"thin",color:{rgb:"AAAAAA"}};
+    const borders={top:br,bottom:br,left:br,right:br};
+    const sHdr={fill:{patternType:"solid",fgColor:{rgb:"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
+    const sHdrPhone={fill:{patternType:"solid",fgColor:{rgb:"FDE047"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
+    const sCell={font:{sz:10},border:borders};
+    const sPhone={fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},font:{sz:10},border:borders};
+    Object.entries(byAgent).forEach(([uid,agPols])=>{
+      const ag=agentDir[uid];
+      const name=ag?(ag.name+" "+ag.surname).trim():(getName(uid)||uid||"Неизвестно");
+      const ic=(ag&&ag.internalCode)||"";
+      const wb=XLSXStyle.utils.book_new();
+      const ws={};
+      HEADERS.forEach((h,c)=>{
+        ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr};
+      });
+      agPols.forEach((p,ri)=>{
+        const agName=getName(p.agentUid)||p.agentCode||"";
+        const vals=[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",agName,p.region||"",p.amount||0,p.bm||"",p.power||""];
+        vals.forEach((v,c)=>{
+          const t=typeof v==="number"?"n":"s";
+          ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t,s:c===PHONE_COL?sPhone:sCell};
+        });
+      });
+      ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:agPols.length,c:HEADERS.length-1}});
+      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:24},{wch:8},{wch:14},{wch:6},{wch:8}];
+      XLSXStyle.utils.book_append_sheet(wb,ws,"Продления");
+      const out=XLSXStyle.write(wb,{bookType:"xlsx",type:"array"});
+      const safe=s=>String(s).replace(/[/\\:*?"<>|]/g,"_");
+      zip.file(`${safe(ic)}_${safe(name).slice(0,30)}.xlsx`,new Uint8Array(out));
+    });
+    const blob=await zip.generateAsync({type:"blob"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`Продления_${expiryLabel||"все"}.zip`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
   const hasData=agentData.length>0||effVol.length>0;
-  const panels=[["agents","👤 Агенты",Object.keys(agentDir).length],["rates","⚙️ Ставки",null],["volrates","📦 Доброволь.",volRates.rates.length],["exceptions","🚫 Исключения",exceptions.filter(e=>e.enabled).length]];
+  const panels=isAdmin?[["agents","👤 Агенты",Object.keys(agentDir).length],["rates","⚙️ Ставки",null],["volrates","📦 Доброволь.",volRates.rates.length],["exceptions","🚫 Исключения",exceptions.filter(e=>e.enabled).length],["access","🔐 Доступ",null]]:[];
   const backupJson=JSON.stringify({version:6,agentDir,rates,volRates,exceptions},null,2);
 
   return(
     <div style={{fontFamily:"system-ui,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#111"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <h2 style={{margin:0,fontSize:20}}>Калькулятор комиссий</h2>
+        <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <h2 style={{margin:0,fontSize:20}}>Калькулятор комиссий</h2>
+          {isAdmin
+            ?<><span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#92400e"}}>🔑 Администратор</span>
+               <button onClick={()=>{setRole("employee");setPanel(null);}} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db",fontSize:12})}>Выйти</button></>
+            :<><span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#166534"}}>👤 Сотрудник</span>
+               <button onClick={()=>setPinModal(true)} style={btn("#1d4ed8",undefined,{fontSize:12})}>🔐 Войти как администратор</button></>
+          }
+        </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {panels.map(([id,label,count])=>(
             <button key={id} onClick={()=>setPanel(panel===id?null:id)} style={{...btn(panel===id?"#eff6ff":"#f9fafb",panel===id?"#1d4ed8":"#374151"),border:"1px solid #d1d5db",fontWeight:500}}>
               {label}{count!=null?" ("+count+")":""}
             </button>
           ))}
-          {hasData&&<button onClick={()=>exportToExcel(agentData,effVol,agentDir,totals,exceptions)} style={btn("#16a34a")}>⬇ Excel</button>}
-          <button onClick={()=>setShowBackup(p=>!p)} style={btn("#7c3aed")}>💾 Резерв</button>
-          <button onClick={()=>backRef.current.click()} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>📂 Восстановить</button>
+          {isAdmin&&hasData&&<button onClick={()=>exportToExcel(agentData,effVol,agentDir,totals,exceptions)} style={btn("#16a34a")}>⬇ Excel</button>}
+          {isAdmin&&<button onClick={()=>setShowBackup(p=>!p)} style={btn("#7c3aed")}>💾 Резерв</button>}
+          {isAdmin&&<button onClick={()=>backRef.current.click()} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>📂 Восстановить</button>}
           <input ref={backRef} type="file" accept=".json" onChange={importBackup} style={{display:"none"}}/>
         </div>
       </div>
 
       <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:16,gap:0}}>
-        {[["commissions","💰 Комиссии"],["policydb","📋 База полисов"],["officesales","🏢 Продажи офиса"],["payroll","📝 Начисления"]].map(([id,label])=>(
+        {[["commissions","💰 Комиссии"],["policydb","📋 База полисов"],["officesales","🏢 Продажи офиса"],["cashbook","📒 Касса"],["payroll","📝 Начисления"]].filter(([id])=>isAdmin||id!=="commissions").map(([id,label])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
             style={{...btn(tab===id?"#2563eb":"transparent",tab===id?"#fff":"#6b7280"),borderRadius:"6px 6px 0 0",fontSize:14,padding:"9px 22px",marginBottom:"-2px",border:"2px solid "+(tab===id?"#2563eb":"transparent"),fontWeight:tab===id?700:400}}>
             {label}
@@ -758,10 +1057,49 @@ export default function App(){
           {panel==="rates"&&<div><h3 style={{margin:"0 0 12px",fontSize:15}}>Ставки</h3><RatesPanel rates={rates} onSave={saveRates} agentDir={agentDir}/></div>}
           {panel==="volrates"&&<div><h3 style={{margin:"0 0 12px",fontSize:15}}>Ставки добровольных продуктов</h3><VolRatesPanel volRates={volRates} onSave={saveVR}/></div>}
           {panel==="exceptions"&&<div><h3 style={{margin:"0 0 12px",fontSize:15}}>Исключения</h3><ExceptionsPanel exceptions={exceptions} onSave={saveExcs} agentDir={agentDir}/></div>}
+          {panel==="access"&&(
+            <div style={{fontSize:13}}>
+              <h3 style={{margin:"0 0 14px",fontSize:15}}>🔐 Управление доступом</h3>
+              <div style={{maxWidth:420,marginBottom:20}}>
+                <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>
+                  {adminPin?"Изменить PIN администратора":"Установить PIN администратора"}
+                </div>
+                {!adminPin&&<p style={{fontSize:12,color:"#6b7280",marginBottom:12,marginTop:0}}>PIN ещё не установлен. После сохранения при следующем входе потребуется этот PIN.</p>}
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+                  <input type="password" value={newPinA} onChange={e=>setNewPinA(e.target.value)} placeholder="Новый PIN" style={{...inp,width:150,padding:"7px 10px",letterSpacing:3,fontSize:16}}/>
+                  <input type="password" value={newPinB} onChange={e=>setNewPinB(e.target.value)} onKeyDown={e=>e.key==="Enter"&&changePin()} placeholder="Повторите PIN" style={{...inp,width:150,padding:"7px 10px",letterSpacing:3,fontSize:16}}/>
+                  <button onClick={changePin} style={btn("#7c3aed")}>Сохранить</button>
+                </div>
+                {pinChangeMsg&&<div style={{fontSize:13,color:pinChangeMsg.startsWith("✓")?"#16a34a":"#dc2626"}}>{pinChangeMsg}</div>}
+              </div>
+              <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:4,color:"#374151"}}>Операторы (в форме «Продажи офиса»)</div>
+              <p style={{fontSize:12,color:"#6b7280",margin:"0 0 10px"}}>Внутренние коды сотрудников, доступных для выбора в форме ввода полиса.</p>
+              {officeStaff.length>0&&(
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                  {officeStaff.map((code,i)=>{
+                    const ag=Object.values(agentDir).find(a=>(a.internalCode||"").trim()===code.trim());
+                    const label=ag?(ag.name+" "+ag.surname+" ("+code+")"):code;
+                    return(
+                      <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#1e40af",fontWeight:600}}>
+                        {label}
+                        <button onClick={()=>saveOfficeStaff(officeStaff.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#6b7280",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input value={newStaffCode} onChange={e=>setNewStaffCode(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(newStaffCode.trim()&&!officeStaff.includes(newStaffCode.trim()))&&(saveOfficeStaff([...officeStaff,newStaffCode.trim()]),setNewStaffCode(""))} placeholder="Внутренний код (напр. 768-101)" style={{...inp,width:220,padding:"6px 10px"}}/>
+                <button onClick={()=>{if(newStaffCode.trim()&&!officeStaff.includes(newStaffCode.trim())){saveOfficeStaff([...officeStaff,newStaffCode.trim()]);setNewStaffCode("");}}} style={btn("#2563eb")}>+ Добавить</button>
+              </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {showBackup&&(
+      {showBackup&&isAdmin&&(
         <div style={{border:"1px solid #7c3aed",borderRadius:8,padding:16,marginBottom:16,background:"#faf5ff"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <strong style={{fontSize:14,color:"#6d28d9"}}>💾 Резервная копия</strong>
@@ -787,25 +1125,48 @@ export default function App(){
 
           <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:14,marginBottom:12,background:"#fafafa"}}>
             <div style={{fontWeight:600,fontSize:14,marginBottom:10}}>{"📂 Файлы — "+fmtMonth(selMonth)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
               {[...ALL_COMPANIES,"voluntary"].map(co=>{
                 const isVol=co==="voluntary";
                 const file=uploadedFiles.find(f=>f.company===co);
-                const volActive=isVol&&(volSession.length>0||storedVol.length>0);
-                const active=file||volActive;
+                const volSession_=isVol&&volSession.length>0;
+                const volStored=isVol&&storedVol.length>0;
+                const savedCount=isVol?storedVol.length:storedPols.filter(p=>p.company===co).length;
+                const sessionCount=isVol?volSession.length:file?(file.rows.length-1):0;
+                const hasSession=isVol?volSession_:!!file;
+                const hasSaved=savedCount>0;
                 const label=isVol?"📦 Доброволь.":co;
-                const rowCount=isVol?(volSession.length||storedVol.length):file?(file.rows.length-1):0;
+                // Определяем состояние
+                const state=hasSession?"session":hasSaved?"saved":"empty";
+                const styles={
+                  session:{border:"2px solid #16a34a",bg:"#f0fdf4",labelColor:"#15803d",icon:"📄"},
+                  saved:{border:"2px solid #3b82f6",bg:"#eff6ff",labelColor:"#1d4ed8",icon:"💾"},
+                  empty:{border:"2px dashed #d1d5db",bg:"white",labelColor:"#6b7280",icon:""},
+                }[state];
                 return(
                   <div key={co} onClick={()=>handleSlotClick(co)}
-                    style={{border:"2px dashed "+(active?"#86efac":"#d1d5db"),borderRadius:8,padding:10,background:active?"#f0fdf4":"white",minHeight:78,cursor:"pointer",display:"flex",flexDirection:"column",gap:4}}>
-                    <div style={{fontWeight:700,fontSize:13,color:active?"#16a34a":"#6b7280"}}>{label}</div>
-                    {active?(
+                    style={{border:styles.border,borderRadius:8,padding:10,background:styles.bg,minHeight:84,cursor:"pointer",display:"flex",flexDirection:"column",gap:3,position:"relative"}}>
+                    <div style={{fontWeight:700,fontSize:13,color:styles.labelColor,display:"flex",alignItems:"center",gap:4}}>
+                      {styles.icon&&<span>{styles.icon}</span>}{label}
+                    </div>
+                    {state==="session"&&(
                       <div>
-                        {file&&<div style={{fontSize:11,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.fileName}</div>}
-                        <div style={{fontSize:11,color:"#16a34a"}}>{rowCount+" строк"}</div>
-                        <button onClick={ev=>{ev.stopPropagation();removeFile(co);}} style={{...btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"}),fontSize:11,padding:"2px 6px",marginTop:4,width:"fit-content"}}>✕</button>
+                        {file&&<div style={{fontSize:10,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{file.fileName}</div>}
+                        <div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>{sessionCount+" строк"}</div>
+                        {hasSaved&&<div style={{fontSize:10,color:"#3b82f6"}}>{"💾 сохр. "+savedCount}</div>}
+                        <button onClick={ev=>{ev.stopPropagation();removeFile(co);}} style={{...btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"}),fontSize:10,padding:"2px 6px",marginTop:4,width:"fit-content"}}>✕ Убрать</button>
                       </div>
-                    ):<div style={{fontSize:11,color:"#9ca3af",marginTop:"auto"}}>Нажмите для загрузки</div>}
+                    )}
+                    {state==="saved"&&(
+                      <div>
+                        <div style={{fontSize:11,color:"#1d4ed8",fontWeight:600}}>{savedCount+" полисов"}</div>
+                        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Сохранено в базе</div>
+                        <div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>Нажмите для обновления</div>
+                      </div>
+                    )}
+                    {state==="empty"&&(
+                      <div style={{fontSize:11,color:"#9ca3af",marginTop:"auto"}}>Нажмите для загрузки</div>
+                    )}
                   </div>
                 );
               })}
@@ -856,8 +1217,8 @@ export default function App(){
                 <div style={{border:"1px solid #ddd6fe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
                   <div style={{background:"#f5f3ff",padding:"10px 16px",fontWeight:600,fontSize:14,color:"#6d28d9"}}>{"📦 Добровольные — "+effVol.length}</div>
                   <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                    <thead><tr>{["Продукт","Компания","Агент","Страхователь","Сумма","% О","Ком.О","% А","Ком.А"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>{effVol.map(v=><tr key={v._id}><td style={{...td,fontWeight:600}}>{v.productName}</td><td style={td}>{v.company}</td><td style={td}>{getName(v.agentUid)||v.agentCode}</td><td style={td}>{v.insuredName}</td><td style={td}>{fmt(v.amount)}</td><td style={{...td,color:"#6b7280"}}>{v.officeRate+"%"}</td><td style={td}>{fmt(v.officeComm)}</td><td style={{...td,color:"#6b7280"}}>{v.agentRate+"%"}</td><td style={td}>{fmt(v.agentComm)}</td></tr>)}</tbody>
+                    <thead><tr>{["Продукт","Компания","Агент","Страхователь","Сумма","% О","Ком.О","% А","Ком.А","К выплате"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                    <tbody>{effVol.map(v=><tr key={v._id}><td style={{...td,fontWeight:600}}>{v.productName}</td><td style={td}>{v.company}</td><td style={td}>{getName(v.agentUid)||v.agentCode}</td><td style={td}>{v.insuredName}</td><td style={td}>{fmt(v.amount)}</td><td style={{...td,color:"#6b7280"}}>{v.officeRate+"%"}</td><td style={td}>{fmt(v.officeComm)}</td><td style={{...td,color:"#6b7280"}}>{v.agentRate+"%"}</td><td style={td}>{fmt(v.agentComm)}</td><td style={{...td,fontWeight:700,color:"#1d4ed8"}}>{fmt(v.amount-v.agentComm)}</td></tr>)}</tbody>
                   </table></div>
                 </div>
               )}
@@ -920,6 +1281,9 @@ export default function App(){
             </select>
             <button onClick={loadDB} style={btn()}>🔄 Обновить</button>
             {dbLoaded&&<span style={{fontSize:12,color:"#6b7280"}}>{filteredDB.length+" полисов"+(expiryF?" ("+fmtMonth(expiryF)+")":"")}</span>}
+            {dbLoaded&&filteredDB.length>0&&(
+              <button onClick={()=>exportRenewalsZip(filteredDB,expiryF?fmtMonth(expiryF):"все")} style={btn("#16a34a",undefined,{marginLeft:"auto"})}>⬇ Экспорт по агентам (ZIP)</button>
+            )}
           </div>
           {!dbLoaded&&<div style={{padding:30,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
           {dbLoaded&&filteredDB.length===0&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>{dbPols.length===0?"База пуста. Загрузите файлы и нажмите «💾 Сохранить месяц».":"Нет полисов с окончанием в "+fmtMonth(expiryF)+"."}</div>}
@@ -945,126 +1309,1022 @@ export default function App(){
         </div>
       )}
 
-      {tab==="payroll"&&(
+      {tab==="officesales"&&(()=>{
+        const fmtPay=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO"})[t]||t||"—";
+        const fmtPolDate=d=>{if(!d)return"—";try{return fmtDate(parseDate(d));}catch{return d;}};
+        const finp={...inp,border:"1.5px solid #9ca3af",padding:"8px 10px"};
+        const flbl={fontSize:12,color:"#111827",marginBottom:4,fontWeight:500};
+        const sortedAgents=Object.entries(agentDir).sort((a,b)=>{
+          const ma=(a[1].internalCode||"").match(/(\d+)$/);const mb=(b[1].internalCode||"").match(/(\d+)$/);
+          return (ma?parseInt(ma[1]):99999)-(mb?parseInt(mb[1]):99999);
+        });
+        const allUnpaid=[...opPrevUnpaid,...opCurrentMonth.filter(p=>!p.paid)].sort((a,b)=>new Date(a.date)-new Date(b.date));
+        const currentPaid=opCurrentMonth.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
+        const staffAgents=sortedAgents.filter(([,a])=>officeStaff.includes((a.internalCode||"").trim()));
+        const tblH={...th,whiteSpace:"nowrap"};
+        const actBtn=(label,bg,col,onClick)=><button onClick={onClick} style={{...btn(bg,col,{fontSize:11,padding:"3px 8px"}),marginRight:3}}>{label}</button>;
+        const opSrch=opSearch.trim().toLowerCase();
+        const matchesText=p=>!opSrch||(p.insuredName||"").toLowerCase().includes(opSrch)||(p.phone||"").includes(opSrch)||(p.policyNum||"").toLowerCase().includes(opSrch)||(p.car||"").toLowerCase().includes(opSrch)||(p.carPlate||"").toLowerCase().includes(opSrch);
+        const matchesStatus=p=>opStatusFilter==="all"||(opStatusFilter==="paid"&&p.paid)||(opStatusFilter==="unpaid"&&!p.paid);
+        const filterPol=p=>matchesText(p)&&matchesStatus(p);
+        const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
+        const osagoList=opCurrentMonth.filter(p=>(p.polType||"osago")==="osago");
+        const volList=opCurrentMonth.filter(p=>p.polType==="voluntary");
+
+        return(
+          <div>
+            {/* Month nav + add */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
+              <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
+              <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
+              <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
+              <select value={opStatusFilter} onChange={e=>setOpStatusFilter(e.target.value)} style={{...inp,padding:"6px 10px",fontSize:13,fontWeight:600,marginLeft:8}}>
+                <option value="all">Все</option>
+                <option value="unpaid">Неоплаченные</option>
+                <option value="paid">Оплаченные</option>
+              </select>
+              <button onClick={openOpNew} style={btn("#2563eb",undefined,{marginLeft:"auto",fontSize:13,padding:"7px 16px"})}>+ Добавить полис</button>
+            </div>
+
+            {/* Search */}
+            <div style={{marginBottom:12}}>
+              <input value={opSearch} onChange={e=>setOpSearch(e.target.value)} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 12px",boxSizing:"border-box"}}/>
+            </div>
+
+            {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
+
+            {/* Unpaid from previous months */}
+            {opLoaded&&opPrevUnpaid.filter(filterPol).length>0&&(
+              <div style={{border:"2px solid #fcd34d",borderRadius:8,overflow:"hidden",marginBottom:20}}>
+                <div style={{background:"#fffbeb",padding:"10px 16px",fontWeight:700,fontSize:14,color:"#92400e",display:"flex",alignItems:"center",gap:8}}>
+                  <span>⚠ Неоплаченные из предыдущих месяцев — {opPrevUnpaid.length}{opSrch&&opPrevUnpaid.filter(filterPol).length!==opPrevUnpaid.length?" (показано "+opPrevUnpaid.filter(filterPol).length+")":""}</span>
+                </div>
+                <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#fef9c3"}}>{["Тип","Дата сост.","Месяц","Страхователь","Телефон","Компания","Продукт / Авто","Срок","Статус","№ полиса","Сумма","К оплате","Агент","Коммент.",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                  <tbody>{opPrevUnpaid.filter(filterPol).map((pol,i)=>(
+                    <tr key={pol._id} style={{background:i%2===0?"white":"#fefce8",borderBottom:"1px solid #fde68a"}}>
+                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280",whiteSpace:"nowrap"}}>{fmtMonth(pol._monthKey)}</td>
+                      <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
+                      <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
+                      <td style={td}>{pol.company||"—"}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.polType==="voluntary"?(pol.productName||"—"):(pol.car||"—")}</td>
+                      <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
+                      <td style={{...td,fontSize:11}}>{pol.polStatus?<span style={{background:"#f3e8ff",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>{fmtPolStatus(pol.polStatus)}</span>:"—"}</td>
+                      <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
+                      <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
+                      <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol.comment||""}</td>
+                      <td style={{...td,whiteSpace:"nowrap"}}>
+                        {actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                        {actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                        {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+              </div>
+            )}
+
+            {/* Current month — ОСАГО */}
+            {opLoaded&&(()=>{
+              const list=osagoList.filter(filterPol);
+              const t=calcTotals(osagoList);
+              return(
+              <div style={{border:"1px solid #dbeafe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+                <div style={{background:"#eff6ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                  <span style={{fontWeight:700,fontSize:14,color:"#1e40af"}}>🚗 ОСАГО — {fmtMonth(selMonth)}</span>
+                  <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap"}}>
+                    <span style={{color:"#374151"}}>Полисов: <strong>{t.count}</strong></span>
+                    <span style={{color:"#374151"}}>Сумма: <strong>{fmt(t.totalAmount)}</strong></span>
+                    <span style={{color:"#374151"}}>К оплате: <strong>{fmt(t.totalNet)}</strong></span>
+                    <span style={{color:"#16a34a"}}>Получено: <strong>{fmt(t.totalPaidAmt)}</strong></span>
+                    {t.unpaid>0&&<span style={{color:"#dc2626"}}>Ожидает: <strong>{t.unpaid}</strong></span>}
+                  </div>
+                </div>
+                {osagoList.length===0
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет полисов ОСАГО за {fmtMonth(selMonth)}</div>
+                  :list.length===0
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
+                  :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#dbeafe"}}>{["Статус","Дата сост.","Страхователь","Телефон","Компания","Марка авто","Рег.номер","Срок","Ст-с","№ полиса","Сумма","К оплате","Оператор","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                    <tbody>{list.map((pol,i)=>(
+                      <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
+                        <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
+                        <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
+                        <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
+                        <td style={td}>{pol.company}</td>
+                        <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.car||"—"}</td>
+                        <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
+                        <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
+                        <td style={{...td,fontSize:11}}>{pol.polStatus?<span style={{background:"#f3e8ff",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>{fmtPolStatus(pol.polStatus)}</span>:"—"}</td>
+                        <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
+                        <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
+                        <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
+                        <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
+                        <td style={{...td,whiteSpace:"nowrap"}}>
+                          {!pol.paid&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                          {!pol.paid&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                          {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table></div>
+                }
+              </div>
+              );
+            })()}
+
+            {/* Current month — Добровольные */}
+            {opLoaded&&(()=>{
+              const list=volList.filter(filterPol);
+              const t=calcTotals(volList);
+              return(
+              <div style={{border:"1px solid #e9d5ff",borderRadius:8,overflow:"hidden",marginBottom:20}}>
+                <div style={{background:"#f5f3ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                  <span style={{fontWeight:700,fontSize:14,color:"#6d28d9"}}>🛡 Добровольные — {fmtMonth(selMonth)}</span>
+                  <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap"}}>
+                    <span style={{color:"#374151"}}>Полисов: <strong>{t.count}</strong></span>
+                    <span style={{color:"#374151"}}>Сумма: <strong>{fmt(t.totalAmount)}</strong></span>
+                    <span style={{color:"#374151"}}>К оплате: <strong>{fmt(t.totalNet)}</strong></span>
+                    <span style={{color:"#16a34a"}}>Получено: <strong>{fmt(t.totalPaidAmt)}</strong></span>
+                    {t.unpaid>0&&<span style={{color:"#dc2626"}}>Ожидает: <strong>{t.unpaid}</strong></span>}
+                  </div>
+                </div>
+                {volList.length===0
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет добровольных полисов за {fmtMonth(selMonth)}</div>
+                  :list.length===0
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
+                  :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#ede9fe"}}>{["Статус","Дата сост.","Страхователь","Телефон","Продукт","Компания","№ полиса","Сумма","К оплате","Оператор","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                    <tbody>{list.map((pol,i)=>(
+                      <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
+                        <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
+                        <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
+                        <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
+                        <td style={{...td,fontSize:11,color:"#6d28d9",fontWeight:500}}>{pol.productName||"—"}</td>
+                        <td style={td}>{pol.company||"—"}</td>
+                        <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
+                        <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
+                        <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
+                        <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
+                        <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
+                        <td style={{...td,whiteSpace:"nowrap"}}>
+                          {!pol.paid&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                          {!pol.paid&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                          {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table></div>
+                }
+              </div>
+              );
+            })()}
+
+            {/* Empty state */}
+            {opLoaded&&osagoList.length===0&&volList.length===0&&opPrevUnpaid.length===0&&(
+              <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
+                <div style={{fontSize:32,marginBottom:8}}>🏢</div>
+                <div>Нет полисов. Нажмите «+ Добавить полис» для начала работы.</div>
+              </div>
+            )}
+
+            {/* Policy form modal */}
+            {opFormOpen&&(
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+                onClick={e=>{if(e.target===e.currentTarget)setOpFormOpen(false);}}>
+                <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+                  <h3 style={{margin:"0 0 12px",fontSize:16}}>{opEditPol?"✎ Редактировать полис":"➕ Новый полис"}</h3>
+                  {/* --- Тип продукта --- */}
+                  <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb"}}>
+                    {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].map(([k,l])=>(
+                      <button key={k} onClick={()=>setOpFD(p=>({...initOpFD(),polType:k,insuredName:p.insuredName,phone:p.phone,policyNum:p.policyNum,agentUid:p.agentUid,date:p.date,comment:p.comment}))}
+                        style={{flex:1,padding:"9px 0",fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:opFD.polType===k?"#2563eb":"#f8fafc",color:opFD.polType===k?"#fff":"#6b7280",transition:"all .15s"}}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  {/* --- Страхователь --- */}
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Страхователь</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div style={{gridColumn:"1/-1"}}>
+                      <div style={flbl}>ФИО страхователя *</div>
+                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value}))} placeholder="Имя Фамилия" style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>№ полиса</div>
+                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:e.target.value}))} placeholder="Номер полиса" style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Телефон</div>
+                      <input value={opFD.phone||""} onChange={e=>setOpFD(p=>({...p,phone:e.target.value}))} placeholder="+374..." style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  {/* === ОСАГО: Полис + Авто + Статус === */}
+                  {opFD.polType==="osago"&&(<>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Полис</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div>
+                      <div style={flbl}>Компания *</div>
+                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}>
+                        {ALL_COMPANIES.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={flbl}>Оператор (принял полис)</div>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}>
+                        <option value="">— Не указан —</option>
+                        {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={flbl}>Дата составления *</div>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Срок</div>
+                      <div style={{display:"flex",gap:6}}>
+                        {[["L","L (от 3 месяцев)"],["SH","SH (краткосрочный)"]].map(([k,l])=>(
+                          <button key={k} onClick={()=>setOpFD(p=>({...p,term:k}))}
+                            style={{...btn(opFD.term===k?"#1d4ed8":"#f3f4f6",opFD.term===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opFD.term===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={flbl}>Дата вступления в силу</div>
+                      <input type="date" value={opFD.dateStart||""} onChange={e=>setOpFD(p=>({...p,dateStart:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Дата окончания</div>
+                      <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Транспортное средство</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div>
+                      <div style={flbl}>Марка / модель авто</div>
+                      <input value={opFD.car||""} onChange={e=>setOpFD(p=>({...p,car:e.target.value}))} placeholder="Toyota Camry..." style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Рег. номер</div>
+                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:e.target.value}))} placeholder="00 AA 000" style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Регион</div>
+                      <select value={opFD.region||""} onChange={e=>setOpFD(p=>({...p,region:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box",background:"white"}}>
+                        <option value="">— выбрать —</option>
+                        {["YR","AG","AR","AV","GH","LO","KT","SH","SY","VD","TV"].map(r=><option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={flbl}>БМ</div>
+                      <select value={opFD.bm||""} onChange={e=>setOpFD(p=>({...p,bm:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box",background:"white"}}>
+                        <option value="">— выбрать —</option>
+                        {Array.from({length:25},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={flbl}>Мощность (л.с.)</div>
+                      <input type="number" value={opFD.power||""} onChange={e=>setOpFD(p=>({...p,power:e.target.value}))} placeholder="л.с." style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Статус полиса</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+                    {POL_STATUSES.map(({k,l})=>(
+                      <button key={k} onClick={()=>setOpFD(p=>({...p,polStatus:k}))}
+                        style={{...btn(opFD.polStatus===k?"#7c3aed":"#f3f4f6",opFD.polStatus===k?"#fff":"#374151",{border:"2px solid "+(opFD.polStatus===k?"#7c3aed":"#e5e7eb"),fontSize:12,padding:"5px 12px"})}}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  </>)}
+                  {/* === Добровольный: Продукт + Компания + Оператор + Дата === */}
+                  {opFD.polType==="voluntary"&&(<>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Продукт</div>
+                  <div style={{marginBottom:14}}>
+                    {(volRates.rates||[]).length>0
+                      ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box",background:"white"}}>
+                          <option value="">— выбрать продукт —</option>
+                          {(volRates.rates||[]).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
+                        </select>
+                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    }
+                  </div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Полис</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div>
+                      <div style={flbl}>Компания *</div>
+                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}>
+                        {ALL_COMPANIES.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={flbl}>Оператор (принял полис)</div>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}>
+                        <option value="">— Не указан —</option>
+                        {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
+                      </select>
+                    </div>
+                    <div style={{gridColumn:"1/-1"}}>
+                      <div style={flbl}>Дата составления *</div>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  </>)}
+                  {/* === Финансы (общее) === */}
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Финансы</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div>
+                      <div style={flbl}>Страховая премия (AMD) *</div>
+                      <input type="number" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:e.target.value}))} placeholder="0" style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Скидка (AMD)</div>
+                      <input type="number" value={opFD.discount||"0"} onChange={e=>setOpFD(p=>({...p,discount:e.target.value}))} placeholder="0" style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right"}}/>
+                    </div>
+                    <div style={{gridColumn:"1/-1",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:12,color:"#166534"}}>К оплате клиентом:</span>
+                      <span style={{fontSize:17,fontWeight:700,color:"#16a34a"}}>{fmt((parseFloat(opFD.amount)||0)-(parseFloat(opFD.discount)||0))}</span>
+                    </div>
+                  </div>
+                  {/* === Добровольный: принятие оплаты сразу === */}
+                  {opFD.polType==="voluntary"&&(
+                  <div style={{marginBottom:14,border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
+                    <div style={{background:"#f8fafc",padding:"8px 14px",display:"flex",alignItems:"center",gap:10}}>
+                      <input type="checkbox" id="payNowCb" checked={!!opFD.payNow} onChange={e=>setOpFD(p=>({...p,payNow:e.target.checked,paymentType:e.target.checked?(p.paymentType||"cash"):""}))} style={{width:16,height:16,cursor:"pointer"}}/>
+                      <label htmlFor="payNowCb" style={{fontSize:13,fontWeight:600,color:"#374151",cursor:"pointer"}}>Принять оплату сразу</label>
+                    </div>
+                    {opFD.payNow&&(
+                      <div style={{padding:"10px 14px"}}>
+                        <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>Способ оплаты *</div>
+                        <div style={{display:"flex",gap:8}}>
+                          {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"]].map(([k,l])=>(
+                            <button key={k} onClick={()=>setOpFD(p=>({...p,paymentType:k}))}
+                              style={{...btn(opFD.paymentType===k?"#1d4ed8":"#f3f4f6",opFD.paymentType===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opFD.paymentType===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
+                              {l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  )}
+                  {/* --- Комментарий --- */}
+                  <div style={{marginBottom:16}}>
+                    <div style={flbl}>Комментарий</div>
+                    <input value={opFD.comment||""} onChange={e=>setOpFD(p=>({...p,comment:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&submitOpForm()} placeholder="Необязательно" style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={submitOpForm} style={{...btn("#2563eb"),flex:1,padding:"10px",fontSize:14}}>{opEditPol?"Сохранить изменения":"Добавить полис"}</button>
+                    <button onClick={()=>setOpFormOpen(false)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Payment modal */}
+            {opPayPol&&(
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+                  <div style={{textAlign:"center",fontSize:28,marginBottom:6}}>✓</div>
+                  <h3 style={{margin:"0 0 16px",fontSize:16,textAlign:"center"}}>Принять оплату</h3>
+                  <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13}}>
+                    <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{opPayPol.insuredName}</div>
+                    <div style={{color:"#6b7280"}}>{opPayPol.company}{opPayPol.policyNum?" · "+opPayPol.policyNum:""}{opPayPol._monthKey&&opPayPol._monthKey!==selMonth?<span style={{marginLeft:8,background:"#fef9c3",color:"#92400e",borderRadius:10,padding:"1px 6px",fontSize:11}}>{"из "+fmtMonth(opPayPol._monthKey)}</span>:null}</div>
+                    <div style={{marginTop:4,fontSize:12,color:"#374151"}}>Сумма: <strong>{fmt(opPayPol.amount)}</strong>{opPayPol.discount>0?<> — скидка <strong style={{color:"#dc2626"}}>{fmt(opPayPol.discount)}</strong></>:null}</div>
+                  </div>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Сумма к оплате (AMD)</div>
+                    <div style={{width:"100%",padding:"10px 12px",fontSize:18,fontWeight:700,textAlign:"right",boxSizing:"border-box",background:"#eff6ff",color:"#1d4ed8",borderRadius:6,border:"1.5px solid #bfdbfe"}}>{fmt(parseFloat(opPayData.paidAmount)||0)}</div>
+                  </div>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>Способ оплаты *</div>
+                    <div style={{display:"flex",gap:8}}>
+                      {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"]].map(([k,l])=>(
+                        <button key={k} onClick={()=>setOpPayData(p=>({...p,paymentType:k}))}
+                          style={{...btn(opPayData.paymentType===k?"#1d4ed8":"#f3f4f6",opPayData.paymentType===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opPayData.paymentType===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Дата оплаты</div>
+                    <div style={{padding:"7px 10px",background:"#f1f5f9",borderRadius:6,border:"1.5px solid #e5e7eb",fontSize:14,color:"#374151",fontWeight:500}}>{opPayData.paidDate||new Date().toISOString().slice(0,10)}</div>
+                  </div>
+                  <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:6,padding:"8px 12px",marginBottom:14,fontSize:12,color:"#9a3412"}}>
+                    ⚠ После подтверждения изменить данные оплаты будет невозможно
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>acceptOpPayment(opPayPol,{paidAmount:parseFloat(opPayData.paidAmount)||0,paymentType:opPayData.paymentType,paidDate:opPayData.paidDate})} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14}}>✓ Подтвердить</button>
+                    <button onClick={()=>setOpPayPol(null)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {tab==="cashbook"&&(()=>{
+        const today=new Date().toISOString().slice(0,10);
+        const fmtDay=d=>{try{const[y,m,dd]=d.split("-");return dd+"."+m+"."+y;}catch{return d;}};
+        const fmtDatetime=iso=>{try{const d=new Date(iso);return d.toLocaleDateString("ru-RU")+", "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
+        const fmtTime=iso=>{try{return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
+        const payLabel=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO"})[t]||t||"—";
+        const polTypeBadge=p=>p.polType==="voluntary"
+          ?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>
+          :<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>;
+
+        // Group live payments by paidDate
+        const byDay={};
+        cashMonthPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
+          const d=p.paidDate;
+          if(!byDay[d])byDay[d]={cash:0,acba:0,ineco:0,pols:[]};
+          const amt=p.paidAmount||0;
+          if(p.paymentType==="acba")byDay[d].acba+=amt;
+          else if(p.paymentType==="ineco")byDay[d].ineco+=amt;
+          else byDay[d].cash+=amt;
+          byDay[d].pols.push(p);
+        });
+        if(today.startsWith(selMonth)&&!byDay[today])byDay[today]={cash:0,acba:0,ineco:0,pols:[]};
+
+        // For closed days use snapshot totals; for open use live
+        const getTotals=date=>{
+          const cd=cashDays[date];
+          if(cd&&cd.closed&&cd.totals)return cd.totals;
+          const d=byDay[date]||{cash:0,acba:0,ineco:0};
+          return{cash:d.cash,acba:d.acba,ineco:d.ineco,total:(d.cash+d.acba+d.ineco)};
+        };
+        const getPols=date=>{
+          const cd=cashDays[date];
+          if(cd&&cd.closed&&cd.snapshot)return cd.snapshot;
+          return(byDay[date]||{pols:[]}).pols;
+        };
+
+        // All days: union of live byDay keys + closed cashDays keys
+        const allDayKeys=new Set([...Object.keys(byDay),...Object.keys(cashDays)]);
+        const days=[...allDayKeys].filter(d=>d.startsWith(selMonth)).sort().reverse();
+
+        // Month totals (sum of all days — closed use snapshot, open use live)
+        const mTotals=days.reduce((acc,d)=>{const t=getTotals(d);acc.cash+=t.cash;acc.acba+=t.acba;acc.ineco+=t.ineco;return acc;},{cash:0,acba:0,ineco:0});
+        const mTotal=mTotals.cash+mTotals.acba+mTotals.ineco;
+
+        const card=(label,val,color)=>(
+          <div style={{flex:1,minWidth:140,background:"white",border:"1px solid #e5e7eb",borderRadius:8,padding:"12px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+            <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>{label}</div>
+            <div style={{fontSize:20,fontWeight:700,color}}>{fmt(val)}</div>
+          </div>
+        );
+
+        const fmtPolDate2=d=>{if(!d)return"—";try{const[y,m,dd]=d.split("-");return dd+"."+m+"."+y;}catch{return d;}};
+        const polTypeLabel=p=>p.polType==="voluntary"?(p.productName||"Добровольный"):"ОСАГО";
+
+        const polsTable=(pols,compact)=>(
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:compact?11:12}}>
+            <thead><tr style={{background:"#f1f5f9"}}>{["Страхователь","Тип","Компания","№ полиса","Дата заключения","Сумма","Скидка","К оплате","Способ","Заметка"].map(h=><th key={h} style={{...th,fontSize:10,padding:"5px 8px"}}>{h}</th>)}</tr></thead>
+            <tbody>{pols.map((p,i)=>(
+              <tr key={p._id||i} style={{background:i%2===0?"white":"#f8fafc",borderBottom:"1px solid #f3f4f6"}}>
+                <td style={{...td,fontWeight:600,whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{polTypeLabel(p)}</td>
+                <td style={{...td,fontSize:11}}>{p.company||"—"}</td>
+                <td style={{...td,fontSize:11}}>{p.policyNum||"—"}</td>
+                <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate2(p.date)}</td>
+                <td style={{...td,textAlign:"right"}}>{fmt(p.amount||0)}</td>
+                <td style={{...td,textAlign:"right",color:"#dc2626"}}>{(p.discount||0)>0?fmt(p.discount):"—"}</td>
+                <td style={{...td,textAlign:"right",fontWeight:700,color:"#16a34a"}}>{fmt(p.paidAmount||0)}</td>
+                <td style={{...td,whiteSpace:"nowrap",fontSize:11}}>{payLabel(p.paymentType)}</td>
+                <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.comment||"—"}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        );
+
+        const printCashReport=(date)=>{
+          const pols=getPols(date);
+          const t=getTotals(date);
+          const isClosed=cashDays[date]&&cashDays[date].closed;
+          const fmtAmd=v=>(v||0).toLocaleString("ru-RU")+" AMD";
+          const pTypeLabel=p=>p.polType==="voluntary"?(p.productName||"Добровольный"):"ОСАГО";
+          const rows=pols.map(p=>`<tr><td>${p.insuredName||"—"}</td><td>${pTypeLabel(p)}</td><td>${p.company||"—"}</td><td>${p.policyNum||"—"}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO"}[p.paymentType]||"—"}</td><td>${p.comment||"—"}</td></tr>`).join("");
+          const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#111}h2{margin:0 0 2px;font-size:16px}p.sub{margin:0 0 14px;color:#666;font-size:11px}table{width:100%;border-collapse:collapse;margin-bottom:16px}th,td{border:1px solid #ccc;padding:4px 7px;text-align:left}th{background:#f1f5f9;font-size:10px;font-weight:600}.totals{border:2px solid #374151;border-radius:4px;padding:10px 14px;max-width:320px}.totals .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}.totals .grand{font-size:15px;font-weight:700;border-top:2px solid #374151;margin-top:5px;padding-top:7px}.footer{margin-top:16px;font-size:10px;color:#999}@media print{.no-print{display:none}}</style></head><body><h2>Кассовый отчёт</h2><p class="sub">${fmtDay(date)}${isClosed?" · Касса закрыта "+fmtDatetime(cashDays[date].closedAt):""}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco)}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const w=window.open("","_blank","width=900,height=650");
+          if(w){w.document.write(html);w.document.close();}
+        };
+
+        return(
+          <div>
+            {/* Month nav */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
+              <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
+              <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
+              <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
+            </div>
+            {/* Month totals */}
+            <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+              {card("💵 Наличные",mTotals.cash,"#374151")}
+              {card("🏦 ACBA",mTotals.acba,"#1d4ed8")}
+              {card("🏦 INECO",mTotals.ineco,"#0f766e")}
+              {card("📊 Итого за месяц",mTotal,"#7c3aed")}
+            </div>
+            {!cashLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
+            {cashLoaded&&days.length===0&&(
+              <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
+                <div style={{fontSize:32,marginBottom:8}}>📒</div>
+                <div>Нет платежей за {fmtMonth(selMonth)}</div>
+              </div>
+            )}
+            {/* Days table */}
+            {cashLoaded&&days.length>0&&(
+              <div style={{border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead>
+                    <tr style={{background:"#f1f5f9"}}>
+                      {["Дата","💵 Наличные","🏦 ACBA","🏦 INECO","Итого","Записей","Статус",""].map(h=><th key={h} style={{...th,padding:"10px 12px"}}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map(date=>{
+                      const t=getTotals(date);
+                      const pols=getPols(date);
+                      const total=t.total||t.cash+t.acba+t.ineco;
+                      const isClosed=!!(cashDays[date]&&cashDays[date].closed);
+                      const wasReopened=!!(cashDays[date]&&cashDays[date].reopenedAt);
+                      const isToday=date===today;
+                      const isPast=date<today;
+                      const isExpanded=cashExpandDay===date;
+                      const canClose=!isClosed&&(isToday||(isAdmin&&isPast));
+                      return(<Fragment key={date}>
+                        <tr onClick={()=>setCashExpandDay(isExpanded?null:date)}
+                          style={{background:isToday?"#fffbeb":isClosed?"#f0fdf4":"white",borderBottom:"1px solid #e5e7eb",cursor:"pointer"}}>
+                          <td style={{...td,fontWeight:700,whiteSpace:"nowrap"}}>
+                            <span style={{marginRight:6,fontSize:11,color:"#9ca3af"}}>{isExpanded?"▾":"▸"}</span>
+                            {fmtDay(date)}
+                            {isToday&&<span style={{marginLeft:6,background:"#fef9c3",color:"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>сегодня</span>}
+                          </td>
+                          <td style={{...td,textAlign:"right",color:t.cash>0?"#374151":"#d1d5db"}}>{t.cash>0?fmt(t.cash):"—"}</td>
+                          <td style={{...td,textAlign:"right",color:t.acba>0?"#1d4ed8":"#d1d5db"}}>{t.acba>0?fmt(t.acba):"—"}</td>
+                          <td style={{...td,textAlign:"right",color:t.ineco>0?"#0f766e":"#d1d5db"}}>{t.ineco>0?fmt(t.ineco):"—"}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700}}>{total>0?fmt(total):"—"}</td>
+                          <td style={{...td,textAlign:"center",color:"#6b7280"}}>{pols.length}</td>
+                          <td style={{...td,whiteSpace:"nowrap"}}>
+                            {isClosed
+                              ?<><span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 9px",fontSize:11,fontWeight:600}}>✓ Закрыта</span>
+                                <span style={{marginLeft:5,fontSize:10,color:"#9ca3af"}}>{fmtTime(cashDays[date].closedAt)}</span>
+                                {wasReopened&&<span style={{marginLeft:5,fontSize:10,color:"#d97706"}}>переоткрывалась</span>}</>
+                              :<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 9px",fontSize:11,fontWeight:600}}>⏳ Открыта</span>
+                            }
+                          </td>
+                          <td style={{...td,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                            {canClose&&<button onClick={()=>setCashCloseModal(date)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 10px"}),marginRight:4}}>Закрыть кассу</button>}
+                            {isClosed&&<button onClick={()=>printCashReport(date)} style={{...btn("#f3f4f6","#374151",{fontSize:11,padding:"3px 10px"}),marginRight:4}}>🖨 Печать</button>}
+                            {isClosed&&isAdmin&&<button onClick={()=>setCashReopenModal(date)} style={btn("#fff7ed","#b45309",{fontSize:11,padding:"3px 10px",border:"1px solid #fcd34d"})}>🔓 Открыть</button>}
+                          </td>
+                        </tr>
+                        {isExpanded&&(
+                          <tr key={date+"-exp"}>
+                            <td colSpan={8} style={{padding:"12px 16px",background:"#fafafa",borderBottom:"1px solid #e5e7eb"}}>
+                              {isClosed&&<div style={{fontSize:11,color:"#6b7280",marginBottom:8}}>Снимок на момент закрытия · {fmtDatetime(cashDays[date].closedAt)}</div>}
+                              {pols.length>0
+                                ?<div style={{overflowX:"auto"}}>{polsTable(pols,true)}</div>
+                                :<div style={{color:"#9ca3af",fontSize:12,padding:"8px 0"}}>Нет платежей за этот день</div>
+                              }
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>);
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* === Close-of-day modal === */}
+            {cashCloseModal&&(()=>{
+              const d=byDay[cashCloseModal]||{cash:0,acba:0,ineco:0,pols:[]};
+              const total=d.cash+d.acba+d.ineco;
+              return(
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:"white",borderRadius:12,width:"100%",maxWidth:680,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
+                  {/* Header */}
+                  <div style={{padding:"18px 24px 14px",borderBottom:"1px solid #e5e7eb"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <h3 style={{margin:0,fontSize:16}}>📒 Закрыть кассу — {fmtDay(cashCloseModal)}</h3>
+                      <button onClick={()=>setCashCloseModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af"}}>×</button>
+                    </div>
+                    <p style={{margin:"4px 0 0",fontSize:12,color:"#6b7280"}}>Проверьте записи перед закрытием. После подтверждения изменения будут недоступны.</p>
+                  </div>
+                  {/* Policy list */}
+                  <div style={{flex:1,overflowY:"auto",padding:"12px 24px"}}>
+                    {d.pols.length===0
+                      ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет платежей за этот день</div>
+                      :<div style={{overflowX:"auto"}}>{polsTable(d.pols,false)}</div>
+                    }
+                  </div>
+                  {/* Totals */}
+                  <div style={{padding:"12px 24px",background:"#f8fafc",borderTop:"1px solid #e5e7eb",borderBottom:"1px solid #e5e7eb"}}>
+                    <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13}}>
+                      <div><span style={{color:"#6b7280"}}>💵 Наличные: </span><strong>{fmt(d.cash)}</strong></div>
+                      <div><span style={{color:"#6b7280"}}>🏦 ACBA: </span><strong style={{color:"#1d4ed8"}}>{fmt(d.acba)}</strong></div>
+                      <div><span style={{color:"#6b7280"}}>🏦 INECO: </span><strong style={{color:"#0f766e"}}>{fmt(d.ineco)}</strong></div>
+                      <div style={{marginLeft:"auto"}}><span style={{color:"#6b7280"}}>Итого: </span><strong style={{fontSize:16,color:"#7c3aed"}}>{fmt(total)}</strong></div>
+                    </div>
+                  </div>
+                  {/* Warning + buttons */}
+                  <div style={{padding:"12px 24px 18px"}}>
+                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:6,padding:"7px 12px",marginBottom:12,fontSize:12,color:"#9a3412"}}>
+                      ⚠ После закрытия сотрудник не сможет вносить изменения. Администратор может открыть кассу при необходимости.
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>closeCashDay(cashCloseModal)} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14}}>✓ Закрыть кассу</button>
+                      <button onClick={()=>setCashCloseModal(null)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+
+            {/* === Reopen modal (admin only) === */}
+            {cashReopenModal&&(
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:"white",borderRadius:12,padding:28,width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+                  <div style={{textAlign:"center",fontSize:36,marginBottom:8}}>🔓</div>
+                  <h3 style={{margin:"0 0 10px",fontSize:16,textAlign:"center"}}>Открыть кассу</h3>
+                  <p style={{textAlign:"center",fontSize:14,color:"#374151",margin:"0 0 16px"}}>за <strong>{fmtDay(cashReopenModal)}</strong></p>
+                  <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:6,padding:"8px 12px",marginBottom:16,fontSize:12,color:"#92400e"}}>
+                    После открытия сотрудник сможет принять новые платежи и повторно закрыть кассу. Снимок предыдущего закрытия будет очищен.
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>reopenCashDay(cashReopenModal)} style={{...btn("#d97706"),flex:1,padding:"10px",fontSize:14}}>🔓 Открыть</button>
+                    <button onClick={()=>setCashReopenModal(null)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {tab==="payroll"&&(()=>{
+        const foundUID=payrollUID&&agentData.find(a=>a.uid===payrollUID)?payrollUID:null;
+        const foundAgent=foundUID?agentData.find(a=>a.uid===foundUID):null;
+        const validPols=foundAgent?foundAgent.policies.filter(p=>!p.exception):[];
+        const excPols=foundAgent?foundAgent.policies.filter(p=>p.exception):[];
+        return(
         <div>
+          {/* Навигация по месяцу */}
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
             <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
             <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
             <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
-            <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-              <button onClick={()=>exportPayroll(agentData,agentDir,selMonth)} style={btn("#16a34a")}>⬇ Экспорт Excel</button>
-              <button onClick={()=>window.print()} style={btn("#6366f1")}>🖨 Печать</button>
+          </div>
+
+          {/* Коды офиса */}
+          <div style={{border:"1px solid #e5e7eb",borderRadius:8,padding:"12px 14px",marginBottom:20,background:"#fafafa"}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>Коды офиса — {fmtMonth(selMonth)}</div>
+            {officeCodes.length>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                {officeCodes.map((code,i)=>(
+                  <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"4px 10px",fontSize:13,color:"#1e40af",fontWeight:600}}>
+                    {code}
+                    <button onClick={()=>removeOfficeCode(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#6b7280",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input
+                value={newOfficeCode}
+                onChange={e=>setNewOfficeCode(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&addOfficeCode()}
+                placeholder="Введите код офиса"
+                style={{padding:"6px 10px",border:"1px solid #d1d5db",borderRadius:6,fontSize:13,minWidth:180,outline:"none"}}
+              />
+              <button onClick={addOfficeCode} style={btn("#2563eb",undefined,{fontSize:12})}>+ Добавить</button>
             </div>
           </div>
 
-          {agentData.filter(a=>a.validSales>0).length===0
-            ?<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>{"Нет данных за "+fmtMonth(selMonth)+". Загрузите файлы в разделе Комиссии."}</div>
-            :(
-            <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <thead>
-                  <tr>
-                    <th rowSpan={2} style={{...th,verticalAlign:"middle"}}>Имя агента</th>
-                    <th rowSpan={2} style={{...th,verticalAlign:"middle",color:"#6366f1"}}>768-код</th>
-                    {ALL_COMPANIES.map(c=><th key={c} colSpan={2} style={{...th,textAlign:"center",borderLeft:"1px solid #e5e7eb"}}>{c}</th>)}
-                    <th rowSpan={2} style={{...th,verticalAlign:"middle",textAlign:"center",borderLeft:"2px solid #374151"}}>Итого</th>
-                    <th rowSpan={2} style={{...th,verticalAlign:"middle",minWidth:120}}>Подпись</th>
-                  </tr>
-                  <tr>
-                    {ALL_COMPANIES.map(c=>[
-                      <th key={c+"-n"} style={{...th,fontSize:10,textAlign:"center",borderLeft:"1px solid #e5e7eb"}}>кол-во</th>,
-                      <th key={c+"-s"} style={{...th,fontSize:10,textAlign:"center"}}>сумма</th>
-                    ])}
-                  </tr>
-                </thead>
-                <tbody>
-                  {agentData.filter(a=>a.validSales>0).map(a=>{
-                    const ic=(agentDir[a.uid]&&agentDir[a.uid].internalCode)||"";
-                    return(
-                      <tr key={a.uid} style={{borderBottom:"1px solid #f0f0f0"}}>
-                        <td style={{...td,fontWeight:600}}>{agName(a)}</td>
-                        <td style={{...td,color:"#6366f1",fontWeight:600,fontSize:11}}>{ic||"—"}</td>
-                        {ALL_COMPANIES.map(c=>{
-                          const pols=a.policies.filter(p=>p.company===c&&!p.exception);
-                          const sum=pols.reduce((s,p)=>s+p.agentComm,0);
-                          return[
-                            <td key={c+"-n"} style={{...td,textAlign:"center",borderLeft:"1px solid #e5e7eb",color:pols.length>0?"#111":"#d1d5db"}}>{pols.length>0?pols.length:"—"}</td>,
-                            <td key={c+"-s"} style={{...td,textAlign:"right",color:sum>0?"#111":"#d1d5db",fontSize:11}}>{sum>0?fmt(sum):"—"}</td>
-                          ];
-                        })}
-                        <td style={{...td,fontWeight:700,textAlign:"right",borderLeft:"2px solid #374151",color:"#16a34a"}}>{fmt(a.totalAgent)}</td>
-                        <td style={{...td,borderBottom:"1px solid #9ca3af",minWidth:120}}></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-        <div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
-            <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
-            <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
-            <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
-            <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-              {savedOk&&<span style={{color:"#16a34a",fontSize:12,fontWeight:600}}>✓ Сохранено</span>}
-              <button onClick={saveMonth} style={btn("#16a34a",undefined,{fontSize:11})}>💾 Сохранить месяц</button>
-            </div>
+          {/* Фильтр по внутреннему коду агента */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+            <input
+              value={payrollIC}
+              onChange={e=>setPayrollIC(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"){const uid=Object.keys(agentDir).find(k=>agentDir[k].internalCode===payrollIC.trim());setPayrollUID(uid||"__notfound__");} }}
+              placeholder="Внутренний код агента (напр. 768-40)"
+              style={{padding:"7px 12px",border:"1px solid #d1d5db",borderRadius:6,fontSize:14,minWidth:260,outline:"none"}}
+            />
+            <button onClick={()=>{const uid=Object.keys(agentDir).find(k=>agentDir[k].internalCode===payrollIC.trim());setPayrollUID(uid||"__notfound__");}} style={btn("#2563eb")}>Показать</button>
+            {payrollUID&&<button onClick={()=>{setPayrollUID(null);setPayrollIC("");}} style={btn("#6b7280",undefined,{fontSize:12})}>✕ Сбросить</button>}
           </div>
-          <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:16,marginBottom:16,background:"#fafafa"}}>
-            <div style={{fontWeight:600,fontSize:14,marginBottom:10}}>{"📂 Файл продаж офиса — "+fmtMonth(selMonth)}</div>
-            <div onClick={()=>officeFileRef.current.click()}
-              style={{border:"2px dashed "+(officeData.rows&&officeData.rows.length>0?"#86efac":"#d1d5db"),borderRadius:8,padding:16,cursor:"pointer",background:officeData.rows&&officeData.rows.length>0?"#f0fdf4":"white",textAlign:"center",marginBottom:8}}>
-              {officeData.rows&&officeData.rows.length>0?(
+
+          {/* Состояния */}
+          {!payrollUID&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>Введите внутренний код агента и нажмите «Показать»</div>}
+          {payrollUID==="__notfound__"&&<div style={{padding:30,textAlign:"center",color:"#dc2626",fontSize:14,background:"#fef2f2",borderRadius:8}}>Агент с кодом «{payrollIC}» не найден в справочнике</div>}
+          {foundAgent&&foundAgent.policies.length===0&&<div style={{padding:30,textAlign:"center",color:"#9ca3af",fontSize:14}}>Нет полисов за {fmtMonth(selMonth)}</div>}
+
+          {foundAgent&&foundAgent.policies.length>0&&(
+            <div>
+              {/* Шапка агента */}
+              <div style={{background:"#1e293b",color:"#fff",borderRadius:10,padding:"14px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
                 <div>
-                  <div style={{fontWeight:600,color:"#16a34a",fontSize:14}}>{"✓ "+(officeData.fileName||"Файл загружен")}</div>
-                  <div style={{fontSize:12,color:"#6b7280",marginTop:4}}>{officeData.rows.length+" строк"}</div>
+                  <div style={{fontSize:11,opacity:.6,marginBottom:2}}>Агент</div>
+                  <div style={{fontWeight:700,fontSize:16}}>{agName(foundAgent)}</div>
+                  <div style={{fontSize:12,opacity:.7,marginTop:2}}>{(agentDir[foundAgent.uid]&&agentDir[foundAgent.uid].internalCode)||""}</div>
                 </div>
-              ):(
-                <div>
-                  <div style={{fontSize:24,marginBottom:4}}>📂</div>
-                  <div style={{color:"#6b7280",fontSize:14}}>Нажмите для загрузки файла</div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:11,opacity:.6}}>Зачётных</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#4ade80"}}>{validPols.length}</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:11,opacity:.6}}>Незачётных</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#f87171"}}>{excPols.length}</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:11,opacity:.6}}>Итого начислено</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#fbbf24"}}>{fmt(foundAgent.totalAgent)}</div>
+                  </div>
+                </div>
+                <button onClick={()=>exportAgentAll(foundAgent.uid,validPols,excPols,selMonth)} style={btn("#16a34a")}>⬇ Экспорт (все)</button>
+              </div>
+
+              {/* Таблица по компаниям */}
+              <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:24}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead>
+                    <tr style={{background:"#f8fafc"}}>
+                      <th style={th}>Компания</th>
+                      <th style={{...th,textAlign:"center"}}>Кол-во полисов</th>
+                      <th style={{...th,textAlign:"right"}}>Сумма начислений</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ALL_COMPANIES.map(c=>{
+                      const pols=foundAgent.policies.filter(p=>p.company===c&&!p.exception);
+                      const sum=pols.reduce((s,p)=>s+p.agentComm,0);
+                      if(pols.length===0)return null;
+                      return(
+                        <tr key={c} style={{borderBottom:"1px solid #f0f0f0"}}>
+                          <td style={{...td,fontWeight:600}}>{c}</td>
+                          <td style={{...td,textAlign:"center"}}>{pols.length}</td>
+                          <td style={{...td,textAlign:"right",color:"#16a34a",fontWeight:600}}>{fmt(sum)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{background:"#f1f5f9"}}>
+                      <td style={{...td,fontWeight:700}}>ИТОГО</td>
+                      <td style={{...td,textAlign:"center",fontWeight:700}}>{validPols.length}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#16a34a"}}>{fmt(foundAgent.totalAgent)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Незачётные полисы */}
+              {excPols.length>0&&(
+                <div style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                    <div style={{fontWeight:700,fontSize:14,color:"#dc2626"}}>Незачётные полисы ({excPols.length})</div>
+                    <button onClick={()=>exportAgentExc(foundAgent.uid,excPols,selMonth)} style={btn("#dc2626",undefined,{fontSize:12})}>⬇ Экспорт незачётных</button>
+                  </div>
+                  <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #fca5a5"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#fef2f2"}}>{["№ полиса","Компания","Страхователь","Марка","Рег.номер","Начало","Окончание","Регион","БМ","Сумма"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{excPols.map((p,i)=>(
+                        <tr key={i} style={{background:i%2===0?"white":"#fff5f5",borderBottom:"1px solid #fee2e2"}}>
+                          <td style={td}>{p.policyNum}</td>
+                          <td style={td}>{p.company}</td>
+                          <td style={td}>{p.insuredName}</td>
+                          <td style={{...td,color:"#6b7280"}}>{p.car}</td>
+                          <td style={{...td,fontSize:11}}>{p.carPlate}</td>
+                          <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.startDateFmt}</td>
+                          <td style={{...td,fontSize:11}}>{p.endDateFmt}</td>
+                          <td style={td}>{p.region}</td>
+                          <td style={{...td,textAlign:"center"}}>{p.bm}</td>
+                          <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Зачётные полисы */}
+              {validPols.length>0&&(
+                <div style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                    <div style={{fontWeight:700,fontSize:14,color:"#16a34a"}}>Зачётные полисы ({validPols.length})</div>
+                    <button onClick={()=>exportAgentValid(foundAgent.uid,validPols,selMonth)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Экспорт зачётных</button>
+                  </div>
+                  <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #86efac"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#f0fdf4"}}>{["№ полиса","Компания","Страхователь","Марка","Рег.номер","Начало","Окончание","Регион","БМ","Сумма","Ставка %","Начислено"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{validPols.map((p,i)=>(
+                        <tr key={i} style={{background:i%2===0?"white":"#f7fef9",borderBottom:"1px solid #d1fae5"}}>
+                          <td style={td}>{p.policyNum}</td>
+                          <td style={td}>{p.company}</td>
+                          <td style={td}>{p.insuredName}</td>
+                          <td style={{...td,color:"#6b7280"}}>{p.car}</td>
+                          <td style={{...td,fontSize:11}}>{p.carPlate}</td>
+                          <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.startDateFmt}</td>
+                          <td style={{...td,fontSize:11}}>{p.endDateFmt}</td>
+                          <td style={td}>{p.region}</td>
+                          <td style={{...td,textAlign:"center"}}>{p.bm}</td>
+                          <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
+                          <td style={{...td,textAlign:"center",color:"#6366f1"}}>{(p.agentRate||0)+"%"}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:600,color:"#16a34a"}}>{fmt(p.agentComm)}</td>
+                        </tr>
+                      ))}</tbody>
+                      <tfoot>
+                        <tr style={{background:"#f0fdf4"}}>
+                          <td colSpan={9} style={{...td,fontWeight:700,borderTop:"2px solid #86efac"}}>ИТОГО</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,borderTop:"2px solid #86efac"}}>{fmt(validPols.reduce((s,p)=>s+p.amount,0))}</td>
+                          <td style={{...td,borderTop:"2px solid #86efac"}}></td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:"#16a34a",borderTop:"2px solid #86efac"}}>{fmt(foundAgent.totalAgent)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
-            <input ref={officeFileRef} type="file" accept=".xlsx,.xls" onChange={handleOfficeFile} style={{display:"none"}}/>
-            <p style={{fontSize:11,color:"#9ca3af",margin:0}}>Колонки: Компания, Страховая сумма, Прибыль</p>
-          </div>
-          {officeData.rows&&officeData.rows.length>0&&(
-            <div>
-              <div style={{display:"flex",gap:16,flexWrap:"wrap",background:"#111827",color:"#fff",borderRadius:10,padding:"14px 20px",marginBottom:16}}>
-                <div style={{minWidth:200}}>
-                  <div style={{fontSize:11,opacity:.55,marginBottom:2}}>{"Прибыль офиса за "+fmtMonth(selMonth)}</div>
-                  <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmt(officeData.profit)}</div>
-                </div>
-                <div style={{minWidth:160}}>
-                  <div style={{fontSize:11,opacity:.55,marginBottom:2}}>Строк в файле</div>
-                  <div style={{fontSize:18,fontWeight:700,color:"#93c5fd"}}>{officeData.rows.length}</div>
-                </div>
-              </div>
-              <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr>{["Компания","Страховая сумма","Прибыль"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-                  <tbody>{officeData.rows.map((r,i)=>(
-                    <tr key={i} style={{background:i%2===0?"white":"#fafafa"}}>
-                      <td style={td}>{r.company||"—"}</td>
-                      <td style={td}>{fmt(r.amount)}</td>
-                      <td style={{...td,fontWeight:600,color:"#16a34a"}}>{fmt(r.profit)}</td>
-                    </tr>
-                  ))}</tbody>
-                  <tfoot><tr>
-                    <td style={{...td,fontWeight:700,borderTop:"2px solid #e5e7eb"}}>ИТОГО</td>
-                    <td style={{...td,fontWeight:700,borderTop:"2px solid #e5e7eb"}}>{fmt(officeData.rows.reduce((s,r)=>s+r.amount,0))}</td>
-                    <td style={{...td,fontWeight:700,color:"#16a34a",borderTop:"2px solid #e5e7eb"}}>{fmt(officeData.profit)}</td>
-                  </tr></tfoot>
-                </table>
-              </div>
-            </div>
           )}
+          {/* Кнопка общих начислений за месяц */}
+          <div style={{marginTop:32,paddingTop:20,borderTop:"2px solid #e5e7eb"}}>
+            <button
+              onClick={()=>setShowAllPayroll(v=>!v)}
+              style={{...btn(showAllPayroll?"#374151":"#1e293b",undefined,{fontSize:14,padding:"9px 20px"})}}>
+              {showAllPayroll?"Скрыть":"📋 Все начисления за "+fmtMonth(selMonth)}
+            </button>
+          </div>
+
+          {showAllPayroll&&(()=>{
+            const rows=buildAllPayrollRows(agentData,effVol,agentDir,officeCodes);
+            const totPols=rows.reduce((s,r)=>s+r.polCount,0);
+            const totAcc=rows.reduce((s,r)=>s+r.accrued,0);
+            const totVol=rows.reduce((s,r)=>s+r.volDebt,0);
+            const totNet=rows.reduce((s,r)=>s+r.net,0);
+            const fillGreen={background:"#dcfce7"};
+            const fillRed={background:"#fee2e2"};
+            const fillBlue={background:"#dbeafe"};
+            const P="padding:8px 12px;border:1.5px solid #444;";
+
+            const doPrint=()=>{
+              const bodyRows=rows.map((r,i)=>{
+                const bg=i%2===0?"#fff":"#f5f7fa";
+                const netColor=r.net>=0?"#1d4ed8":"#dc2626";
+                return`<tr style="background:${bg}">
+                  <td style="${P}font-weight:600;">${r.name}</td>
+                  <td style="${P}text-align:center;color:#4f46e5;font-weight:600;">${r.ic||"—"}</td>
+                  <td style="${P}text-align:center;">${r.polCount}</td>
+                  <td style="${P}text-align:right;background:#dcfce7;color:#16a34a;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${r.accrued.toLocaleString("ru-RU")} ֏</td>
+                  <td style="${P}text-align:right;background:#fee2e2;color:${r.volDebt>0?"#dc2626":"#6b7280"};-webkit-print-color-adjust:exact;print-color-adjust:exact;">${r.volDebt>0?r.volDebt.toLocaleString("ru-RU")+" ֏":"0 ֏"}</td>
+                  <td style="${P}text-align:right;background:#dbeafe;color:${netColor};font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${r.net.toLocaleString("ru-RU")} ֏</td>
+                  <td style="${P}min-width:80px;"> </td>
+                  <td style="${P}min-width:130px;"> </td>
+                </tr>`;
+              }).join("");
+              const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+                <style>
+                  @page { size: A4 landscape; margin: 8mm; }
+                  body { font-family: Arial, sans-serif; margin: 0; }
+                  h3 { text-align: center; font-size: 11pt; margin: 0 0 10px; }
+                  table { width: 100%; border-collapse: collapse; }
+                  th { padding: 8px 12px; border: 1.5px solid #333; background: #1e293b; color: #fff; white-space: nowrap; font-size: 8.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                  td { font-size: 8.5pt; }
+                </style>
+              </head><body>
+                <h3>Начисления агентам — ${fmtMonth(selMonth)}</h3>
+                <table>
+                  <thead><tr>
+                    <th style="text-align:left;min-width:140px;">Имя агента</th>
+                    <th style="min-width:80px;">768-код</th>
+                    <th style="min-width:55px;">Кол-во полисов</th>
+                    <th style="min-width:110px;background:#15803d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;">Начислено (ОСАГО)</th>
+                    <th style="min-width:120px;background:#b91c1c!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;">К оплате офису (доброволь.)</th>
+                    <th style="min-width:110px;background:#1d4ed8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;">К выплате</th>
+                    <th style="min-width:80px;">Примечание</th>
+                    <th style="min-width:130px;">Подпись</th>
+                  </tr></thead>
+                  <tbody>${bodyRows}
+                  <tr style="background:#e2e8f0;font-weight:bold;border-top:2.5px solid #374151;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                    <td style="${P}font-weight:700;border-top:2.5px solid #374151;">ИТОГО</td>
+                    <td style="${P}border-top:2.5px solid #374151;"></td>
+                    <td style="${P}text-align:center;font-weight:700;border-top:2.5px solid #374151;">${totPols}</td>
+                    <td style="${P}text-align:right;background:#dcfce7;color:#15803d;font-weight:700;border-top:2.5px solid #374151;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${totAcc.toLocaleString("ru-RU")} ֏</td>
+                    <td style="${P}text-align:right;background:#fee2e2;color:#b91c1c;font-weight:700;border-top:2.5px solid #374151;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${totVol>0?totVol.toLocaleString("ru-RU")+" ֏":"0 ֏"}</td>
+                    <td style="${P}text-align:right;background:#dbeafe;color:#1d4ed8;font-weight:700;border-top:2.5px solid #374151;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${totNet.toLocaleString("ru-RU")} ֏</td>
+                    <td style="${P}border-top:2.5px solid #374151;"></td>
+                    <td style="${P}border-top:2.5px solid #374151;"></td>
+                  </tr></tbody>
+                </table>
+              </body></html>`;
+              const w=window.open("","_blank","width=1000,height=700");
+              if(!w)return;
+              w.document.write(html);
+              w.document.close();
+              w.focus();
+              setTimeout(()=>{w.print();},400);
+            };
+
+            return(
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:10,margin:"16px 0",flexWrap:"wrap"}}>
+                  <span style={{fontWeight:700,fontSize:15}}>Все начисления — {fmtMonth(selMonth)}</span>
+                  <button onClick={()=>exportAllPayrollXlsx(agentData,effVol,agentDir,selMonth)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
+                  <button onClick={doPrint} style={btn("#6366f1",undefined,{fontSize:12})}>🖨 Печать / PDF</button>
+                </div>
+
+                <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb"}}>
+                  <div style={{fontWeight:700,fontSize:13,padding:"10px 14px",borderBottom:"1px solid #e5e7eb",background:"#f8fafc",textAlign:"center"}}>
+                    Начисления агентам — {fmtMonth(selMonth)}
+                  </div>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead>
+                      <tr style={{background:"#1e293b",color:"#fff"}}>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"left",minWidth:160}}>Имя агента</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"center",minWidth:90}}>768-код</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"center",minWidth:70}}>Кол-во полисов</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillGreen,minWidth:110}}>Начислено (ОСАГО)</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillRed,minWidth:130}}>К оплате офису (доброволь.)</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillBlue,minWidth:110}}>К выплате</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",minWidth:100}}>Примечание</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",minWidth:130}}>Подпись</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r,i)=>(
+                        <tr key={r.uid} style={{borderBottom:"1px solid #e5e7eb",background:i%2===0?"white":"#f8fafc"}}>
+                          <td style={{...td,fontWeight:600}}>{r.name}</td>
+                          <td style={{...td,textAlign:"center",color:"#6366f1",fontWeight:600}}>{r.ic||"—"}</td>
+                          <td style={{...td,textAlign:"center"}}>{r.polCount}</td>
+                          <td style={{...td,textAlign:"right",...fillGreen,fontWeight:600,color:"#16a34a"}}>{fmt(r.accrued)}</td>
+                          <td style={{...td,textAlign:"right",...fillRed,color:r.volDebt>0?"#dc2626":"#6b7280"}}>{r.volDebt>0?fmt(r.volDebt):"0 ֏"}</td>
+                          <td style={{...td,textAlign:"right",...fillBlue,fontWeight:700,color:r.net>=0?"#1d4ed8":"#dc2626"}}>{fmt(r.net)}</td>
+                          <td style={td}></td>
+                          <td style={{...td,borderBottom:"1px solid #9ca3af"}}></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{background:"#f1f5f9",borderTop:"2px solid #374151"}}>
+                        <td style={{...td,fontWeight:700}}>ИТОГО</td>
+                        <td style={td}></td>
+                        <td style={{...td,textAlign:"center",fontWeight:700}}>{totPols}</td>
+                        <td style={{...td,textAlign:"right",...fillGreen,fontWeight:700,color:"#16a34a"}}>{fmt(totAcc)}</td>
+                        <td style={{...td,textAlign:"right",...fillRed,fontWeight:700,color:"#dc2626"}}>{totVol>0?fmt(totVol):"0 ֏"}</td>
+                        <td style={{...td,textAlign:"right",...fillBlue,fontWeight:700,color:"#1d4ed8"}}>{fmt(totNet)}</td>
+                        <td style={td}></td>
+                        <td style={td}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </div>
-      
+        );
+      })()}
+
+      {pinModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={e=>{if(e.target===e.currentTarget){setPinModal(false);setPinInput("");setPinError("");}}}>
+          <div style={{background:"white",borderRadius:14,padding:"32px 28px",width:300,boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+            <div style={{textAlign:"center",fontSize:32,marginBottom:8}}>🔐</div>
+            <h3 style={{margin:"0 0 6px",fontSize:17,textAlign:"center"}}>Вход для администратора</h3>
+            {!adminPin&&<p style={{fontSize:12,color:"#6b7280",textAlign:"center",margin:"0 0 16px"}}>Первый вход — введите новый PIN</p>}
+            {adminPin&&<div style={{height:12}}/>}
+            <input
+              type="password"
+              value={pinInput}
+              onChange={e=>{setPinInput(e.target.value);setPinError("");}}
+              onKeyDown={e=>e.key==="Enter"&&tryAdminLogin()}
+              placeholder="Введите PIN"
+              autoFocus
+              style={{...inp,width:"100%",padding:"11px 12px",fontSize:20,textAlign:"center",letterSpacing:6,boxSizing:"border-box",marginBottom:6}}
+            />
+            {pinError&&<div style={{color:"#dc2626",fontSize:12,textAlign:"center",marginBottom:8}}>{pinError}</div>}
+            <div style={{display:"flex",gap:8,marginTop:12}}>
+              <button onClick={tryAdminLogin} style={{...btn(),flex:1,padding:"10px",fontSize:14}}>Войти</button>
+              <button onClick={()=>{setPinModal(false);setPinInput("");setPinError("");}} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const fs=require\\('fs'\\);const src=fs.readFileSync\\('src/pages/Calculator/calculator.jsx','utf8'\\);try{require\\('@babel/parser'\\).parse\\(src,{sourceType:'module',plugins:['jsx']}\\);console.log\\('OK'\\);}catch\\(e\\){console.log\\('ERROR:',e.message\\);}\")"
+    ]
+  }
+}
