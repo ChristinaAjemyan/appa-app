@@ -1,5 +1,5 @@
 import{useState,useMemo,useEffect,useRef,Fragment}from"react";
-import{calcStorage as supabaseStorage}from"./calcStorage";
+import{calcStorage}from"./calcStorage";
 import * as XLSX from "xlsx";
 import XLSXStyle from "xlsx-js-style";
 import JSZip from "jszip";
@@ -528,49 +528,49 @@ export default function App(){
   const[newStaffCode,setNewStaffCode]=useState("");
 
   useEffect(()=>{(async()=>{
-    try{const r=await supabaseStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);supabaseStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
-    try{const r=await supabaseStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
-    try{const r=await supabaseStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
-    try{const r=await supabaseStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
-    try{const r=await supabaseStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
+    try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
+    try{const r=await calcStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
+    try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
+    try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
+    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
   })();},[]);
 
   useEffect(()=>{
     setUploadedFiles([]);setVolSession([]);setOfficeSession(null);setActiveAgent(null);setOfficeCodes([]);setNewOfficeCode("");
     (async()=>{
-      try{const r=await supabaseStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
-      try{const r=await supabaseStorage.get("officeStore:"+selMonth).catch(()=>null);if(r&&r.value)setStoredOffice(JSON.parse(r.value));else setStoredOffice({profit:0,rows:[]});}catch{setStoredOffice({profit:0,rows:[]});}
-      try{const r=await supabaseStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
+      try{const r=await calcStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
+      try{const r=await calcStorage.get("officeStore:"+selMonth).catch(()=>null);if(r&&r.value)setStoredOffice(JSON.parse(r.value));else setStoredOffice({profit:0,rows:[]});}catch{setStoredOffice({profit:0,rows:[]});}
+      try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
     })();
   },[selMonth]);
 
   useEffect(()=>{if(role==="employee"&&tab==="commissions")setTab("policydb");},[role]);
-  const saveDir=d=>{setAgentDir(d);supabaseStorage.set("agentDirectory",JSON.stringify(d)).catch(()=>{});};
-  const saveOfficeCodes=codes=>{setOfficeCodes(codes);supabaseStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
+  const saveDir=d=>{setAgentDir(d);calcStorage.set("agentDirectory",JSON.stringify(d)).catch(()=>{});};
+  const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
-  const saveRates=r=>{setRates(r);supabaseStorage.set("ratesConfig",JSON.stringify(r)).catch(()=>{});};
-  const saveVR=r=>{setVolRates(r);supabaseStorage.set("volRates",JSON.stringify(r)).catch(()=>{});};
-  const saveExcs=e=>{setExceptions(e);supabaseStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
+  const saveRates=r=>{setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(()=>{});};
+  const saveVR=r=>{setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(()=>{});};
+  const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
   const isAdmin=role==="admin";
   const tryAdminLogin=()=>{
     const p=pinInput.trim();
     if(!p){setPinError("Введите PIN");return;}
     if(!adminPin){
       const s={adminPin:p,officeStaff};
-      supabaseStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
+      calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
       setAdminPin(p);setRole("admin");setPinModal(false);setPinInput("");setPinError("");
     } else {
       if(p===adminPin){setRole("admin");setPinModal(false);setPinInput("");setPinError("");}
       else setPinError("Неверный PIN");
     }
   };
-  const saveOfficeStaff=(list)=>{setOfficeStaff(list);supabaseStorage.set("appSettings",JSON.stringify({adminPin:adminPin||"",officeStaff:list})).catch(()=>{});};
+  const saveOfficeStaff=(list)=>{setOfficeStaff(list);calcStorage.set("appSettings",JSON.stringify({adminPin:adminPin||"",officeStaff:list})).catch(()=>{});};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
     const s={adminPin:newPinA.trim(),officeStaff};
-    supabaseStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
+    calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
     setAdminPin(newPinA.trim());setNewPinA("");setNewPinB("");
     setPinChangeMsg("✓ PIN изменён");setTimeout(()=>setPinChangeMsg(""),3000);
   };
@@ -708,18 +708,18 @@ export default function App(){
 
   const saveMonth=()=>{
     const pols=agentData.flatMap(a=>a.policies);
-    supabaseStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:effVol})).catch(()=>{});
-    if(officeSession)supabaseStorage.set("officeStore:"+selMonth,JSON.stringify(officeSession)).catch(()=>{});
+    calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:effVol})).catch(()=>{});
+    if(officeSession)calcStorage.set("officeStore:"+selMonth,JSON.stringify(officeSession)).catch(()=>{});
     setSavedOk(true);setTimeout(()=>setSavedOk(false),2500);
   };
 
   const loadDB=()=>{
     setDbLoaded(false);
-    supabaseStorage.list("month:").then(res=>{
+    calcStorage.list("month:").then(res=>{
       if(!res||!res.keys||!res.keys.length){setDbPols([]);setDbLoaded(true);return;}
       const all=[];let done=0;
       res.keys.forEach(key=>{
-        supabaseStorage.get(key).then(r=>{
+        calcStorage.get(key).then(r=>{
           if(r&&r.value){try{const d=JSON.parse(r.value);const mk=key.replace("month:","");(d.policies||[]).forEach(p=>all.push({...p,_monthKey:mk}));}catch{}}
           done++;if(done===res.keys.length){setDbPols(all);setDbLoaded(true);}
         }).catch(()=>{done++;if(done===res.keys.length){setDbPols(all);setDbLoaded(true);}});
@@ -730,12 +730,12 @@ export default function App(){
   const loadOfficeSales=async()=>{
     setOpLoaded(false);
     const mk=selMonth;
-    try{const r=await supabaseStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
+    try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
     try{
-      const res=await supabaseStorage.list("officePol:").catch(()=>({keys:[]}));
+      const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
       const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
       if(!otherKeys.length){setOpPrevUnpaid([]);setOpLoaded(true);return;}
-      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await supabaseStorage.get(key).catch(()=>null);return r&&r.value?JSON.parse(r.value):[];}catch{return[];}}));
+      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);return r&&r.value?JSON.parse(r.value):[];}catch{return[];}}));
       setOpPrevUnpaid(results.flat().filter(p=>!p.paid).sort((a,b)=>new Date(a.date)-new Date(b.date)));
     }catch{setOpPrevUnpaid([]);}
     setOpLoaded(true);
@@ -744,8 +744,8 @@ export default function App(){
 
   const loadCashBook=async()=>{
     setCashLoaded(false);
-    try{const r=await supabaseStorage.get("cashBook:"+selMonth).catch(()=>null);setCashDays(r&&r.value?JSON.parse(r.value):{});}catch{setCashDays({});}
-    try{const r=await supabaseStorage.get("officePol:"+selMonth).catch(()=>null);setCashMonthPols(r&&r.value?JSON.parse(r.value):[]);}catch{setCashMonthPols([]);}
+    try{const r=await calcStorage.get("cashBook:"+selMonth).catch(()=>null);setCashDays(r&&r.value?JSON.parse(r.value):{});}catch{setCashDays({});}
+    try{const r=await calcStorage.get("officePol:"+selMonth).catch(()=>null);setCashMonthPols(r&&r.value?JSON.parse(r.value):[]);}catch{setCashMonthPols([]);}
     setCashLoaded(true);
   };
   useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
@@ -757,26 +757,26 @@ export default function App(){
     const ineco=pols.filter(p=>p.paymentType==="ineco").reduce((s,p)=>s+(p.paidAmount||0),0);
     const updated={...cashDays,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(cashDays[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,total:cash+acba+ineco}}};
     setCashDays(updated);
-    supabaseStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
+    calcStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
     setCashCloseModal(null);
   };
   const reopenCashDay=(date)=>{
     const updated={...cashDays,[date]:{...cashDays[date],closed:false,reopenedAt:new Date().toISOString()}};
     setCashDays(updated);
-    supabaseStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
+    calcStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
     setCashReopenModal(null);
   };
 
-  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);supabaseStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
+  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:""});
   const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);};
   const saveEditPol=async(pol,updates)=>{
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?{...p,...updates}:p));}
     else{
       const updated={...pol,...updates};
-      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
   };
@@ -784,9 +784,9 @@ export default function App(){
     const updated={...pol,...payData,paid:true,paidAt:new Date().toISOString()};
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
     else{
-      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
     }
     setOpPayPol(null);
@@ -795,9 +795,9 @@ export default function App(){
     if(!window.confirm("Удалить полис "+pol.insuredName+"?"))return;
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
     else{
-      const r=await supabaseStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      supabaseStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
     }
   };
