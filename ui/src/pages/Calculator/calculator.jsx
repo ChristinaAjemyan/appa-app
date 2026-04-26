@@ -25,6 +25,45 @@ const DEFAULT_RATES={
   agentOverrides:{},
 };
 const DEFAULT_VOL_RATES={rates:[]};
+const DEFAULT_MGR_RATES={
+  managerRates:{Nairi:16,Ingo:7,Liga:5,Sil:10,Rego:5},
+  armeniaManager:{"1-9":11,"10-14":10,"15-25":7},
+  operatorRates:{Nairi:[16,14,12,10,8,6],Ingo:[7,6,5,4,3,2],Liga:[5,4,3,3,2,2],Sil:[10,9,8,7,6,5],Rego:[5,4,3,3,2,2]},
+  armeniaOperator:{"1-9":[11,10,9,8,7,6],"10-14":[10,9,8,7,6,5],"15-25":[7,6,5,4,3,2]},
+  tierThresholds:[0,500000,1000000,1500000,2000000,2500000],
+  tierFixes:[0,20000,30000,40000,50000,70000],
+  operatorUids:[],
+};
+const DEFAULT_EXPENSE_ROWS=[
+  {id:"sal1",cat:"Зарплаты",name:"Зарплата 1",amount:0,type:"static"},
+  {id:"sal2",cat:"Зарплаты",name:"Зарплата 2",amount:0,type:"static"},
+  {id:"sal3",cat:"Зарплаты",name:"Зарплата 3",amount:0,type:"static"},
+  {id:"sal4",cat:"Зарплаты",name:"Зарплата 4",amount:0,type:"static"},
+  {id:"sal5",cat:"Зарплаты",name:"Зарплата 5",amount:0,type:"static"},
+  {id:"sal6",cat:"Зарплаты",name:"Зарплата 6",amount:0,type:"static"},
+  {id:"sal7",cat:"Зарплаты",name:"Зарплата 7",amount:0,type:"static"},
+  {id:"com1",cat:"Коммунальные",name:"Свет",amount:0,type:"static"},
+  {id:"com2",cat:"Коммунальные",name:"Газ",amount:0,type:"static"},
+  {id:"com3",cat:"Коммунальные",name:"Вода",amount:0,type:"static"},
+  {id:"tel1",cat:"Связь",name:"Телефония офис",amount:0,type:"static"},
+  {id:"tel2",cat:"Связь",name:"Телефония КолЦентр",amount:0,type:"static"},
+  {id:"tax1",cat:"Налоги",name:"Подоходный налог",amount:0,type:"static"},
+  {id:"tax2",cat:"Налоги",name:"Подоходный налог от аренды",amount:0,type:"static"},
+  {id:"tax3",cat:"Налоги",name:"Налог на прибыль",amount:0,type:"static"},
+  {id:"tax4",cat:"Налоги",name:"Соц. выплаты",amount:0,type:"static"},
+  {id:"tax5",cat:"Налоги",name:"Налог на акцизы",amount:0,type:"static"},
+  {id:"tax6",cat:"Налоги",name:"Штрафы",amount:0,type:"static"},
+  {id:"tax7",cat:"Налоги",name:"Налог ИП Гагик",amount:0,type:"static"},
+  {id:"tax8",cat:"Налоги",name:"Налог ИП Гриш",amount:0,type:"static"},
+  {id:"tax9",cat:"Налоги",name:"Налог ИП Левон",amount:0,type:"static"},
+  {id:"oth1",cat:"Прочее",name:"Аренда основного офиса",amount:0,type:"static"},
+  {id:"oth2",cat:"Прочее",name:"Аренда офиса МРЭО",amount:0,type:"static"},
+  {id:"oth3",cat:"Прочее",name:"Реклама",amount:0,type:"static"},
+  {id:"oth4",cat:"Прочее",name:"Заправка принтеров",amount:0,type:"static"},
+  {id:"oth5",cat:"Прочее",name:"Бумага и файлы",amount:0,type:"static"},
+  {id:"oth6",cat:"Прочее",name:"Хоз. расходы",amount:0,type:"static"},
+  {id:"oth7",cat:"Прочее",name:"Бухгалтерия",amount:0,type:"static"},
+];
 const DEFAULT_EXCEPTIONS=[
   {id:"e1",company:"Nairi",enabled:true,excludedAgents:[],conditions:[{field:"region",op:"eq",value:"YR"},{field:"bm",op:"eq",value:"10"},{field:"term",op:"eq",value:"L"}]},
   {id:"e2",company:"Sil",enabled:true,excludedAgents:[],conditions:[{field:"bm",op:"between",value:"11",value2:"14"}]},
@@ -42,81 +81,81 @@ const fmtPolStatus=k=>(POL_STATUSES.find(s=>s.k===k)||POL_STATUSES[0]).l;
 
 const SEED_AGENTS=(()=>{
   const d=[
-    ["768-01","Հakob","Vkhkryan","1606-01","","","","",""],
-    ["768-03","Ռobert","Bichakhchyan (112)","1606-03","","","","",""],
-    ["768-05","Lusine","Mosoyan (12+66)","1606-05","541-01","","","",""],
-    ["768-07","Mkrtich","Baghdasaryan","1606-07","","310-71-10","797-25","",""],
-    ["768-11","Srap","Khachatryan","1606-11","","","","",""],
-    ["768-19","Grigor","Hovhannisyan (Natella)","1606-168","","","","",""],
-    ["768-20","David","Minasyan","1606-20","","","","",""],
-    ["768-24","Manvel","Nahapetyan","1606-24","","","","",""],
-    ["768-27","Gagik","Vanoyan","1606-27","","","","",""],
-    ["768-40","Levon","Vardanyan","1606-40","3671-07","310-71-11","797-26","A50-M3-40-G12","13021-09"],
-    ["768-53","Vladimir","Shahinyan","1606-53","","","","",""],
-    ["768-74","Armen","Khanoyan","1606-74","","310-71-09","797-23","A50-M3-40-G9","13021-07"],
-    ["768-101","Nelli","Harutyunyan","1606-101","3671-01","310-71-01","797-16","A50-M3-40-G5","13021-01"],
-    ["768-105","Viktorya","Vkhkryan","1606-105","3671-05","310-71-02","797-17","A50-M3-40-G3","13021-02"],
-    ["768-106","Gayane","Aleksanyan","1606-106","3671-02","310-71-03","797-18","A50-M3-40-G111","13021-04"],
-    ["768-115","Annman","Ghevondyan (Shant)","1606-115","","","","",""],
-    ["768-116","Aghuniq","Petrosyan","1606-116","","","","",""],
-    ["768-118","Hovhannes","Torosyan","1606-118","","","","",""],
-    ["768-121","Artur","Safaryan","1606-121","","","","",""],
-    ["768-122","Hovhannes","Djanoyan","1606-122","","","","",""],
-    ["768-123","Tehmine","Kocharyan","1606-123","","","","",""],
-    ["768-125","Narine","Arzumanyan","1606-125","101-1","101-1","101-1","A50-M3-40-G4","101-1"],
-    ["768-127","Armen","Simonyan","1606-127","","","","",""],
-    ["768-128","GURGEN","AREVIKYAN","1606-128","","310-71-08","797-22","A50-M3-40-G8","13021-06"],
-    ["768-130","RITA","GRIGORYAN","1606-130","","","","",""],
-    ["768-131","HRIPSIME","TOROSYAN","1606-131","","","","",""],
-    ["768-132","Zhanna","Gasparyan","1606-132","","","797-27","","13021-12"],
-    ["768-133","Romik","Nazaretyan (+145+164)","1606-133","","310-71-07","797-21","","13021-10"],
-    ["768-135","Artak","Khachatryan","1606-135","","","","",""],
-    ["768-137","ARTYOM","AVETISYAN (Artak)","1606-137","","","","",""],
-    ["768-138","Zarzand","Brsoyan","1606-138","","","","",""],
-    ["768-139","Aghasi","Sahakyan (Artak)","1606-139","","","","",""],
-    ["768-142","Varduhi","Yayloyan","1606-142","","","","",""],
-    ["768-144","Vram","Ayvazyan","1606-144","","","","",""],
-    ["768-145","Amalya","Yephremyan","1606-145","","","","",""],
-    ["768-146","Sargis","Hamazaspyan","1606-146","","","797-24","A50-M3-40-G10",""],
-    ["768-147","Anushiq","Sargsyan","1606-147","","","","",""],
-    ["768-148","Lusine","Ghazaryan","1606-148","","","","",""],
-    ["768-149","Varduhi","Tadevosyan","1606-149","","","","",""],
-    ["768-150","MARGARIT","MIKOYAN","1606-150","","","","",""],
-    ["768-151","Sveta","Hasoyan","1606-151","","","","",""],
-    ["768-152","Ashot","Martirosyan","1606-152","","","","",""],
-    ["768-153","VARDAN","GHAZARYAN","1606-153","","","","",""],
-    ["768-154","SUSANNA","GRIGORYAN","1606-154","","","","",""],
-    ["768-155","ARINA","METSOYAN","1606-155","","","","",""],
-    ["768-156","KARINE","TAMAZYAN (Shaboyan)","1606-156","","","","",""],
-    ["768-157","ARKADI","TADEVOSYAN","1606-157","","","","",""],
-    ["768-158","ARTAK","KHACHATRYAN (EDGARI)","1606-158","","","","",""],
-    ["768-159","VAHAN","AGHABABYAN","1606-159","","310-71-13","","",""],
-    ["768-160","Hovhannes","Hovhannisyan","1606-160","","","","",""],
-    ["768-161","MARUSYA","GRIGORYAN","1606-161","","","","",""],
-    ["768-164","Grigor","Gasparyan-Roman","1606-164","","","","",""],
-    ["768-165","Yelena","","1606-165","","","","",""],
-    ["768-166","ARTYOM","SARGSYAN","1606-166","","","","",""],
-    ["768-170","ARMENUI","MGDESYAN","1606-170","","","","",""],
-    ["768-171","TATYEVIK","KHACHATRYAN (Narine)","1606-171","","","","",""],
-    ["768-172","Mariam","Avagyan (Yulia)","1606-172","","","","",""],
-    ["768-173","Andranik","Hovhannisyan","1606-173","","","","",""],
-    ["768-175","Ashkhen","Galoyan","1606-175","","","","",""],
-    ["768-176","Rustam","Karapetyan (Nelli Reso)","1606-176","","","","",""],
-    ["768-177","Aghavni","Stepanyan (Yelena)","1606-177","","","","",""],
-    ["1606-178","Smbat","Nersisyan","1606-178","","","","",""],
-    ["768-178","Mkrtich","Abajyan","1606-178-01","","","","",""],
-    ["768-179","Hovhannes","Gevorgyan (Vanadzor)","1606-179","","","","",""],
-    ["768-180","Vahan","Manukyan","1606-180","","","","",""],
-    ["768-181","Naira","Tovmasyan","1606-181","","310-71-04","797-04","A50-M3-40-G1",""],
-    ["768-183","Tigran","Manukyan","1606-183","","","","",""],
-    ["768-184","Gevorg","Harutyunyan Shiro","1606-184","","","","",""],
-    ["768-185","Karlen","Harutyunyan","1606-185","","","","",""],
-    ["768-186","Nelli","Nikoyan-Maga","1606-186","3671-03","310-71-05","797-19","A50-M3-40-G2","13021-03"],
-    ["768-187","ANIA","IGITYAN","1606-187","3671-111","310-71-06","797-20","A50-M3-40-G13","13021-111"],
-    ["768-188","Hovhannes","Hovhannisyan JB","1606-188","","","","",""],
-    ["768-190","Narine","Arzumanyan (2)","1606-190","3671-10","310-71-15","797-28","A50-M3-40-G14","13021-13"],
-    ["768-191","Taghuhi","Gevorgyan","1606-191","","310-71-14","797-29","A50-M3-40-G15",""],
-    ["768-192","Susanna","Harutyunyan (Rozik)","1606-192","","","797-30","",""],
+    ["768-01","Հակոբ","Վխկրյան","1606-01","","","","",""],
+    ["768-03","Ռոբերտ","Բիչախչյան (112)","1606-03","","","","",""],
+    ["768-05","Լուսինե","Մոսոյան (12+66)","1606-05","541-01","","","",""],
+    ["768-07","Մկրտիչ","Բաղդասարյան","1606-07","","310-71-10","797-25","",""],
+    ["768-11","Սրապ","Խաչատրյան","1606-11","","","","",""],
+    ["768-19","Գրիգոր","Հովհաննիսյան (Նաթելլա)","1606-168","","","","",""],
+    ["768-20","Դավիթ","Մինասյան","1606-20","","","","",""],
+    ["768-24","Մանվել","Նահապետյան","1606-24","","","","",""],
+    ["768-27","Գագիկ","Վանոյան","1606-27","","","","",""],
+    ["768-40","Լեվոն","Վարդանյան","1606-40","3671-07","310-71-11","797-26","A50-M3-40-G12","13021-09"],
+    ["768-53","Վլադիմիր","Շահինյան","1606-53","","","","",""],
+    ["768-74","Արմեն","Խանոյան","1606-74","","310-71-09","797-23","A50-M3-40-G9","13021-07"],
+    ["768-101","Նելլի","Հարությունյան","1606-101","3671-01","310-71-01","797-16","A50-M3-40-G5","13021-01"],
+    ["768-105","Վիկտորյա","Վխկրյան","1606-105","3671-05","310-71-02","797-17","A50-M3-40-G3","13021-02"],
+    ["768-106","Գայանե","Ալեքսանյան","1606-106","3671-02","310-71-03","797-18","A50-M3-40-G111","13021-04"],
+    ["768-115","Աննման","Ղևոնդյան (Շանթ)","1606-115","","","","",""],
+    ["768-116","Աղունիկ","Պետրոսյան","1606-116","","","","",""],
+    ["768-118","Հովհաննես","Թորոսյան","1606-118","","","","",""],
+    ["768-121","Արթուր","Սաֆարյան","1606-121","","","","",""],
+    ["768-122","Հովհաննես","Ջանոյան","1606-122","","","","",""],
+    ["768-123","Թեհմինե","Քոչարյան","1606-123","","","","",""],
+    ["768-125","Նարինե","Արզումանյան","1606-125","101-1","101-1","101-1","A50-M3-40-G4","101-1"],
+    ["768-127","Արմեն","Սիմոնյան","1606-127","","","","",""],
+    ["768-128","ԳՈՒՐԳԵՆ","ԱՐևԻԿՅԱՆ","1606-128","","310-71-08","797-22","A50-M3-40-G8","13021-06"],
+    ["768-130","ՌԻՏԱ","ԳՐԻԳՈՐՅԱՆ","1606-130","","","","",""],
+    ["768-131","ՀՌԻՓՍԻՄԵ","ԹՈՐՈՍՅԱՆ","1606-131","","","","",""],
+    ["768-132","Ժաննա","Գասպարյան","1606-132","","","797-27","","13021-12"],
+    ["768-133","Ռոմիկ","Նազարեթյան (+145+164)","1606-133","","310-71-07","797-21","","13021-10"],
+    ["768-135","Արտակ","Խաչատրյան","1606-135","","","","",""],
+    ["768-137","ԱՐՏՅՈՄ","ԱՎԵՏԻՍՅԱՆ (Արտակ)","1606-137","","","","",""],
+    ["768-138","Զարզանդ","Բրսոյան","1606-138","","","","",""],
+    ["768-139","Աղասի","Սահակյան (Արտակ)","1606-139","","","","",""],
+    ["768-142","Վարդուհի","Յայլոյան","1606-142","","","","",""],
+    ["768-144","Վռամ","Այվազյան","1606-144","","","","",""],
+    ["768-145","Ամալյա","Եփրեմյան","1606-145","","","","",""],
+    ["768-146","Սարգիս","Համազասպյան","1606-146","","","797-24","A50-M3-40-G10",""],
+    ["768-147","Անուշիկ","Սարգսյան","1606-147","","","","",""],
+    ["768-148","Լուսինե","Ղազարյան","1606-148","","","","",""],
+    ["768-149","Վարդուհի","Թադևոսյան","1606-149","","","","",""],
+    ["768-150","ՄԱՐԳԱՐԻՏ","ՄԻԿՈՅԱՆ","1606-150","","","","",""],
+    ["768-151","Սվետա","Հասոյան","1606-151","","","","",""],
+    ["768-152","Աշոտ","Մարտիրոսյան","1606-152","","","","",""],
+    ["768-153","ՎԱՐԴԱՆ","ՂԱԶԱՐՅԱՆ","1606-153","","","","",""],
+    ["768-154","ՍՈՒՍԱՆՆԱ","ԳՐԻԳՈՐՅԱՆ","1606-154","","","","",""],
+    ["768-155","ԱՐԻՆԱ","ՄԵԾՈՅԱՆ","1606-155","","","","",""],
+    ["768-156","ԿԱՐԻՆԵ","ԹԱՄԱԶՅԱՆ (Շաբոյան)","1606-156","","","","",""],
+    ["768-157","ԱՐԿԱԴԻ","ԹԱԴևՈՍՅԱՆ","1606-157","","","","",""],
+    ["768-158","ԱՐՏԱԿ","ԽԱՉԱՏՐՅԱՆ (ԷԴԳԱՐԻ)","1606-158","","","","",""],
+    ["768-159","ՎԱՀԱՆ","ԱՂԱԲԱԲՅԱՆ","1606-159","","310-71-13","","",""],
+    ["768-160","Հովհաննես","Հովհաննիսյան","1606-160","","","","",""],
+    ["768-161","ՄԱՐՈՒՍՅԱ","ԳՐԻԳՈՐՅԱՆ","1606-161","","","","",""],
+    ["768-164","Գրիգոր","Գասպարյան-Ռոման","1606-164","","","","",""],
+    ["768-165","Ելենա","","1606-165","","","","",""],
+    ["768-166","ԱՐՏՅՈՄ","ՍԱՐԳՍՅԱՆ","1606-166","","","","",""],
+    ["768-170","ԱՐՄԵՆՈՒՀԻ","ՄՂԴԵՍՅԱՆ","1606-170","","","","",""],
+    ["768-171","ՏԱԹԵՎԻԿ","ԽԱՉԱՏՐՅԱՆ (Նարինե)","1606-171","","","","",""],
+    ["768-172","Մարիամ","Ավագյան(Յուլյա)","1606-172","","","","",""],
+    ["768-173","Անդրանիկ","Հովհաննիսյան","1606-173","","","","",""],
+    ["768-175","Աշխեն","Գալոյան","1606-175","","","","",""],
+    ["768-176","Ռուստամ","Կարապետյան (Նելլի Ռեսո)","1606-176","","","","",""],
+    ["768-177","Աղավնի","Ստեփանյան(Ելենա)","1606-177","","","","",""],
+    ["1606-178","Սմբատ","Ներսիսյան","1606-178","","","","",""],
+    ["768-178","Մկրտիչ","Աբաջյան","1606-178-01","","","","",""],
+    ["768-179","Հովհաննես","Գևորգյան (Վանաձոր)","1606-179","","","","",""],
+    ["768-180","Վահան","Մանուկյան","1606-180","","","","",""],
+    ["768-181","Նաիռա","Թովմասյան","1606-181","","310-71-04","797-04","A50-M3-40-G1",""],
+    ["768-183","Տիգրան","Մանուկյան","1606-183","","","","",""],
+    ["768-184","Գևորգ","Հարությունյան Շիրո","1606-184","","","","",""],
+    ["768-185","Կարլեն","Հարությունյան","1606-185","","","","",""],
+    ["768-186","Նելլի","Նիկոյան-Մագա","1606-186","3671-03","310-71-05","797-19","A50-M3-40-G2","13021-03"],
+    ["768-187","ԱՆԻԱ","ԻԳԻԹՅԱՆ","1606-187","3671-111","310-71-06","797-20","A50-M3-40-G13","13021-111"],
+    ["768-188","Հովհաննես","Հովհաննիսյան JB","1606-188","","","","",""],
+    ["768-190","Նարինե","Արզումանյան","1606-190","3671-10","310-71-15","797-28","A50-M3-40-G14","13021-13"],
+    ["768-191","Թագուհի","Գևորգյան","1606-191","","310-71-14","797-29","A50-M3-40-G15",""],
+    ["768-192","Սուսաննա","Հարությունյան (Ռոզիկ)","1606-192","","","797-30","",""],
   ];
   return Object.fromEntries(d.map(([ic,nm,sr,n,i,s,r,l,a])=>[`ag-${ic}`,{name:nm,surname:sr,internalCode:ic,codes:{Nairi:n,Ingo:i,Sil:s,Rego:r,Liga:l,Armenia:a}}]));
 })();
@@ -298,6 +337,15 @@ const excReason=(p,excepts,agentUid)=>{
 };
 
 const getArmGroup=bm=>bm<=9?"1-9":bm<=14?"10-14":"15-25";
+const getTierMgr=(sales,thresholds)=>{let t=1;for(let i=1;i<thresholds.length;i++)if(sales>=thresholds[i])t=i+1;return t;};
+const getMgrPolicyRate=(p,cfg)=>{
+  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaManager&&cfg.armeniaManager["1-9"])||0;return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
+  return(cfg.managerRates&&cfg.managerRates[p.company])||0;
+};
+const getOpPolicyRate=(p,tier,cfg)=>{
+  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return 0;const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
+  return(cfg.operatorRates&&cfg.operatorRates[p.company]&&cfg.operatorRates[p.company][tier-1])||0;
+};
 const getAgentRate=(p,agentUid,rates)=>{
   if(agentUid&&rates.agentOverrides&&rates.agentOverrides[agentUid]&&rates.agentOverrides[agentUid][p.company]!==undefined)
     return rates.agentOverrides[agentUid][p.company];
@@ -465,6 +513,31 @@ function ExceptionsPanel({exceptions,onSave,agentDir}){
   );
 }
 
+function MgrRatesPanel({cfg,onSave}){
+  const[local,setLocal]=useState(()=>JSON.parse(JSON.stringify(cfg)));
+  useEffect(()=>setLocal(JSON.parse(JSON.stringify(cfg))),[cfg]);
+  const updArr=(arr,i,val,path)=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));const keys=path.split(".");let o=n;for(let k=0;k<keys.length;k++)o=o[keys[k]];o[i]=parseFloat(val)||0;return n;});
+  const updObj=(path,val)=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));const keys=path.split(".");let o=n;for(let i=0;i<keys.length-1;i++)o=o[keys[i]];o[keys[keys.length-1]]=parseFloat(val)||0;return n;});
+  const ni=(v,cb,w)=><input type="number" value={v||0} onChange={e=>cb(e.target.value)} style={{...inp,width:w||55,textAlign:"center"}}/>;
+  const TIERS=["С1","С2","С3","С4","С5","С6"];
+  return(
+    <div style={{fontSize:13}}>
+      <h4 style={{margin:"0 0 6px",color:"#7c3aed"}}>% менеджера (с каждого полиса оператора)</h4>
+      <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr>{[...COMPANIES,"Арм.1-9","Арм.10-14","Арм.15-25"].map(c=><th key={c} style={th}>{c}</th>)}</tr></thead><tbody><tr>{COMPANIES.map(c=><td key={c} style={td}>{ni((local.managerRates||{})[c],v=>updObj("managerRates."+c,v))}</td>)}{ARM_GROUPS.map(g=><td key={g} style={td}>{ni((local.armeniaManager||{})[g],v=>updObj("armeniaManager."+g,v))}</td>)}</tr></tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#059669"}}>% оператора по ступеням (ОСАГО)</h4>
+      <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{COMPANIES.map(c=><th key={c} style={th}>{c}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600,color:"#374151"}}>{t}</td>{COMPANIES.map(c=><td key={c} style={td}>{ni(((local.operatorRates||{})[c]||[])[i],v=>updArr(local.operatorRates[c]||[],i,v,"operatorRates."+c))}</td>)}</tr>)}</tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#059669"}}>% оператора Armenia по ступеням</h4>
+      <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{ARM_GROUPS.map(g=><th key={g} style={th}>{"Арм."+g}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600}}>{t}</td>{ARM_GROUPS.map(g=><td key={g} style={td}>{ni(((local.armeniaOperator||{})[g]||[])[i],v=>updArr((local.armeniaOperator||{})[g]||[],i,v,"armeniaOperator."+g))}</td>)}</tr>)}</tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#d97706"}}>Пороги ступеней и фиксированная часть (AMD)</h4>
+      <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Параметр</th>{TIERS.map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody>
+        <tr><td style={{...td,fontWeight:600}}>Порог</td>{(local.tierThresholds||[]).map((v,i)=><td key={i} style={td}>{ni(v,val=>{setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.tierThresholds[i]=parseFloat(val)||0;return n;});},80)}</td>)}</tr>
+        <tr><td style={{...td,fontWeight:600}}>Фикс. часть</td>{(local.tierFixes||[]).map((v,i)=><td key={i} style={td}>{ni(v,val=>{setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.tierFixes[i]=parseFloat(val)||0;return n;});},80)}</td>)}</tr>
+      </tbody></table></div>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>onSave(local)} style={btn("#16a34a")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_MGR_RATES)))} style={btn("#f3f4f6","#374151")}>Сбросить</button></div>
+    </div>
+  );
+}
+
 const valR=r=>{try{return r&&r.officeRates&&r.agentRates;}catch{return false;}};
 const valE=e=>{try{return Array.isArray(e)&&e.every(x=>x.id&&x.company&&typeof x.enabled==="boolean"&&Array.isArray(x.conditions));}catch{return false;}};
 const valD=d=>{try{return d&&typeof d==="object"&&!Array.isArray(d);}catch{return false;}};
@@ -526,6 +599,13 @@ export default function App(){
   const[cashMonthPols,setCashMonthPols]=useState([]);
   const[officeStaff,setOfficeStaff]=useState(["768-101","768-105","768-106"]);
   const[newStaffCode,setNewStaffCode]=useState("");
+  const[managerConfig,setManagerConfig]=useState(DEFAULT_MGR_RATES);
+  const[mgrDetail,setMgrDetail]=useState(null);
+  const[showMgrSettings,setShowMgrSettings]=useState(false);
+  const[mgrNewOp,setMgrNewOp]=useState("");
+  const[officeExpenses,setOfficeExpenses]=useState({});
+  const[officeExpLoaded,setOfficeExpLoaded]=useState(false);
+  const[expNewName,setExpNewName]=useState("");
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
@@ -533,6 +613,8 @@ export default function App(){
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
     try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
+    try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[]});}}catch{}
+    try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
   })();},[]);
 
   useEffect(()=>{
@@ -545,6 +627,20 @@ export default function App(){
   },[selMonth]);
 
   useEffect(()=>{if(role==="employee"&&tab==="commissions")setTab("policydb");},[role]);
+  useEffect(()=>{
+    if(tab!=="income"||!officeExpLoaded)return;
+    setOfficeExpenses(prev=>{
+      if(prev[selMonth])return prev;
+      const months=Object.keys(prev).sort();
+      const lastMo=months[months.length-1];
+      const rows=lastMo
+        ?prev[lastMo].filter(r=>r.type==="static").map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
+        :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
+      const next={...prev,[selMonth]:rows};
+      calcStorage.set("officeExpenses",JSON.stringify(next)).catch(()=>{});
+      return next;
+    });
+  },[tab,selMonth,officeExpLoaded]);
   const saveDir=d=>{setAgentDir(d);calcStorage.set("agentDirectory",JSON.stringify(d)).catch(()=>{});};
   const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
@@ -566,6 +662,8 @@ export default function App(){
     }
   };
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);calcStorage.set("appSettings",JSON.stringify({adminPin:adminPin||"",officeStaff:list})).catch(()=>{});};
+  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});};
+  const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(()=>{});};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
@@ -924,6 +1022,147 @@ export default function App(){
     XLSX.writeFile(wb,"Все_начисления_"+month+".xlsx");
   };
 
+  // Shared helper: build one operator worksheet. showMgr=true includes manager income columns.
+  const _buildOpSheet=(r,cfg,agentDir,month,excepts,showMgr)=>{
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sDark=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"left",wrapText:true}});
+    const sLight=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:al||"center",wrapText:true}});
+    const sC=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
+    const sN=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}});
+    const ac=(ws,row,c,v,s)=>{ws[XLSXStyle.utils.encode_cell({r:row,c})]={v,t:typeof v==="number"?"n":"s",s};};
+    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
+    const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+    const ws={};let rw=0;const mg=[];
+    const VHDRS=showMgr
+      ?["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер."]
+      :["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Опер.","Выплата опер."];
+    const EHDRS=[...VHDRS,"Причина исключения"];
+    const nc=EHDRS.length-1;
+    // Header row
+    ac(ws,rw,0,(gn(r.uid)||gc(r.uid)||r.uid)+" — "+fmtMonth(month),sDark("4C1D95","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+    // Info row
+    const infoBase=["Ступень: С"+r.tier,"Зачётные: "+r.validSales.toLocaleString("ru-RU")+" AMD","Фикс: "+r.fix.toLocaleString("ru-RU")+" AMD","Начислено: "+r.oi.toLocaleString("ru-RU")+" AMD","К выплате: "+(r.oi+r.fix).toLocaleString("ru-RU")+" AMD"];
+    const infoMgr=showMgr?["Доход мен.: "+r.mi.toLocaleString("ru-RU")+" AMD","Прибыль: "+r.profit.toLocaleString("ru-RU")+" AMD"]:[];
+    [...infoBase,...infoMgr].forEach((v,c)=>ac(ws,rw,c,v,sLight("EDE9FE","left")));rw++;
+    // Valid policies
+    const vp=r.policies.filter(p=>!p.exception);const ep=r.policies.filter(p=>p.exception);
+    if(vp.length>0){
+      ac(ws,rw,0,"ЗАЧЁТНЫЕ ПОЛИСЫ ("+vp.length+")",sDark("166534","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+      VHDRS.forEach((h,c)=>ac(ws,rw,c,h,sLight("D1FAE5")));rw++;
+      vp.forEach((p,i)=>{
+        const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg);
+        const vals=showMgr
+          ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr,Math.round(p.amount*mr/100),or,Math.round(p.amount*or/100)]
+          :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or,Math.round(p.amount*or/100)];
+        vals.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;
+      });
+      const totAmt=vp.reduce((s,p)=>s+p.amount,0);
+      const totRow=showMgr?["ИТОГО","","","","","","","","",totAmt,"",r.mi,"",r.oi]:["ИТОГО","","","","","","","","",totAmt,"",r.oi];
+      totRow.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw+=2;
+    }
+    if(ep.length>0){
+      ac(ws,rw,0,"НЕЗАЧЁТНЫЕ ПОЛИСЫ ("+ep.length+")",sDark("991B1B","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+      EHDRS.forEach((h,c)=>ac(ws,rw,c,h,sLight("FEE2E2")));rw++;
+      ep.forEach((p,i)=>{
+        const bg=i%2===0?"FFFFFF":"FFF7ED";const reason=excReason(p,excepts,r.uid);
+        const vals=showMgr
+          ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,"—","—","—","—",reason]
+          :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,"—","—",reason];
+        vals.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;
+      });
+    }
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:nc}});
+    ws["!cols"]=showMgr
+      ?[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:8},{wch:14},{wch:35}]
+      :[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:35}];
+    ws["!merges"]=mg;
+    return ws;
+  };
+
+  const _dlXlsx=(wb,name)=>{
+    const out=XLSXStyle.write(wb,{bookType:"xlsx",type:"array"});
+    const blob=new Blob([new Uint8Array(out)],{type:"application/octet-stream"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
+  const _computeOpR=(agentData,cfg)=>agentData.filter(a=>(cfg.operatorUids||[]).includes(a.uid)).map(op=>{
+    const thrs=cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
+    const fixes=cfg.tierFixes||DEFAULT_MGR_RATES.tierFixes;
+    const tier=getTierMgr(op.validSales,thrs);const fix=fixes[tier-1]||0;
+    let mi=0,oi=0;
+    op.policies.filter(p=>!p.exception).forEach(p=>{mi+=Math.round(p.amount*getMgrPolicyRate(p,cfg)/100);oi+=Math.round(p.amount*getOpPolicyRate(p,tier,cfg)/100);});
+    return{uid:op.uid,totalSales:op.totalSales,validSales:op.validSales,tier,fix,mi,oi,profit:mi-oi-fix,policies:op.policies};
+  });
+
+  const exportManagerXlsx=(agentData,cfg,agentDir,month,excepts)=>{
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sDark=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"left",wrapText:true}});
+    const sLight=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:al||"center",wrapText:true}});
+    const sC=(bg,bold,al)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:al||"left"}});
+    const sN=(bg,bold,col)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold,color:col?{rgb:col}:undefined},border:borders,alignment:{horizontal:"right"}});
+    const ac=(ws,r,c,v,s)=>{ws[XLSXStyle.utils.encode_cell({r,c})]={v,t:typeof v==="number"?"n":"s",s};};
+    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
+    const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+    const opR=_computeOpR(agentData,cfg);
+    const totMgr=opR.reduce((s,r)=>s+r.mi,0);const totOp=opR.reduce((s,r)=>s+r.oi,0);const totFix=opR.reduce((s,r)=>s+r.fix,0);const totProfit=opR.reduce((s,r)=>s+r.profit,0);
+    const sT=(al)=>({fill:{patternType:"solid",fgColor:{rgb:"111827"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"right"}});
+    const mkSummary=(showMgr)=>{
+      const ws={};let rw=0;const mg=[];
+      const ncols=showMgr?8:6;
+      const title=showMgr?"Менеджерский отчёт — "+fmtMonth(month):"Отчёт по операторам — "+fmtMonth(month);
+      ac(ws,rw,0,title,sDark("4C1D95","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:ncols}});rw++;
+      const hdrs=showMgr
+        ?["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс (AMD)","Доход мен. (AMD)","Выплата опер. (AMD)","Прибыль (AMD)"]
+        :["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс (AMD)","Начислено (AMD)","К выплате (AMD)"];
+      hdrs.forEach((h,c)=>ac(ws,rw,c,h,sDark("374151","center")));rw++;
+      opR.forEach((r,i)=>{
+        const bg=i%2===0?"FFFFFF":"F5F3FF";
+        const row=showMgr
+          ?[gn(r.uid),gc(r.uid),r.totalSales,r.validSales,"С"+r.tier,r.fix,r.mi,r.oi,r.profit]
+          :[gn(r.uid),gc(r.uid),r.totalSales,r.validSales,"С"+r.tier,r.fix,r.oi,r.oi+r.fix];
+        row.forEach((v,c)=>{
+          const isProfit=showMgr&&c===8;
+          const s=isProfit?sN(bg,true,r.profit>=0?"166534":"DC2626"):c>=2?sN(bg,c>=5):sC(bg,false,c===0?"left":"center");
+          ac(ws,rw,c,v,s);
+        });rw++;
+      });
+      const totRow=showMgr
+        ?["ИТОГО","",opR.reduce((s,r)=>s+r.totalSales,0),opR.reduce((s,r)=>s+r.validSales,0),"",totFix,totMgr,totOp,totProfit]
+        :["ИТОГО","",opR.reduce((s,r)=>s+r.totalSales,0),opR.reduce((s,r)=>s+r.validSales,0),"",totFix,totOp,totOp+totFix];
+      totRow.forEach((v,c)=>ac(ws,rw,c,v,sT(c===0?"left":"right")));rw+=2;
+      if(showMgr){
+        ac(ws,rw,0,"Офис должен менеджеру:",sLight("FDE68A","left"));
+        ac(ws,rw,1,totMgr,{fill:{patternType:"solid",fgColor:{rgb:"FDE68A"}},font:{bold:true,sz:12},border:borders,alignment:{horizontal:"right"}});
+        mg.push({s:{r:rw,c:0},e:{r:rw,c:0}});
+      }
+      ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:ncols}});
+      ws["!cols"]=showMgr?[{wch:28},{wch:12},{wch:16},{wch:16},{wch:10},{wch:14},{wch:18},{wch:18},{wch:16}]:[{wch:28},{wch:12},{wch:16},{wch:16},{wch:10},{wch:14},{wch:16},{wch:16}];
+      ws["!merges"]=mg;
+      return ws;
+    };
+    // File 1: manager (with mgr income/profit)
+    const wb1=XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb1,mkSummary(true),"Сводка");
+    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb1,_buildOpSheet(r,cfg,agentDir,month,excepts,true),sn);});
+    _dlXlsx(wb1,"Менеджер_"+month+".xlsx");
+    // File 2: operators (without mgr income/profit)
+    const wb2=XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb2,mkSummary(false),"Сводка");
+    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb2,_buildOpSheet(r,cfg,agentDir,month,excepts,false),sn);});
+    setTimeout(()=>_dlXlsx(wb2,"Операторы_"+month+".xlsx"),300);
+  };
+
+  const exportSingleOpXlsx=(r,cfg,agentDir,month,excepts)=>{
+    const wb=XLSXStyle.utils.book_new();
+    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
+    const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+    const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));
+    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,false),sn);
+    const name=gn(r.uid)||gc(r.uid)||r.uid;
+    _dlXlsx(wb,name.slice(0,30)+"_"+month+".xlsx");
+  };
+
   const exportRenewalsZip=async(pols,expiryLabel)=>{
     const zip=new JSZip();
     const byAgent={};
@@ -997,7 +1236,7 @@ export default function App(){
       </div>
 
       <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:16,gap:0}}>
-        {[["commissions","💰 Комиссии"],["policydb","📋 База полисов"],["officesales","🏢 Продажи офиса"],["cashbook","📒 Касса"],["payroll","📝 Начисления"]].filter(([id])=>isAdmin||id!=="commissions").map(([id,label])=>(
+        {[["commissions","💰 Комиссии"],["policydb","📋 База полисов"],["officesales","🏢 Продажи офиса"],["cashbook","📒 Касса"],["payroll","📝 Начисления"],["manager","👔 Менеджер"],["income","📊 Доходы офиса"]].filter(([id])=>isAdmin||!["commissions","manager","income"].includes(id)).map(([id,label])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
             style={{...btn(tab===id?"#2563eb":"transparent",tab===id?"#fff":"#6b7280"),borderRadius:"6px 6px 0 0",fontSize:14,padding:"9px 22px",marginBottom:"-2px",border:"2px solid "+(tab===id?"#2563eb":"transparent"),fontWeight:tab===id?700:400}}>
             {label}
@@ -2297,6 +2536,360 @@ export default function App(){
             );
           })()}
         </div>
+        );
+      })()}
+
+      {tab==="manager"&&(()=>{
+        const cfg=managerConfig;
+        const opResults=_computeOpR(agentData,cfg);
+        const totMgr=opResults.reduce((s,r)=>s+r.mi,0);
+        const totOp=opResults.reduce((s,r)=>s+r.oi,0);
+        const totFix=opResults.reduce((s,r)=>s+r.fix,0);
+        const totProfit=opResults.reduce((s,r)=>s+r.profit,0);
+        const detailResult=mgrDetail?opResults.find(r=>r.uid===mgrDetail):null;
+        const detailOp=mgrDetail?agentData.find(a=>a.uid===mgrDetail):null;
+        const agentsNotOp=Object.entries(agentDir).filter(([id])=>!(cfg.operatorUids||[]).includes(id));
+        return(
+          <div>
+            {/* Month nav */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
+              <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
+              <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
+              <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
+              <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+                {opResults.length>0&&<button onClick={()=>exportManagerXlsx(agentData,cfg,agentDir,selMonth,exceptions)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
+                <button onClick={()=>setShowMgrSettings(v=>!v)} style={{...btn(showMgrSettings?"#7c3aed":"#f3f4f6",showMgrSettings?"#fff":"#374151",{border:"1px solid #d1d5db"}),fontSize:12}}>⚙️ Настройки</button>
+              </div>
+            </div>
+            {/* Settings panel */}
+            {showMgrSettings&&(
+              <div style={{border:"1px solid #d8b4fe",borderRadius:8,padding:16,marginBottom:16,background:"#faf5ff"}}>
+                <h3 style={{margin:"0 0 14px",fontSize:15,color:"#6d28d9"}}>👔 Настройки менеджера</h3>
+                {/* Operator selection */}
+                <div style={{marginBottom:16}}>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:8,color:"#374151"}}>Операторы в команде</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                    {(cfg.operatorUids||[]).map(uid=>{const a=agentDir[uid];const nm=a?(a.name+" "+a.surname).trim():uid;return(
+                      <span key={uid} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#ede9fe",border:"1px solid #c4b5fd",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#5b21b6",fontWeight:600}}>
+                        {nm}
+                        <button onClick={()=>saveManagerConfig({...cfg,operatorUids:(cfg.operatorUids||[]).filter(x=>x!==uid)})} style={{background:"none",border:"none",cursor:"pointer",color:"#6b7280",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                      </span>
+                    );})}
+                    {(cfg.operatorUids||[]).length===0&&<span style={{color:"#9ca3af",fontSize:12}}>Нет операторов</span>}
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <select value={mgrNewOp} onChange={e=>setMgrNewOp(e.target.value)} style={{...inp,padding:"4px 8px",fontSize:12,minWidth:220}}>
+                      <option value="">Выберите агента...</option>
+                      {agentsNotOp.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+" ("+(a.internalCode||id)+")"}</option>)}
+                    </select>
+                    <button onClick={()=>{if(!mgrNewOp)return;saveManagerConfig({...cfg,operatorUids:[...(cfg.operatorUids||[]),mgrNewOp]});setMgrNewOp("");}} disabled={!mgrNewOp} style={btn("#7c3aed")}>+ Добавить</button>
+                  </div>
+                </div>
+                <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14}}>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>Ставки</div>
+                  <MgrRatesPanel cfg={cfg} onSave={nc=>saveManagerConfig({...nc,operatorUids:cfg.operatorUids||[]})}/>
+                </div>
+              </div>
+            )}
+            {/* Summary cards */}
+            {opResults.length>0&&(
+              <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+                {[["Доход менеджера",totMgr,"#6d28d9","#f5f3ff","#ede9fe"],["Выплачено операторам",totOp,"#1d4ed8","#eff6ff","#dbeafe"],["Фикс. расходы",totFix,"#b45309","#fffbeb","#fde68a"],["Прибыль",totProfit,totProfit>=0?"#15803d":"#dc2626",totProfit>=0?"#f0fdf4":"#fff1f2",totProfit>=0?"#bbf7d0":"#fecaca"]].map(([l,v,col,bg,border])=>(
+                  <div key={l} style={{background:bg,border:"1px solid "+border,borderRadius:10,padding:"12px 18px",minWidth:150}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:17,fontWeight:700,color:col}}>{fmt(v)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* No operators message */}
+            {(cfg.operatorUids||[]).length===0&&(
+              <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
+                <div style={{fontSize:32,marginBottom:8}}>👔</div>
+                <div>Добавьте операторов в настройках</div>
+              </div>
+            )}
+            {/* Operators table */}
+            {opResults.length>0&&(
+              <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead><tr style={{background:"#1e293b",color:"#fff"}}>
+                    {["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс","Доход мен.","Выплата опер.","Прибыль","",""].map(h=><th key={h} style={{...th,color:"#fff",background:"#1e293b",whiteSpace:"nowrap"}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {opResults.map((r,i)=>{
+                      const a=agentDir[r.uid];const nm=a?(a.name+" "+a.surname).trim():r.uid;const ic=a&&a.internalCode||"";
+                      return(
+                        <tr key={r.uid} style={{background:i%2===0?"white":"#f8fafc",cursor:"pointer"}} onClick={()=>setMgrDetail(mgrDetail===r.uid?null:r.uid)}>
+                          <td style={{...td,fontWeight:600,color:"#374151"}}>{nm}</td>
+                          <td style={{...td,color:"#6366f1",fontSize:12,fontWeight:600}}>{ic||"—"}</td>
+                          <td style={{...td,textAlign:"right"}}>{fmt(r.totalSales)}</td>
+                          <td style={{...td,textAlign:"right",color:"#16a34a",fontWeight:600}}>{fmt(r.validSales)}</td>
+                          <td style={{...td,textAlign:"center"}}><span style={{background:"#ede9fe",color:"#5b21b6",borderRadius:12,padding:"2px 8px",fontSize:12,fontWeight:700}}>{"С"+r.tier}</span></td>
+                          <td style={{...td,textAlign:"right",color:"#d97706"}}>{fmt(r.fix)}</td>
+                          <td style={{...td,textAlign:"right",color:"#7c3aed",fontWeight:600}}>{fmt(r.mi)}</td>
+                          <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(r.oi)}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:r.profit>=0?"#16a34a":"#dc2626"}}>{fmt(r.profit)}</td>
+                          <td style={{...td,color:"#6b7280",fontSize:11}}>{mgrDetail===r.uid?"▲":"▼"}</td>
+                          <td style={td} onClick={e=>e.stopPropagation()}><button onClick={()=>exportSingleOpXlsx(r,cfg,agentDir,selMonth,exceptions)} style={btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"})} title="Экспорт оператора">⬇</button></td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{background:"#111827",color:"#fff"}}>
+                      <td colSpan={4} style={{...td,fontWeight:700,color:"#fff",borderTop:"2px solid #374151"}}>ИТОГО</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,textAlign:"right",color:"#fbbf24",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totFix)}</td>
+                      <td style={{...td,textAlign:"right",color:"#c4b5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totMgr)}</td>
+                      <td style={{...td,textAlign:"right",color:"#93c5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totOp)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:totProfit>=0?"#4ade80":"#f87171",borderTop:"2px solid #374151"}}>{fmt(totProfit)}</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {/* Detail view */}
+            {detailResult&&detailOp&&(()=>{
+              const thrs=cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
+              const tier=detailResult.tier;
+              return(
+                <div style={{border:"1px solid #d8b4fe",borderRadius:8,marginBottom:16,overflow:"hidden"}}>
+                  <div style={{background:"#4c1d95",color:"#fff",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontWeight:700,fontSize:14}}>{getName(detailOp.uid)||detailOp.uid}</span>
+                    <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:12,opacity:.9}}>
+                      <span>{"Ступень "+tier+" (зачётные ≥ "+fmt(thrs[tier-1])+")"}</span>
+                      <span>{"Фикс: "+fmt(detailResult.fix)}</span>
+                      <span>{"Прибыль: "+fmt(detailResult.profit)}</span>
+                    </div>
+                    <button onClick={()=>setMgrDetail(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#fff",fontSize:18,padding:0}}>×</button>
+                  </div>
+                  {/* Зачётные */}
+                  <div style={{overflowX:"auto",padding:0}}>
+                    <div style={{background:"#166534",color:"#fff",padding:"6px 14px",fontSize:12,fontWeight:600}}>{"✓ Зачётные полисы ("+detailOp.policies.filter(p=>!p.exception).length+")"}</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#f0fdf4"}}>{["№ полиса","Компания","Страхователь","Марка","Рег.номер","Регион","БМ","Мощ-ть","Срок","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер."].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{detailOp.policies.filter(p=>!p.exception).map((p,i)=>{
+                        const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,tier,cfg);
+                        const mc=Math.round(p.amount*mr/100);const oc=Math.round(p.amount*or/100);
+                        return(
+                          <tr key={i} style={{background:i%2===0?"white":"#f0fdf4",borderBottom:"1px solid #d1fae5"}}>
+                            <td style={{...td,fontSize:11}}>{p.policyNum||"—"}</td>
+                            <td style={td}>{p.company}</td>
+                            <td style={td}>{p.insuredName}</td>
+                            <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.car||"—"}</td>
+                            <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.carPlate||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.region||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.bm||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.power||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.term||"—"}</td>
+                            <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
+                            <td style={{...td,textAlign:"center",color:"#7c3aed"}}>{mr+"%"}</td>
+                            <td style={{...td,textAlign:"right",color:"#7c3aed",fontWeight:600}}>{fmt(mc)}</td>
+                            <td style={{...td,textAlign:"center",color:"#1d4ed8"}}>{or+"%"}</td>
+                            <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(oc)}</td>
+                          </tr>
+                        );
+                      })}</tbody>
+                      <tfoot><tr style={{background:"#d1fae5",fontWeight:700}}>
+                        <td colSpan={9} style={{...td,borderTop:"2px solid #86efac"}}>ИТОГО</td>
+                        <td style={{...td,textAlign:"right",borderTop:"2px solid #86efac"}}>{fmt(detailOp.policies.filter(p=>!p.exception).reduce((s,p)=>s+p.amount,0))}</td>
+                        <td style={{...td,borderTop:"2px solid #86efac"}}></td>
+                        <td style={{...td,textAlign:"right",color:"#7c3aed",borderTop:"2px solid #86efac"}}>{fmt(detailResult.mi)}</td>
+                        <td style={{...td,borderTop:"2px solid #86efac"}}></td>
+                        <td style={{...td,textAlign:"right",color:"#1d4ed8",borderTop:"2px solid #86efac"}}>{fmt(detailResult.oi)}</td>
+                      </tr></tfoot>
+                    </table>
+                  </div>
+                  {/* Незачётные */}
+                  {detailOp.policies.filter(p=>p.exception).length>0&&(
+                    <div style={{overflowX:"auto"}}>
+                      <div style={{background:"#991b1b",color:"#fff",padding:"6px 14px",fontSize:12,fontWeight:600}}>{"✕ Незачётные полисы ("+detailOp.policies.filter(p=>p.exception).length+")"}</div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead><tr style={{background:"#fee2e2"}}>{["№ полиса","Компания","Страхователь","Марка","Рег.номер","Регион","БМ","Мощ-ть","Срок","Сумма","Причина исключения"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>{detailOp.policies.filter(p=>p.exception).map((p,i)=>(
+                          <tr key={i} style={{background:i%2===0?"white":"#fff7ed",borderBottom:"1px solid #fed7aa"}}>
+                            <td style={{...td,fontSize:11}}>{p.policyNum||"—"}</td>
+                            <td style={td}>{p.company}</td>
+                            <td style={td}>{p.insuredName}</td>
+                            <td style={{...td,fontSize:11}}>{p.car||"—"}</td>
+                            <td style={{...td,fontSize:11}}>{p.carPlate||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.region||"—"}</td>
+                            <td style={{...td,textAlign:"center",color:p.bm?"#dc2626":"#6b7280",fontWeight:p.bm?600:400}}>{p.bm||"—"}</td>
+                            <td style={{...td,textAlign:"center",color:p.power?"#dc2626":"#6b7280",fontWeight:p.power?600:400}}>{p.power||"—"}</td>
+                            <td style={{...td,textAlign:"center"}}>{p.term||"—"}</td>
+                            <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
+                            <td style={{...td,fontSize:11,color:"#dc2626"}}>{excReason(p,exceptions,detailOp.uid)}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
+      {tab==="income"&&(()=>{
+        const rows=officeExpenses[selMonth]||[];
+        const osagoGross=agentData.reduce((s,a)=>s+a.totalOffice,0);
+        const osagoAgentPay=agentData.reduce((s,a)=>s+a.totalAgent,0);
+        const volGross=effVol.reduce((s,v)=>s+v.officeComm,0);
+        const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
+        const salesGross=osagoGross+volGross;
+        const agentPayTotal=osagoAgentPay+volAgentPay;
+        const salesNet=salesGross-agentPayTotal;
+        const opR=_computeOpR(agentData,managerConfig);
+        const mgrTeamSales=opR.reduce((s,r)=>s+r.validSales,0);
+        const totMgr=opR.reduce((s,r)=>s+r.mi,0);
+        const totOp=opR.reduce((s,r)=>s+r.oi,0);
+        const totFix=opR.reduce((s,r)=>s+r.fix,0);
+        const totMgrPersonal=totMgr-totOp-totFix;
+        const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+        const netProfit=salesNet-totalExpenses;
+        const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);saveOfficeExpenses({...officeExpenses,[selMonth]:nr});};
+        const delRow=id=>saveOfficeExpenses({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
+        const addDynRow=()=>{if(!expNewName.trim())return;saveOfficeExpenses({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat:"Доп.",name:expNewName.trim(),amount:0,type:"dynamic"}]});setExpNewName("");};
+        const STATIC_CATS=["Зарплаты","Коммунальные","Связь","Налоги","Прочее"];
+        const dynRows=rows.filter(r=>r.type==="dynamic");
+        const catColors={"Зарплаты":"#eff6ff","Коммунальные":"#f0fdf4","Связь":"#fdf4ff","Налоги":"#fff7ed","Прочее":"#f8fafc"};
+        const catBorders={"Зарплаты":"#bfdbfe","Коммунальные":"#bbf7d0","Связь":"#e9d5ff","Налоги":"#fed7aa","Прочее":"#e2e8f0"};
+        const RowEl=({r})=>(
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 14px",borderBottom:"1px solid #f9fafb"}}>
+            <input value={r.name} onChange={e=>updRow(r.id,"name",e.target.value)} style={{...inp,flex:1,padding:"3px 8px",fontSize:13,minWidth:0}}/>
+            <input type="number" value={r.amount||""} onChange={e=>updRow(r.id,"amount",Number(e.target.value)||0)} placeholder="0" style={{...inp,width:120,padding:"3px 8px",fontSize:13,textAlign:"right"}}/>
+            <button onClick={()=>delRow(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
+          </div>
+        );
+        return(
+          <div style={{maxWidth:960}}>
+            {/* Сводка */}
+            <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
+              {[
+                ["Валовой доход",salesGross,"#1d4ed8","#eff6ff","#bfdbfe"],
+                ["Выплачено агентам",agentPayTotal,"#7c3aed","#f5f3ff","#ede9fe"],
+                ["Расходы офиса",totalExpenses,"#b45309","#fffbeb","#fde68a"],
+                ["Чистая прибыль",netProfit,netProfit>=0?"#15803d":"#dc2626",netProfit>=0?"#f0fdf4":"#fff1f2",netProfit>=0?"#bbf7d0":"#fecaca"],
+              ].map(([l,v,col,bg,border])=>(
+                <div key={l} style={{background:bg,border:"1px solid "+border,borderRadius:10,padding:"12px 18px",minWidth:160}}>
+                  <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:col}}>{fmt(v)}</div>
+                </div>
+              ))}
+            </div>
+            {/* Доходы от продаж */}
+            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
+              <div style={{background:"#1d4ed8",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>💰 Доходы от продаж — {fmtMonth(selMonth)}</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr>
+                  <th style={{...th,textAlign:"left",paddingLeft:14}}>Источник</th>
+                  <th style={th}>Брутто</th>
+                  <th style={th}>Выплачено агентам</th>
+                  <th style={th}>Нетто</th>
+                </tr></thead>
+                <tbody>
+                  <tr>
+                    <td style={{...td,paddingLeft:14}}>ОСАГО</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(osagoGross)}</td>
+                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(osagoAgentPay)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoGross-osagoAgentPay)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{...td,paddingLeft:14}}>Добровольные</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(volGross)}</td>
+                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(volAgentPay)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(volGross-volAgentPay)}</td>
+                  </tr>
+                  <tr style={{background:"#f8fafc"}}>
+                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(salesGross)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626"}}>−{fmt(agentPayTotal)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#15803d"}}>{fmt(salesNet)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {/* Команда менеджера */}
+            {opR.length>0&&(
+              <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
+                <div style={{background:"#7c3aed",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>👔 Команда менеджера</div>
+                <div style={{padding:"12px 14px"}}>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
+                    {[
+                      ["Объём продаж команды",fmt(mgrTeamSales),"#374151"],
+                      ["Бюджет менеджера (расход офиса)",fmt(totMgr),"#7c3aed"],
+                      ["Выплачено операторам",fmt(totOp+totFix),"#1d4ed8"],
+                      ["Доход менеджера лично",fmt(totMgrPersonal),totMgrPersonal>=0?"#15803d":"#dc2626"],
+                    ].map(([l,v,c])=>(
+                      <div key={l} style={{background:"#faf5ff",border:"1px solid #ede9fe",borderRadius:8,padding:"8px 14px",minWidth:155}}>
+                        <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
+                        <div style={{fontSize:15,fontWeight:700,color:c}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:12,color:"#6b7280",padding:"6px 10px",background:"#faf5ff",borderRadius:6,border:"1px solid #ede9fe"}}>
+                    ℹ️ Бюджет менеджера входит в строку «Выплачено агентам» выше — операторы учтены в общем расчёте
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Расходы */}
+            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
+              <div style={{background:"#b45309",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>📋 Расходы офиса — {fmtMonth(selMonth)}</span>
+                <span style={{fontSize:12,fontWeight:400,opacity:0.85}}>Итого: {fmt(totalExpenses)}</span>
+              </div>
+              {rows.length===0&&<div style={{padding:20,textAlign:"center",color:"#9ca3af",fontSize:13}}>Загрузка данных...</div>}
+              {STATIC_CATS.map(cat=>{
+                const catRows=rows.filter(r=>r.cat===cat&&r.type==="static");
+                if(!catRows.length)return null;
+                const catTotal=catRows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+                return(
+                  <div key={cat} style={{borderBottom:"1px solid #f3f4f6"}}>
+                    <div style={{background:catColors[cat]||"#f9fafb",borderBottom:"1px solid "+(catBorders[cat]||"#e5e7eb"),padding:"5px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontWeight:600,fontSize:12,color:"#374151"}}>{cat}</span>
+                      <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>{fmt(catTotal)}</span>
+                    </div>
+                    {catRows.map(r=><RowEl key={r.id} r={r}/>)}
+                  </div>
+                );
+              })}
+              {dynRows.length>0&&(
+                <div style={{borderBottom:"1px solid #f3f4f6"}}>
+                  <div style={{background:"#f9fafb",borderBottom:"1px solid #e5e7eb",padding:"5px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontWeight:600,fontSize:12,color:"#374151"}}>Дополнительно</span>
+                    <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>{fmt(dynRows.reduce((s,r)=>s+(Number(r.amount)||0),0))}</span>
+                  </div>
+                  {dynRows.map(r=><RowEl key={r.id} r={r}/>)}
+                </div>
+              )}
+              <div style={{padding:"10px 14px",display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #f3f4f6"}}>
+                <input value={expNewName} onChange={e=>setExpNewName(e.target.value)} placeholder="Название доп. расхода..." style={{...inp,flex:1,padding:"5px 8px",fontSize:13}} onKeyDown={e=>e.key==="Enter"&&addDynRow()}/>
+                <button onClick={addDynRow} style={btn("#374151",undefined,{fontSize:13,padding:"5px 14px"})}>+ Добавить</button>
+              </div>
+            </div>
+            {/* Итог */}
+            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
+              <div style={{background:"#111827",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>📊 Итоговый расчёт</div>
+              <div style={{padding:"14px"}}>
+                {[
+                  ["Нетто от продаж",salesNet,"#15803d"],
+                  ["Расходы офиса",-totalExpenses,"#dc2626"],
+                ].map(([l,v,c])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f3f4f6",fontSize:14}}>
+                    <span style={{color:"#374151"}}>{l}</span>
+                    <span style={{fontWeight:600,color:c}}>{v>=0?"+":""}{fmt(v)}</span>
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontSize:16}}>
+                  <span style={{fontWeight:700}}>Чистая прибыль</span>
+                  <span style={{fontWeight:800,color:netProfit>=0?"#15803d":"#dc2626",fontSize:18}}>{fmt(netProfit)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         );
       })()}
 
