@@ -255,7 +255,7 @@ function parseCoRows(rows,company){
     const termNum=parseInt(termRaw)||0;
     let days=null;
     if(sd&&ed){days=Math.round((ed.getTime()-sd.getTime())/86400000);}
-    else if(company==="Armenia"&&termNum>0){days=termNum;if(sd)ed=new Date(sd.getTime()+termNum*86400000);}
+    else if(termNum>0){days=termNum;if(sd)ed=new Date(sd.getTime()+termNum*86400000);}
     const termAuto=days!==null?(days<88?"SH":"L"):termRaw||"";
     const amt=parseFloat(String(get("amount")).replace(/\s/g,"").replace(",","."))||0;
     return{_id:`${company}-${idx}`,company,agentCode:getCode("agentCode"),policyNum:get("policyNum"),
@@ -343,7 +343,7 @@ const getMgrPolicyRate=(p,cfg)=>{
   return(cfg.managerRates&&cfg.managerRates[p.company])||0;
 };
 const getOpPolicyRate=(p,tier,cfg)=>{
-  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return 0;const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
+  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortOperator!=null?cfg.armeniaShortOperator:20);const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
   return(cfg.operatorRates&&cfg.operatorRates[p.company]&&cfg.operatorRates[p.company][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
@@ -1265,10 +1265,14 @@ export default function App(){
     const wb=new JSZip();
     const month=selMonth;
     const rows=officeExpenses[month]||[];
-    const opPols=cashMonthPols||[];
+    const opPols=(cashMonthPols||[]).filter(p=>!p.insuredName?.includes("ПРИМЕР"));
     const totalExp=rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
-    const osagoGross=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+(p.amount||0),0);
-    const volGross=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>s+(p.amount||0),0);
+    const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
+    const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
+    const officeDirectOsago=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0)),0);
+    const officeDirectVol=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>{const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
+    const osagoGross=osagoAgentIncome+officeDirectOsago;
+    const volGross=volAgentIncome+officeDirectVol;
     const totalGross=osagoGross+volGross;
     const agentCommissions=agentData.reduce((s,a)=>s+a.totalAgent,0)+effVol.reduce((s,v)=>s+v.agentComm,0);
     const netIncome=totalGross-agentCommissions-totalExp;
@@ -3314,10 +3318,15 @@ export default function App(){
 
       {tab==="income"&&(()=>{
         const rows=officeExpenses[selMonth]||[];
-        const osagoGross=agentData.reduce((s,a)=>s+a.totalOffice,0);
+        const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
         const osagoAgentPay=agentData.reduce((s,a)=>s+a.totalAgent,0);
-        const volGross=effVol.reduce((s,v)=>s+v.officeComm,0);
+        const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
         const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
+        const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+        const officeDirectOsago=opReal.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0)),0);
+        const officeDirectVol=opReal.filter(p=>p.polType==="voluntary").reduce((s,p)=>{const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
+        const osagoGross=osagoAgentIncome+officeDirectOsago;
+        const volGross=volAgentIncome+officeDirectVol;
         const salesGross=osagoGross+volGross;
         const agentPayTotal=osagoAgentPay+volAgentPay;
         const salesNet=salesGross-agentPayTotal;
