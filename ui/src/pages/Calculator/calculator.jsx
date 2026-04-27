@@ -683,6 +683,11 @@ export default function App(){
   const[searchResults,setSearchResults]=useState(null);
   const[searchLoading,setSearchLoading]=useState(false);
   const[searchViewPol,setSearchViewPol]=useState(null);
+  const[notifs,setNotifs]=useState([]);
+  const[showNotifs,setShowNotifs]=useState(false);
+  const[chartData,setChartData]=useState(null);
+  const[chartLoading,setChartLoading]=useState(false);
+  const[chartHover,setChartHover]=useState(null);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
@@ -750,7 +755,67 @@ export default function App(){
     }
     setLoginError("Неверный PIN");
   };
-  const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);};
+  const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);setNotifs([]);setShowNotifs(false);};
+  const buildNotifications=async()=>{
+    try{
+      const mk=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
+      const today=new Date();today.setHours(0,0,0,0);
+      const in30=new Date(today.getTime()+30*24*60*60*1000);
+      const parseD=s=>{if(!s)return null;const[d,m,y]=s.split(".");if(!d||!m||!y)return null;return new Date(+y,+m-1,+d);};
+      const all=[];
+      for(const key of(mk.keys||[])){
+        const r=await calcStorage.get(key).catch(()=>null);
+        if(!r?.value)continue;
+        const pols=JSON.parse(r.value);
+        const month=key.replace("officePol:","");
+        for(const p of pols){
+          if(!p.insuredName||p.insuredName.includes("ПРИМЕР"))continue;
+          if(!p.paid){
+            all.push({...p,_monthKey:month,_ntype:"unpaid"});
+          }else if(p.polType==="osago"&&p.dateEnd){
+            const end=parseD(p.dateEnd);
+            if(end&&end>=today&&end<=in30){
+              const days=Math.ceil((end-today)/(24*60*60*1000));
+              all.push({...p,_monthKey:month,_ntype:"expiring",_daysLeft:days});
+            }
+          }
+        }
+      }
+      setNotifs([...all].sort(()=>Math.random()-0.5).slice(0,5));
+    }catch{setNotifs([]);}
+  };
+  useEffect(()=>{if(role)buildNotifications();},[role]);
+  useEffect(()=>{if(role)buildNotifications();},[tab]);
+  const loadChartData=async()=>{
+    setChartLoading(true);
+    try{
+      const now=new Date();
+      const months=[];
+      for(let i=11;i>=0;i--){
+        const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+        months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"));
+      }
+      const mgrUids=new Set(managerConfig.operatorUids||[]);
+      const result={};
+      for(const m of months){
+        result[m]={office:0,agents:0,manager:0};
+        const or=await calcStorage.get("officePol:"+m).catch(()=>null);
+        if(or?.value)JSON.parse(or.value).forEach(p=>{if(!p.insuredName?.includes("ПРИМЕР"))result[m].office+=Number(p.amount)||0;});
+        const ar=await calcStorage.get("month:"+m).catch(()=>null);
+        if(ar?.value){
+          const dd=JSON.parse(ar.value);
+          [...(dd.policies||[]),...(dd.voluntary||[])].forEach(p=>{
+            const amt=Number(p.amount)||0;
+            if(mgrUids.has(p.agentUid))result[m].manager+=amt;
+            else result[m].agents+=amt;
+          });
+        }
+      }
+      setChartData({months,data:result});
+    }catch{setChartData(null);}
+    setChartLoading(false);
+  };
+  useEffect(()=>{if(tab==="income")loadChartData();},[tab]);
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
   const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});};
   const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});};
@@ -1543,6 +1608,10 @@ export default function App(){
             ?<><span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#92400e"}}>🔑 Администратор</span></>
             :<><span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#166534"}}>👤 {currentEmployee?.name||"Сотрудник"}</span></>
           }
+          <button onClick={()=>setShowNotifs(p=>!p)} style={{...btn(showNotifs?"#1d4ed8":"#f1f5f9",showNotifs?"#fff":"#1e293b",{position:"relative",padding:"5px 13px",fontSize:16,lineHeight:1}),border:"2px solid "+(showNotifs?"#1d4ed8":"#94a3b8")}}>
+            🔔
+            {notifs.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{notifs.length}</span>}
+          </button>
           <button onClick={logout} style={btn("#64748b",undefined,{fontSize:12})}>Выйти</button>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -3207,11 +3276,92 @@ export default function App(){
             <button onClick={()=>delRow(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
           </div>
         );
+        const CCOLS={office:"#3b82f6",agents:"#22c55e",manager:"#a855f7"};
+        const CLBLS={office:"Офис",agents:"Агенты",manager:"Менеджер"};
+        const fmtK=v=>{if(v>=1000000)return(v/1000000).toFixed(1).replace(/\.0$/,"")+"M";if(v>=1000)return Math.round(v/1000)+"K";return String(v);};
+        const ChartBlock=(()=>{
+          if(chartLoading)return<div style={{background:"white",borderRadius:14,border:"1px solid #e2e8f0",padding:32,textAlign:"center",color:"#94a3b8",marginBottom:20}}>Загрузка графика...</div>;
+          if(!chartData)return null;
+          const{months,data}=chartData;
+          const W=900,H=270,PL=72,PR=24,PT=28,PB=48;
+          const CW=W-PL-PR,CH=H-PT-PB;
+          const allVals=months.flatMap(m=>[data[m].office,data[m].agents,data[m].manager]);
+          const rawMax=Math.max(1,...allVals);
+          const step=Math.pow(10,Math.floor(Math.log10(rawMax)));
+          const maxY=Math.ceil(rawMax/step*1.15)*step;
+          const TICKS=5;
+          const toY=v=>CH*(1-v/maxY);
+          const groupW=CW/months.length;
+          const barW=Math.max(8,Math.min(16,groupW/4.8));
+          const gap=2;
+          const totalBW=3*barW+2*gap;
+          return(
+            <div style={{background:"white",borderRadius:14,padding:"16px 16px 10px",boxShadow:"0 2px 12px rgba(15,23,42,0.09)",border:"1px solid #e2e8f0",marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                <div style={{fontWeight:700,fontSize:15,color:"#0f172a"}}>📊 Объём продаж — последние 12 месяцев</div>
+                <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+                  {Object.entries(CLBLS).map(([k,l])=>(
+                    <div key={k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:"#374151"}}>
+                      <div style={{width:12,height:12,borderRadius:3,background:CCOLS[k]}}/>
+                      <span>{l}</span>
+                    </div>
+                  ))}
+                  <button onClick={loadChartData} style={{...btn("#f1f5f9","#374151",{fontSize:11,padding:"3px 10px"}),border:"1px solid #cbd5e1"}}>↻ Обновить</button>
+                </div>
+              </div>
+              <div style={{position:"relative"}}>
+                <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:"block",overflow:"visible"}}>
+                  {Array.from({length:TICKS+1},(_,i)=>{
+                    const v=(maxY/TICKS)*i;
+                    const y=PT+toY(v);
+                    return<g key={i}>
+                      <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={i===0?"#cbd5e1":"#e2e8f0"} strokeWidth={i===0?1.5:1}/>
+                      <text x={PL-6} y={y+4} textAnchor="end" fontSize={10} fill="#64748b">{fmtK(v)}</text>
+                    </g>;
+                  })}
+                  {months.map((m,mi)=>{
+                    const cx=PL+mi*groupW+groupW/2;
+                    const bx=cx-totalBW/2;
+                    return<g key={m}>
+                      {["office","agents","manager"].map((t,ti)=>{
+                        const v=data[m][t];
+                        const x=bx+ti*(barW+gap);
+                        const barH=Math.max(toY(0)-toY(v),0);
+                        const y=PT+toY(v);
+                        return<rect key={t} x={x} y={v>0?y:PT+CH} width={barW} height={v>0?barH:0}
+                          fill={CCOLS[t]} rx={3}
+                          opacity={chartHover&&!(chartHover.month===m&&chartHover.type===t)?0.45:1}
+                          style={{cursor:"pointer",transition:"opacity 0.12s"}}
+                          onMouseEnter={e=>setChartHover({month:m,type:t,value:v,cx:e.clientX,cy:e.clientY})}
+                          onMouseLeave={()=>setChartHover(null)}
+                        />;
+                      })}
+                      <text x={cx} y={H-PT+16} textAnchor="middle" fontSize={9} fill="#64748b">
+                        {m.slice(2).replace("-",".")}
+                      </text>
+                    </g>;
+                  })}
+                </svg>
+                {chartHover&&(
+                  <div style={{position:"fixed",left:chartHover.cx+14,top:chartHover.cy-14,background:"#1e293b",color:"#fff",borderRadius:10,padding:"8px 14px",fontSize:12,pointerEvents:"none",zIndex:9999,boxShadow:"0 4px 16px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}}>
+                    <div style={{fontWeight:700,marginBottom:5,color:"#e2e8f0"}}>{fmtMonth(chartHover.month)}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:10,height:10,borderRadius:2,background:CCOLS[chartHover.type]}}/>
+                      <span style={{color:"#94a3b8"}}>{CLBLS[chartHover.type]}:</span>
+                      <span style={{fontWeight:700}}>{(chartHover.value||0).toLocaleString("ru-RU")} ֏</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })();
         return(
           <div style={{maxWidth:960}}>
             <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
               <button onClick={exportIncomeExcel} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
             </div>
+            {ChartBlock}
             {/* Сводка */}
             <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
               {[
@@ -3488,10 +3638,10 @@ export default function App(){
 
                   <Section title="Финансы" color="#15803d">
                     <Row label="Страховая премия" value={p.amount?fmt(p.amount):"—"} bold color={p.amount?"#1d4ed8":undefined}/>
-                    <Row label="Скидка" value={p.discount&&Number(p.discount)>0?fmt(p.discount):"—"}/>
-                    <Row label="К оплате" value={p.amount!=null?fmt((Number(p.amount)||0)-(Number(p.discount)||0)):"—"} bold/>
-                    {p._source==="office"
-                      ?p.paid
+                    {p._source==="office"&&<>
+                      <Row label="Скидка" value={p.discount&&Number(p.discount)>0?fmt(p.discount):"—"}/>
+                      <Row label="К оплате" value={p.amount!=null?fmt((Number(p.amount)||0)-(Number(p.discount)||0)):"—"} bold/>
+                      {p.paid
                         ?<>
                           <Row label="Статус оплаты" value="✓ Оплачено" bold color="#15803d"/>
                           <Row label="Сумма оплаты" value={p.paidAmount?fmt(p.paidAmount):"—"} bold color="#15803d"/>
@@ -3499,8 +3649,8 @@ export default function App(){
                           <Row label="Способ оплаты" value={fmtPay2(p.paymentType)}/>
                         </>
                         :<Row label="Статус оплаты" value="✗ Не оплачено" bold color="#dc2626"/>
-                      :<Row label="Статус оплаты" value="— (агентский полис)" color="#94a3b8"/>
-                    }
+                      }
+                    </>}
                   </Section>
 
                 </div>
@@ -3510,6 +3660,72 @@ export default function App(){
         </div>
       )}
 
+      {showNotifs&&(
+        <>
+          <div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:1000,backdropFilter:"blur(3px)"}}/>
+          <div style={{position:"fixed",right:0,top:0,width:400,height:"100vh",background:"#f8fafc",zIndex:1001,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(15,23,42,0.25)"}}>
+            <div style={{background:"#1e293b",padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div>
+                <div style={{color:"#fff",fontWeight:700,fontSize:16}}>🔔 Уведомления</div>
+                <div style={{color:"#94a3b8",fontSize:12,marginTop:2}}>{notifs.length>0?`${notifs.length} активных уведомлений`:"Нет уведомлений"}</div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={buildNotifications} title="Показать другие" style={{background:"#334155",border:"1px solid #475569",color:"#cbd5e1",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>↻</button>
+                <button onClick={()=>setShowNotifs(false)} style={{background:"#334155",border:"1px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1,fontWeight:300}}>×</button>
+              </div>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:12}}>
+              {notifs.length===0
+                ?<div style={{textAlign:"center",color:"#94a3b8",marginTop:80,padding:"0 20px"}}>
+                  <div style={{fontSize:48,marginBottom:16}}>🎉</div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#475569",marginBottom:8}}>Всё в порядке!</div>
+                  <div style={{fontSize:13,lineHeight:1.6}}>Неоплаченных полисов и истекающих в ближайшие 30 дней не найдено</div>
+                </div>
+                :notifs.map((p,i)=>{
+                  const isExp=p._ntype==="expiring";
+                  const stripCol=isExp?"#f59e0b":"#ef4444";
+                  const badgeBg=isExp?"#fef3c7":"#fee2e2";
+                  const badgeCol=isExp?"#92400e":"#991b1b";
+                  const icon=isExp?"⏰":"💳";
+                  const title=isExp?`Истекает через ${p._daysLeft} дн.`:"Не оплачен";
+                  return(
+                    <div key={i} style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 2px 10px rgba(15,23,42,0.09)",border:"1px solid #e2e8f0",position:"relative"}}>
+                      <div style={{position:"absolute",left:0,top:0,bottom:0,width:5,background:stripCol}}/>
+                      <div style={{padding:"12px 14px 14px 20px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                            <span style={{background:badgeBg,color:badgeCol,borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700}}>{icon} {title}</span>
+                            <span style={{background:"#f1f5f9",color:"#64748b",borderRadius:6,padding:"2px 7px",fontSize:11}}>{fmtMonth(p._monthKey)}</span>
+                          </div>
+                          <button onClick={()=>setNotifs(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18,padding:"0 2px",lineHeight:1,marginLeft:6}}>×</button>
+                        </div>
+                        <div style={{fontWeight:700,fontSize:15,color:"#0f172a",marginBottom:5}}>{p.insuredName||"—"}</div>
+                        <div style={{fontSize:12,color:"#475569",marginBottom:8,display:"flex",gap:12,flexWrap:"wrap"}}>
+                          {p.company&&<span>🏢 {p.company}</span>}
+                          {p.phone&&<span>📞 {p.phone}</span>}
+                        </div>
+                        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                          {p.policyNum&&<span style={{background:"#e0f2fe",color:"#0369a1",borderRadius:6,padding:"2px 9px",fontSize:11,fontWeight:600}}>№ {p.policyNum}</span>}
+                          {p.polType==="osago"
+                            ?<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:6,padding:"2px 9px",fontSize:11,fontWeight:600}}>🚗 ОСАГО</span>
+                            :<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:6,padding:"2px 9px",fontSize:11,fontWeight:600}}>🛡 {p.productName||"Добровол."}</span>
+                          }
+                          {isExp&&p.dateEnd&&<span style={{background:"#fef9c3",color:"#92400e",borderRadius:6,padding:"2px 9px",fontSize:11,fontWeight:600}}>до {p.dateEnd}</span>}
+                          {!isExp&&p.amount&&<span style={{background:"#fce7f3",color:"#9d174d",borderRadius:6,padding:"2px 9px",fontSize:11,fontWeight:600}}>{(Number(p.amount)||0).toLocaleString("ru-RU")} ֏</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </div>
+            <div style={{padding:"12px 16px",borderTop:"2px solid #e2e8f0",background:"#f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <span style={{fontSize:12,color:"#64748b"}}>Обновляется при смене вкладки</span>
+              <button onClick={buildNotifications} style={btn("#1d4ed8",undefined,{fontSize:12})}>↻ Показать другие</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
