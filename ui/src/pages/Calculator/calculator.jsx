@@ -639,11 +639,16 @@ export default function App(){
   const fileRef=useRef();const backRef=useRef();const officeFileRef=useRef();const importOfficeRef=useRef();
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
-  const[role,setRole]=useState("employee");
-  const[pinModal,setPinModal]=useState(false);
-  const[pinInput,setPinInput]=useState("");
-  const[pinError,setPinError]=useState("");
-  const[adminPin,setAdminPin]=useState(null);
+  const DEFAULT_EMPLOYEES=[
+    {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false},
+    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales"],viewOnly:true},
+  ];
+  const[role,setRole]=useState(null);
+  const[currentEmployee,setCurrentEmployee]=useState(null);
+  const[employees,setEmployees]=useState(DEFAULT_EMPLOYEES);
+  const[loginPin,setLoginPin]=useState("");
+  const[loginError,setLoginError]=useState("");
+  const[adminPin,setAdminPin]=useState("000000");
   const[newPinA,setNewPinA]=useState("");
   const[newPinB,setNewPinB]=useState("");
   const[pinChangeMsg,setPinChangeMsg]=useState("");
@@ -680,7 +685,7 @@ export default function App(){
     try{const r=await calcStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
-    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
+    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);if(p&&Array.isArray(p.employees)&&p.employees.length)setEmployees(p.employees);}}catch{}
     try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[]});}}catch{}
     try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
     try{const r=await calcStorage.get("lockedMonths").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setLockedMonths(p);}}catch{}
@@ -696,7 +701,11 @@ export default function App(){
     })();
   },[selMonth]);
 
-  useEffect(()=>{if(role==="employee"&&tab==="commissions")setTab("policydb");},[role]);
+  useEffect(()=>{
+    if(role==="employee"&&currentEmployee){
+      if(!currentEmployee.tabs.includes(tab))setTab(currentEmployee.tabs[0]||"policydb");
+    }
+  },[role,currentEmployee]);
   useEffect(()=>{
     if(tab!=="income"||!officeExpLoaded)return;
     setOfficeExpenses(prev=>{
@@ -719,27 +728,35 @@ export default function App(){
   const saveVR=r=>{setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(()=>{});};
   const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
   const isAdmin=role==="admin";
-  const tryAdminLogin=()=>{
-    const p=pinInput.trim();
-    if(!p){setPinError("Введите PIN");return;}
-    if(!adminPin){
-      const s={adminPin:p,officeStaff};
-      calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
-      setAdminPin(p);setRole("admin");setPinModal(false);setPinInput("");setPinError("");
-    } else {
-      if(p===adminPin){setRole("admin");setPinModal(false);setPinInput("");setPinError("");}
-      else setPinError("Неверный PIN");
-    }
+  const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
+  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income"]:(currentEmployee?.tabs||[]);
+
+  const saveAppSettings=(updates={})=>{
+    const s={adminPin,employees,officeStaff,...updates};
+    calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
   };
-  const saveOfficeStaff=(list)=>{setOfficeStaff(list);calcStorage.set("appSettings",JSON.stringify({adminPin:adminPin||"",officeStaff:list})).catch(()=>{});};
+  const tryLogin=()=>{
+    const p=loginPin.trim();
+    if(!p){setLoginError("Введите PIN");return;}
+    if(p===adminPin){setRole("admin");setCurrentEmployee(null);setLoginPin("");setLoginError("");return;}
+    const emp=employees.find(e=>e.pin===p);
+    if(emp){
+      setRole("employee");setCurrentEmployee(emp);setLoginPin("");setLoginError("");
+      return;
+    }
+    setLoginError("Неверный PIN");
+  };
+  const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);};
+  const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
+  const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});};
   const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});};
   const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(()=>{});};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
-    const s={adminPin:newPinA.trim(),officeStaff};
-    calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
-    setAdminPin(newPinA.trim());setNewPinA("");setNewPinB("");
+    const np=newPinA.trim();
+    setAdminPin(np);saveAppSettings({adminPin:np});
+    setNewPinA("");setNewPinB("");
     setPinChangeMsg("✓ PIN изменён");setTimeout(()=>setPinChangeMsg(""),3000);
   };
   const getName=id=>{const a=agentDir[id];return a?(a.name+" "+a.surname).trim():"";};
@@ -1458,17 +1475,40 @@ export default function App(){
   const panels=isAdmin?[["agents","👤 Агенты",Object.keys(agentDir).length],["rates","⚙️ Ставки",null],["volrates","📦 Доброволь.",volRates.rates.length],["exceptions","🚫 Исключения",exceptions.filter(e=>e.enabled).length],["access","🔐 Доступ",null]]:[];
   const backupJson=JSON.stringify({version:6,agentDir,rates,volRates,exceptions},null,2);
 
+  if(role===null){
+    return(
+      <div style={{minHeight:"100vh",background:"#dde3ed",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,sans-serif"}}>
+        <div style={{background:"white",borderRadius:16,padding:"40px 48px",boxShadow:"0 8px 32px rgba(0,0,0,0.12)",minWidth:320,textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:8}}>🏢</div>
+          <h2 style={{margin:"0 0 4px",fontSize:22,color:"#1e293b"}}>INSURANCE MANAGER</h2>
+          <div style={{color:"#64748b",fontSize:13,marginBottom:28}}>Введите PIN-код для входа</div>
+          <input
+            type="password"
+            value={loginPin}
+            onChange={e=>setLoginPin(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&tryLogin()}
+            placeholder="••••••"
+            maxLength={8}
+            style={{...inp,width:"100%",fontSize:22,textAlign:"center",letterSpacing:6,padding:"10px 16px",marginBottom:12,boxSizing:"border-box"}}
+            autoFocus
+          />
+          {loginError&&<div style={{color:"#dc2626",fontSize:13,marginBottom:10,fontWeight:600}}>{loginError}</div>}
+          <button onClick={tryLogin} style={{...btn("#1d4ed8"),width:"100%",fontSize:15,padding:"10px 0"}}>Войти</button>
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{fontFamily:"system-ui,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#1e293b",background:"#dde3ed",minHeight:"100vh"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <h2 style={{margin:0,fontSize:20}}>Калькулятор комиссий</h2>
           {isAdmin
-            ?<><span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#92400e"}}>🔑 Администратор</span>
-               <button onClick={()=>{setRole("employee");setPanel(null);}} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db",fontSize:12})}>Выйти</button></>
-            :<><span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#166534"}}>👤 Сотрудник</span>
-               <button onClick={()=>setPinModal(true)} style={btn("#1d4ed8",undefined,{fontSize:12})}>🔐 Войти как администратор</button></>
+            ?<><span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#92400e"}}>🔑 Администратор</span></>
+            :<><span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#166534"}}>👤 {currentEmployee?.name||"Сотрудник"}</span></>
           }
+          <button onClick={logout} style={btn("#64748b",undefined,{fontSize:12})}>Выйти</button>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {panels.map(([id,label,count])=>(
@@ -1484,7 +1524,7 @@ export default function App(){
       </div>
 
       <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
-        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"]].filter(([id])=>isAdmin||!["commissions","manager","income"].includes(id)).map(([id,label,activeCol,activeBg])=>(
+        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
             style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
             {label}
@@ -1558,6 +1598,46 @@ export default function App(){
                   <button onClick={changePin} style={btn("#7c3aed")}>Сохранить</button>
                 </div>
                 {pinChangeMsg&&<div style={{fontSize:13,color:pinChangeMsg.startsWith("✓")?"#16a34a":"#dc2626"}}>{pinChangeMsg}</div>}
+              </div>
+              <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16,marginBottom:20}}>
+                <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>👥 Сотрудники</div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,marginBottom:10}}>
+                  <thead><tr>
+                    <th style={{...th,textAlign:"left"}}>Имя</th>
+                    <th style={th}>PIN</th>
+                    <th style={th}>Доступные вкладки</th>
+                    <th style={th}>Только просмотр</th>
+                    <th style={th}></th>
+                  </tr></thead>
+                  <tbody>
+                    {employees.map((emp,i)=>{
+                      const TAB_LABELS={policydb:"📋 База",officesales:"🏢 Продажи",cashbook:"📒 Касса",payroll:"📝 Начисления"};
+                      return(
+                        <tr key={emp.id}>
+                          <td style={td}><input value={emp.name} onChange={e=>{const l=[...employees];l[i]={...l[i],name:e.target.value};saveEmployees(l);}} style={{...inp,width:"100%"}}/></td>
+                          <td style={td}><input type="password" value={emp.pin} onChange={e=>{const l=[...employees];l[i]={...l[i],pin:e.target.value};saveEmployees(l);}} style={{...inp,width:90,letterSpacing:3}}/></td>
+                          <td style={{...td,fontSize:11}}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                              {Object.entries(TAB_LABELS).map(([id,label])=>(
+                                <label key={id} style={{display:"flex",alignItems:"center",gap:3,cursor:"pointer",userSelect:"none"}}>
+                                  <input type="checkbox" checked={emp.tabs.includes(id)} onChange={e=>{const l=[...employees];const tabs=e.target.checked?[...emp.tabs,id]:emp.tabs.filter(t=>t!==id);l[i]={...l[i],tabs};saveEmployees(l);}}/>
+                                  {label}
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{...td,textAlign:"center"}}>
+                            <input type="checkbox" checked={emp.viewOnly||false} onChange={e=>{const l=[...employees];l[i]={...l[i],viewOnly:e.target.checked};saveEmployees(l);}}/>
+                          </td>
+                          <td style={{...td,textAlign:"center"}}>
+                            <button onClick={()=>{if(window.confirm("Удалить сотрудника "+emp.name+"?"))saveEmployees(employees.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",cursor:"pointer",color:"#dc2626",fontSize:16}}>×</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <button onClick={()=>saveEmployees([...employees,{id:"emp"+Date.now(),name:"Новый сотрудник",pin:"000000",tabs:["policydb","officesales"],viewOnly:false}])} style={btn("#2563eb",undefined,{fontSize:12})}>+ Добавить сотрудника</button>
               </div>
               <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16}}>
               <div style={{fontWeight:600,fontSize:13,marginBottom:4,color:"#374151"}}>Операторы (в форме «Продажи офиса»)</div>
@@ -1840,7 +1920,7 @@ export default function App(){
                 ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
                 :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
               )}
-              {(!isLocked||isAdmin)&&<button onClick={openOpNew} style={btn("#2563eb",undefined,{marginLeft:"auto",fontSize:13,padding:"7px 16px"})}>+ Добавить полис</button>}
+              {(!isLocked||isAdmin)&&!isViewOnly&&<button onClick={openOpNew} style={btn("#2563eb",undefined,{marginLeft:"auto",fontSize:13,padding:"7px 16px"})}>+ Добавить полис</button>}
               {isAdmin&&<>
                 <button onClick={downloadOfficeTemplate} style={btn("#0891b2",undefined,{fontSize:13,padding:"7px 16px"})}>📋 Шаблон Excel</button>
                 <button onClick={()=>importOfficeRef.current.click()} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 16px"})}>⬆ Импорт</button>
@@ -1941,8 +2021,8 @@ export default function App(){
                       <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
                       <td style={{...td,fontSize:11,color:"#6b7280",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol.comment||""}</td>
                       <td style={{...td,whiteSpace:"nowrap"}}>
-                        {actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
-                        {actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                        {!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                        {!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
                         {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
                       </td>
                     </tr>
@@ -1991,8 +2071,8 @@ export default function App(){
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
                         <td style={{...td,whiteSpace:"nowrap"}}>
-                          {!pol.paid&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
-                          {!pol.paid&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                          {!pol.paid&&!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                          {!pol.paid&&!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
                           {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
                         </td>
                       </tr>
@@ -2040,8 +2120,8 @@ export default function App(){
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
                         <td style={{...td,whiteSpace:"nowrap"}}>
-                          {!pol.paid&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
-                          {!pol.paid&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                          {!pol.paid&&!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                          {!pol.paid&&!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
                           {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
                         </td>
                       </tr>
@@ -3225,31 +3305,6 @@ export default function App(){
         );
       })()}
 
-      {pinModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
-          onClick={e=>{if(e.target===e.currentTarget){setPinModal(false);setPinInput("");setPinError("");}}}>
-          <div style={{background:"white",borderRadius:14,padding:"32px 28px",width:300,boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
-            <div style={{textAlign:"center",fontSize:32,marginBottom:8}}>🔐</div>
-            <h3 style={{margin:"0 0 6px",fontSize:17,textAlign:"center"}}>Вход для администратора</h3>
-            {!adminPin&&<p style={{fontSize:12,color:"#6b7280",textAlign:"center",margin:"0 0 16px"}}>Первый вход — введите новый PIN</p>}
-            {adminPin&&<div style={{height:12}}/>}
-            <input
-              type="password"
-              value={pinInput}
-              onChange={e=>{setPinInput(e.target.value);setPinError("");}}
-              onKeyDown={e=>e.key==="Enter"&&tryAdminLogin()}
-              placeholder="Введите PIN"
-              autoFocus
-              style={{...inp,width:"100%",padding:"11px 12px",fontSize:20,textAlign:"center",letterSpacing:6,boxSizing:"border-box",marginBottom:6}}
-            />
-            {pinError&&<div style={{color:"#dc2626",fontSize:12,textAlign:"center",marginBottom:8}}>{pinError}</div>}
-            <div style={{display:"flex",gap:8,marginTop:12}}>
-              <button onClick={tryAdminLogin} style={{...btn(),flex:1,padding:"10px",fontSize:14}}>Войти</button>
-              <button onClick={()=>{setPinModal(false);setPinInput("");setPinError("");}} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
