@@ -692,6 +692,9 @@ export default function App(){
   const[cmpMonth2,setCmpMonth2]=useState("");
   const[cmpData,setCmpData]=useState(null);
   const[cmpLoading,setCmpLoading]=useState(false);
+  const[auditEntries,setAuditEntries]=useState([]);
+  const[showAudit,setShowAudit]=useState(false);
+  const[auditFilter,setAuditFilter]=useState({user:"",action:""});
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
@@ -758,6 +761,16 @@ export default function App(){
       return;
     }
     setLoginError("Неверный PIN");
+  };
+  useEffect(()=>{calcStorage.get("auditLog").then(r=>{if(r?.value)setAuditEntries(JSON.parse(r.value));}).catch(()=>{});},[]);
+  const logAction=(action,details,month)=>{
+    const user=role==="admin"?"Администратор":(currentEmployee?.name||"Сотрудник");
+    const entry={id:genUid(),ts:Date.now(),user,action,details,month:month||selMonth};
+    setAuditEntries(prev=>{
+      const updated=[entry,...prev].slice(0,500);
+      calcStorage.set("auditLog",JSON.stringify(updated)).catch(()=>{});
+      return updated;
+    });
   };
   const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);setNotifs([]);setShowNotifs(false);};
   const buildNotifications=async()=>{
@@ -851,8 +864,8 @@ export default function App(){
     setCmpLoading(false);
   };
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
-  const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});};
-  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});};
+  const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});logAction("settings","Изменён список сотрудников","—");};
+  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(()=>{});};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
@@ -1047,6 +1060,7 @@ export default function App(){
     const updated={...lockedMonths,[selMonth]:true};
     setLockedMonths(updated);setMonthSnapshot(snap);
     await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
+    logAction("lock_month","Закрыт месяц: "+fmtMonth(selMonth));
   };
 
   const unlockMonth=async()=>{
@@ -1054,6 +1068,7 @@ export default function App(){
     const updated={...lockedMonths};delete updated[selMonth];
     setLockedMonths(updated);
     await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
+    logAction("unlock_month","Открыт месяц: "+fmtMonth(selMonth));
   };
 
   const loadDB=()=>{
@@ -1112,7 +1127,7 @@ export default function App(){
 
   const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:""});
-  const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);};
+  const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);logAction("add_policy","Добавлен полис: "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" ("+(fd.polType==="osago"?"ОСАГО":"Добровольный")+")");};
   const saveEditPol=async(pol,updates)=>{
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?{...p,...updates}:p));}
     else{
@@ -1122,6 +1137,7 @@ export default function App(){
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
+    logAction("edit_policy","Изменён полис: "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н"),pol._monthKey);
   };
   const acceptOpPayment=async(pol,payData)=>{
     const updated={...pol,...payData,paid:true,paidAt:new Date().toISOString()};
@@ -1132,6 +1148,7 @@ export default function App(){
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
     }
+    logAction("pay_policy","Оплата принята: "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" → "+(payData.paidAmount||0)+" ֏",pol._monthKey);
     setOpPayPol(null);
   };
   const deleteOfficePol=async(pol)=>{
@@ -1143,6 +1160,7 @@ export default function App(){
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
     }
+    logAction("delete_policy","Удалён полис: "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н"),pol._monthKey);
   };
   const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormOpen(true);};
   const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:""});setOpFormOpen(true);};
@@ -1238,6 +1256,7 @@ export default function App(){
       setImportPending({pols:validPols,month:selMonth});
     }else{
       saveOpMonth(validPols);
+      logAction("import","Импорт: "+validPols.length+" полисов за "+fmtMonth(selMonth));
       alert("Импортировано "+validPols.length+" записей за "+fmtMonth(selMonth));
     }
   };
@@ -1655,6 +1674,7 @@ export default function App(){
             </button>
           ))}
           {isAdmin&&hasData&&<button onClick={()=>exportToExcel(agentData,effVol,agentDir,totals,exceptions)} style={btn("#16a34a")}>⬇ Excel</button>}
+          {isAdmin&&<button onClick={()=>setShowAudit(p=>!p)} style={{...btn(showAudit?"#0f172a":"#f1f5f9",showAudit?"#fff":"#1e293b",{fontSize:12}),border:"2px solid "+(showAudit?"#0f172a":"#94a3b8")}}>📋 Журнал</button>}
           {isAdmin&&<button onClick={()=>setShowBackup(p=>!p)} style={btn("#7c3aed")}>💾 Резерв</button>}
           {isAdmin&&<button onClick={()=>backRef.current.click()} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>📂 Восстановить</button>}
           <input ref={backRef} type="file" accept=".json" onChange={importBackup} style={{display:"none"}}/>
@@ -2120,8 +2140,8 @@ export default function App(){
                 <div style={{fontWeight:700,fontSize:14,color:"#92400e"}}>⚠ Данные за {fmtMonth(importPending.month)} уже существуют ({opCurrentMonth.length} зап.)</div>
                 <div style={{fontSize:13,color:"#78350f"}}>Импортируется {importPending.pols.length} записей. Что сделать с существующими?</div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                  <button onClick={()=>{saveOpMonth(importPending.pols);setImportPending(null);}} style={btn("#dc2626",undefined,{fontSize:13,padding:"7px 18px"})}>Заменить полностью</button>
-                  <button onClick={()=>{saveOpMonth([...opCurrentMonth,...importPending.pols]);setImportPending(null);}} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 18px"})}>Добавить к существующим</button>
+                  <button onClick={()=>{saveOpMonth(importPending.pols);logAction("import","Импорт (замена): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#dc2626",undefined,{fontSize:13,padding:"7px 18px"})}>Заменить полностью</button>
+                  <button onClick={()=>{saveOpMonth([...opCurrentMonth,...importPending.pols]);logAction("import","Импорт (добавление): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 18px"})}>Добавить к существующим</button>
                   <button onClick={()=>setImportPending(null)} style={btn("#6b7280",undefined,{fontSize:13,padding:"7px 18px"})}>Отмена</button>
                 </div>
               </div>
@@ -3786,6 +3806,86 @@ export default function App(){
         </div>
       )}
 
+      {showAudit&&isAdmin&&(()=>{
+        const ACTION_META={
+          add_policy:{label:"Добавлен полис",bg:"#dcfce7",col:"#166534"},
+          edit_policy:{label:"Изменён полис",bg:"#dbeafe",col:"#1d4ed8"},
+          delete_policy:{label:"Удалён полис",bg:"#fee2e2",col:"#991b1b"},
+          pay_policy:{label:"Оплата",bg:"#ccfbf1",col:"#0f766e"},
+          lock_month:{label:"Закрыт месяц",bg:"#ffedd5",col:"#9a3412"},
+          unlock_month:{label:"Открыт месяц",bg:"#fef9c3",col:"#92400e"},
+          import:{label:"Импорт",bg:"#ede9fe",col:"#6d28d9"},
+          settings:{label:"Настройки",bg:"#f1f5f9",col:"#475569"},
+        };
+        const allUsers=[...new Set(auditEntries.map(e=>e.user))];
+        const filtered=auditEntries.filter(e=>{
+          if(auditFilter.user&&e.user!==auditFilter.user)return false;
+          if(auditFilter.action&&e.action!==auditFilter.action)return false;
+          return true;
+        });
+        const fmtTs=ts=>{const d=new Date(ts);return d.toLocaleDateString("ru-RU")+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});};
+        return(
+          <>
+            <div onClick={()=>setShowAudit(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:1000,backdropFilter:"blur(3px)"}}/>
+            <div style={{position:"fixed",right:0,top:0,width:560,height:"100vh",background:"#f8fafc",zIndex:1001,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(15,23,42,0.25)"}}>
+              <div style={{background:"#0f172a",padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <div>
+                  <div style={{color:"#fff",fontWeight:700,fontSize:16}}>📋 Журнал изменений</div>
+                  <div style={{color:"#94a3b8",fontSize:12,marginTop:2}}>{filtered.length} из {auditEntries.length} записей</div>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  {auditEntries.length>0&&<button onClick={()=>{if(window.confirm("Очистить весь журнал?")){{setAuditEntries([]);calcStorage.set("auditLog",JSON.stringify([])).catch(()=>{});}}}} style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Очистить</button>}
+                  <button onClick={()=>setShowAudit(false)} style={{background:"#1e293b",border:"1px solid #334155",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+                </div>
+              </div>
+              <div style={{padding:"10px 16px",borderBottom:"1px solid #e2e8f0",background:"white",display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
+                <select value={auditFilter.user} onChange={e=>setAuditFilter(p=>({...p,user:e.target.value}))} style={{...inp,fontSize:12,padding:"4px 8px",flex:1,minWidth:120}}>
+                  <option value="">Все пользователи</option>
+                  {allUsers.map(u=><option key={u} value={u}>{u}</option>)}
+                </select>
+                <select value={auditFilter.action} onChange={e=>setAuditFilter(p=>({...p,action:e.target.value}))} style={{...inp,fontSize:12,padding:"4px 8px",flex:1,minWidth:140}}>
+                  <option value="">Все действия</option>
+                  {Object.entries(ACTION_META).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                </select>
+                {(auditFilter.user||auditFilter.action)&&<button onClick={()=>setAuditFilter({user:"",action:""})} style={{...btn("#f1f5f9","#374151",{fontSize:11,padding:"4px 10px"}),border:"1px solid #cbd5e1"}}>✕ Сброс</button>}
+              </div>
+              <div style={{flex:1,overflowY:"auto"}}>
+                {filtered.length===0
+                  ?<div style={{textAlign:"center",color:"#94a3b8",marginTop:60,fontSize:13}}>Нет записей</div>
+                  :<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead style={{position:"sticky",top:0,zIndex:1}}>
+                      <tr style={{background:"#f1f5f9"}}>
+                        <th style={{...th,fontSize:11,padding:"8px 10px"}}>Время</th>
+                        <th style={{...th,fontSize:11,padding:"8px 10px"}}>Пользователь</th>
+                        <th style={{...th,fontSize:11,padding:"8px 10px"}}>Действие</th>
+                        <th style={{...th,fontSize:11,padding:"8px 10px"}}>Детали</th>
+                        <th style={{...th,fontSize:11,padding:"8px 10px"}}>Месяц</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((e,i)=>{
+                        const m=ACTION_META[e.action]||{label:e.action,bg:"#f1f5f9",col:"#374151"};
+                        return(
+                          <tr key={e.id||i} style={{background:i%2===0?"white":"#f8fafc",borderBottom:"1px solid #f1f5f9"}}>
+                            <td style={{...td,fontSize:11,whiteSpace:"nowrap",padding:"7px 10px",color:"#64748b"}}>{fmtTs(e.ts)}</td>
+                            <td style={{...td,fontSize:11,padding:"7px 10px",fontWeight:600}}>{e.user}</td>
+                            <td style={{...td,padding:"7px 10px"}}><span style={{background:m.bg,color:m.col,borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{m.label}</span></td>
+                            <td style={{...td,fontSize:11,padding:"7px 10px",maxWidth:180,wordBreak:"break-word"}}>{e.details}</td>
+                            <td style={{...td,fontSize:11,padding:"7px 10px",whiteSpace:"nowrap",color:"#64748b"}}>{e.month&&e.month!=="—"?fmtMonth(e.month):"—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                }
+              </div>
+              <div style={{padding:"10px 16px",borderTop:"2px solid #e2e8f0",background:"#f1f5f9",fontSize:11,color:"#64748b",flexShrink:0}}>
+                Хранится последние 500 записей · Все действия всех пользователей
+              </div>
+            </div>
+          </>
+        );
+      })()}
       {showNotifs&&(
         <>
           <div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:1000,backdropFilter:"blur(3px)"}}/>
