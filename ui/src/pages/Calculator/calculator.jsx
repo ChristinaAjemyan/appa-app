@@ -392,10 +392,74 @@ function exportToExcel(agentData,effVol,agentDir,totals,excepts){
   XLSX.writeFile(wb,"Комиссии.xlsx");
 }
 
-const th={padding:"7px 10px",fontWeight:600,fontSize:12,whiteSpace:"nowrap",color:"#374151",borderBottom:"2px solid #e5e7eb",textAlign:"left",background:"#f9fafb"};
-const td={padding:"7px 10px",fontSize:13,borderBottom:"1px solid #f0f0f0"};
-const inp={border:"1px solid #d1d5db",borderRadius:5,padding:"3px 7px",fontSize:13,boxSizing:"border-box"};
-const btn=(bg,col,ex)=>({padding:"5px 12px",background:bg||"#2563eb",color:col||"#fff",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600,...(ex||{})});
+// ─── Office template download ────────────────────────────────────────────────
+function downloadOfficeTemplate(){
+  const wb=XLSXStyle.utils.book_new();
+  const sHdr={font:{bold:true,color:{rgb:"FFFFFF"},sz:11},fill:{patternType:"solid",fgColor:{rgb:"1D4ED8"}},alignment:{horizontal:"center",wrapText:true},border:{bottom:{style:"thin",color:{rgb:"93C5FD"}}}};
+  const sHint={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"DBEAFE"}},alignment:{wrapText:true}};
+  const sHintOpt={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"F3F4F6"}},alignment:{wrapText:true}};
+  const sEx={font:{italic:true,sz:10,color:{rgb:"92400E"}},fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},alignment:{wrapText:true}};
+  const sData={font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:"FFFFFF"}}};
+  const mkSheet=(headers,labels,hints,exRow)=>{
+    const ws={};
+    const range={s:{c:0,r:0},e:{c:headers.length-1,r:13}};
+    headers.forEach((h,c)=>{
+      ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr};
+      ws[XLSXStyle.utils.encode_cell({r:1,c})]={v:labels[c]||h,t:"s",s:sHdr};
+      ws[XLSXStyle.utils.encode_cell({r:2,c})]={v:hints[c]||"",t:"s",s:hints[c]&&hints[c].startsWith("*")?sHint:sHintOpt};
+      ws[XLSXStyle.utils.encode_cell({r:3,c})]={v:exRow[c]||"",t:"s",s:sEx};
+      for(let r=4;r<14;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
+    });
+    ws["!ref"]=XLSXStyle.utils.encode_range(range);
+    ws["!cols"]=headers.map(()=>({wch:18}));
+    return ws;
+  };
+  const h1=["polType","insuredName","phone","company","policyNum","date","dateStart","dateEnd","car","carPlate","bm","region","power","term","polStatus","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
+  const l1=["Тип","Страхователь","Телефон","Компания","№ полиса","Дата продажи","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Статус","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
+  const hint1=["*osago","*Иванов Иван","*+37400000000","*Nairi / Ingo...","№ полиса","*ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","статус","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco","число","ДД.ММ.ГГГГ"];
+  const ex1=["osago","⚠ ПРИМЕР — не удалять","+37400000000","Nairi","AB123456","15.01.2024","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","","85000","0","768-101","","FALSE","","",""];
+  const h2=["polType","insuredName","phone","company","policyNum","productName","date","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
+  const l2=["Тип","Страхователь","Телефон","Компания","№ полиса","Продукт","Дата продажи","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
+  const hint2=["*voluntary","*Иванов Иван","*+37400000000","*компания","№ полиса","*название продукта","*ДД.ММ.ГГГГ","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco","число","ДД.ММ.ГГГГ"];
+  const ex2=["voluntary","⚠ ПРИМЕР — не удалять","+37499000000","Nairi","VOL123","КАСКО","20.01.2024","150000","0","768-102","","FALSE","","",""];
+  XLSXStyle.utils.book_append_sheet(wb,mkSheet(h1,l1,hint1,ex1),"АПРА (osago)");
+  XLSXStyle.utils.book_append_sheet(wb,mkSheet(h2,l2,hint2,ex2),"Добровольные");
+  XLSXStyle.writeFile(wb,"Шаблон_импорта_офис.xlsx");
+}
+
+// ─── OOXML chart helpers ──────────────────────────────────────────────────────
+const escXml=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const buildPieChartXml=(title,labels,values)=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${escXml(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+  <c:autoTitleDeleted val="0"/><c:plotArea><c:pieChart><c:varyColors val="1"/>
+  <c:ser><c:idx val="0"/><c:order val="0"/>
+  <c:cat><c:strRef><c:f>Sheet1!$A$1</c:f><c:strCache><c:ptCount val="${labels.length}"/>${labels.map((l,i)=>`<c:pt idx="${i}"><c:v>${escXml(l)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>
+  <c:val><c:numRef><c:f>Sheet1!$B$1</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${values.length}"/>${values.map((v,i)=>`<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join("")}</c:numCache></c:numRef></c:val>
+  </c:ser><c:firstSliceAng val="0"/></c:pieChart></c:plotArea>
+  <c:legend><c:legendPos val="r"/></c:legend><c:plotVisOnly val="1"/></c:chart></c:chartSpace>`;
+const buildBarChartXml=(title,labels,values)=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${escXml(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+  <c:autoTitleDeleted val="0"/><c:plotArea><c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+  <c:ser><c:idx val="0"/><c:order val="0"/>
+  <c:cat><c:strRef><c:f>Sheet1!$A$1</c:f><c:strCache><c:ptCount val="${labels.length}"/>${labels.map((l,i)=>`<c:pt idx="${i}"><c:v>${escXml(l)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>
+  <c:val><c:numRef><c:f>Sheet1!$B$1</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${values.length}"/>${values.map((v,i)=>`<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join("")}</c:numCache></c:numRef></c:val>
+  </c:ser></c:barChart></c:plotArea>
+  <c:legend><c:legendPos val="r"/></c:legend><c:plotVisOnly val="1"/></c:chart></c:chartSpace>`;
+const buildDrawingXml=(rid,c1,r1,c2,r2)=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<xdr:twoCellAnchor><xdr:from><xdr:col>${c1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+<xdr:to><xdr:col>${c2}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r2}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
+<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
+<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${rid}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`;
+
+const th={padding:"7px 10px",fontWeight:600,fontSize:12,whiteSpace:"nowrap",color:"#1e293b",borderBottom:"2px solid #cbd5e1",textAlign:"left",background:"#e2e8f0"};
+const td={padding:"7px 10px",fontSize:13,borderBottom:"1px solid #e2e8f0",color:"#1e293b"};
+const inp={border:"1.5px solid #94a3b8",borderRadius:8,padding:"4px 8px",fontSize:13,boxSizing:"border-box",color:"#1e293b",background:"#f8fafc"};
+const btn=(bg,col,ex)=>({padding:"5px 12px",background:bg||"#2563eb",color:col||"#fff",border:"1.5px solid rgba(0,0,0,0.25)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,...(ex||{})});
 const fmt=n=>Number(n).toLocaleString("ru-RU")+" ֏";
 const genUid=()=>Math.random().toString(36).slice(2,8);
 
@@ -572,7 +636,9 @@ export default function App(){
   const[showAllPayroll,setShowAllPayroll]=useState(false);
   const[officeCodes,setOfficeCodes]=useState([]);
   const[newOfficeCode,setNewOfficeCode]=useState("");
-  const fileRef=useRef();const backRef=useRef();const officeFileRef=useRef();
+  const fileRef=useRef();const backRef=useRef();const officeFileRef=useRef();const importOfficeRef=useRef();
+  const[importPending,setImportPending]=useState(null);
+  const[importPreview,setImportPreview]=useState(null);
   const[role,setRole]=useState("employee");
   const[pinModal,setPinModal]=useState(false);
   const[pinInput,setPinInput]=useState("");
@@ -606,6 +672,8 @@ export default function App(){
   const[officeExpenses,setOfficeExpenses]=useState({});
   const[officeExpLoaded,setOfficeExpLoaded]=useState(false);
   const[expNewName,setExpNewName]=useState("");
+  const[lockedMonths,setLockedMonths]=useState({});
+  const[monthSnapshot,setMonthSnapshot]=useState(null);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
@@ -615,6 +683,7 @@ export default function App(){
     try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);}}catch{}
     try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[]});}}catch{}
     try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
+    try{const r=await calcStorage.get("lockedMonths").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setLockedMonths(p);}}catch{}
   })();},[]);
 
   useEffect(()=>{
@@ -623,6 +692,7 @@ export default function App(){
       try{const r=await calcStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
       try{const r=await calcStorage.get("officeStore:"+selMonth).catch(()=>null);if(r&&r.value)setStoredOffice(JSON.parse(r.value));else setStoredOffice({profit:0,rows:[]});}catch{setStoredOffice({profit:0,rows:[]});}
       try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
+      try{const r=await calcStorage.get("monthSnapshot:"+selMonth).catch(()=>null);if(r&&r.value)setMonthSnapshot(JSON.parse(r.value));else setMonthSnapshot(null);}catch{setMonthSnapshot(null);}
     })();
   },[selMonth]);
 
@@ -682,9 +752,15 @@ export default function App(){
   };
   const rmAgent=id=>{const d={...agentDir};delete d[id];saveDir(d);};
 
+  const isLocked=lockedMonths[selMonth]===true;
+  const effRates=isLocked&&monthSnapshot?monthSnapshot.rates:rates;
+  const effVolRates=isLocked&&monthSnapshot?monthSnapshot.volRates:volRates;
+  const effExceptions=isLocked&&monthSnapshot?monthSnapshot.exceptions:exceptions;
+  const effAgentDir=isLocked&&monthSnapshot?monthSnapshot.agentDir:agentDir;
+
   const codeLookup=useMemo(()=>{
     const map={};
-    Object.entries(agentDir).forEach(([aUid,agent])=>{
+    Object.entries(effAgentDir).forEach(([aUid,agent])=>{
       Object.entries(agent.codes||{}).forEach(([co,code])=>{
         if(code&&code.trim()){
           const c=code.replace(/\s+/g,"").trim();
@@ -695,7 +771,7 @@ export default function App(){
       if(agent.internalCode&&agent.internalCode.trim())map[agent.internalCode.trim()]=aUid;
     });
     return map;
-  },[agentDir]);
+  },[effAgentDir]);
 
   const handleSlotClick=co=>{setUploadingFor(co);fileRef.current.click();};
   const handleFile=e=>{
@@ -744,25 +820,25 @@ export default function App(){
       });
       return result;
     }catch{return[];}
-  },[uploadedFiles,exceptions,codeLookup]);
+  },[uploadedFiles,effExceptions,codeLookup]);
 
   const effPols=useMemo(()=>{
     if(uploadedFiles.length>0)return sessionPols;
-    return storedPols.map(p=>{const aUid=p.agentUid||codeLookup[p.company+":"+p.agentCode]||null;return{...p,agentUid:aUid,exception:checkExc(p,exceptions,aUid)};});
-  },[uploadedFiles,sessionPols,storedPols,exceptions,codeLookup]);
+    return storedPols.map(p=>{const aUid=p.agentUid||codeLookup[p.company+":"+p.agentCode]||null;return{...p,agentUid:aUid,exception:checkExc(p,effExceptions,aUid)};});
+  },[uploadedFiles,sessionPols,storedPols,effExceptions,codeLookup]);
 
   const effVol=useMemo(()=>{
     const vols=volSession.length>0?volSession:storedVol;
     return vols.map(v=>{
       const _ac=(v.agentCode||"").replace(/\s+/g,"").trim();
       const aUid=codeLookup[v.company+":"+_ac]||codeLookup[_ac]
-        ||Object.keys(agentDir).find(uid=>Object.values(agentDir[uid].codes||{}).some(c=>c&&c.replace(/\s+/g,"").trim()===_ac))
+        ||Object.keys(effAgentDir).find(uid=>Object.values(effAgentDir[uid].codes||{}).some(c=>c&&c.replace(/\s+/g,"").trim()===_ac))
         ||null;
-      const vr=(volRates.rates||[]).find(r=>r.name===v.productName);
+      const vr=(effVolRates.rates||[]).find(r=>r.name===v.productName);
       const oR=vr?vr.officeRate:0;const aR=vr?vr.agentRate:0;
       return{...v,agentUid:aUid,officeRate:oR,agentRate:aR,officeComm:Math.round(v.amount*oR/100),agentComm:Math.round(v.amount*aR/100)};
     });
-  },[volSession,storedVol,codeLookup,volRates]);
+  },[volSession,storedVol,codeLookup,effVolRates,effAgentDir]);
 
   const warnings=useMemo(()=>{
     const w=[];
@@ -784,8 +860,8 @@ export default function App(){
         const validSales=valid.reduce((s,p)=>s+p.amount,0);
         const enriched=pols.map(p=>{
           if(p.exception)return{...p,officeRate:0,agentRate:0,officeComm:0,agentComm:0};
-          const oR=getOfficeRate(p,rates);
-          const aR=getAgentRate(p,key,rates);
+          const oR=getOfficeRate(p,effRates);
+          const aR=getAgentRate(p,key,effRates);
           return{...p,officeRate:oR,agentRate:aR,officeComm:Math.round(p.amount*oR/100),agentComm:Math.round(p.amount*aR/100)};
         });
         const totalOffice=enriched.reduce((s,p)=>s+p.officeComm,0);
@@ -793,7 +869,7 @@ export default function App(){
         return{uid:key,policies:enriched,totalSales,validSales,totalOffice,totalAgent,profit:totalOffice-totalAgent};
       });
     }catch{return[];}
-  },[effPols,rates]);
+  },[effPols,effRates]);
 
   const totals=useMemo(()=>({
     office:agentData.reduce((s,a)=>s+a.totalOffice,0)+effVol.reduce((s,v)=>s+v.officeComm,0),
@@ -806,9 +882,27 @@ export default function App(){
 
   const saveMonth=()=>{
     const pols=agentData.flatMap(a=>a.policies);
+    const snap={rates,volRates,exceptions,agentDir,managerConfig};
     calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:effVol})).catch(()=>{});
+    calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
     if(officeSession)calcStorage.set("officeStore:"+selMonth,JSON.stringify(officeSession)).catch(()=>{});
     setSavedOk(true);setTimeout(()=>setSavedOk(false),2500);
+  };
+
+  const lockMonth=async()=>{
+    if(!window.confirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам."))return;
+    const snap={rates,volRates,exceptions,agentDir,managerConfig};
+    await calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
+    const updated={...lockedMonths,[selMonth]:true};
+    setLockedMonths(updated);setMonthSnapshot(snap);
+    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
+  };
+
+  const unlockMonth=async()=>{
+    if(!window.confirm("Открыть "+fmtMonth(selMonth)+"?\nМесяц снова станет редактируемым."))return;
+    const updated={...lockedMonths};delete updated[selMonth];
+    setLockedMonths(updated);
+    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
   };
 
   const loadDB=()=>{
@@ -928,6 +1022,160 @@ export default function App(){
     r.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(d.agentDir&&valD(d.agentDir))saveDir(d.agentDir);if(d.rates&&valR(d.rates))saveRates(d.rates);if(d.volRates&&valV(d.volRates))saveVR(d.volRates);if(d.exceptions&&valE(d.exceptions))saveExcs(d.exceptions);alert("Восстановлено.");}catch{alert("Ошибка файла.");}};
     r.readAsText(f);e.target.value="";
   };
+
+  const handleImportOfficeFile=e=>{
+    const f=e.target.files[0];if(!f)return;
+    e.target.value="";
+    const reader=new FileReader();
+    reader.onload=evt=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(evt.target.result),{type:"array"});
+        const isValidDate=s=>{if(!s)return false;return/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(s).getTime());};
+        const parseDate=s=>{if(!s)return"";const m=String(s).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;return String(s).trim();};
+        const parseBool=v=>{const s=String(v).trim().toLowerCase();return s==="true"||s==="1"||s==="yes";};
+        const parseNum=v=>{const n=parseFloat(String(v).replace(/\s/g,"").replace(",","."));return isNaN(n)?0:n;};
+        const allRows=[];
+        [["АПРА (osago)","osago"],["Добровольные","voluntary"]].forEach(([sname,polType])=>{
+          const ws=wb.Sheets[sname];if(!ws)return;
+          const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+          const headers=(rows[0]||[]).map(h=>String(h).trim());
+          for(let i=4;i<rows.length;i++){
+            const row=rows[i];
+            if(!row||row.every(c=>!String(c).trim()))continue;
+            const obj={};
+            headers.forEach((h,ci)=>{if(h)obj[h]=row[ci]!==undefined?String(row[ci]).trim():"";});
+            if(!obj.insuredName&&!obj.policyNum)continue;
+            const errs=[];
+            if(!obj.insuredName)errs.push("Не заполнено имя");
+            const parsedDate=parseDate(obj.date);
+            if(!obj.date)errs.push("Не указана дата");
+            else if(!isValidDate(parsedDate))errs.push("Неверный формат даты: "+obj.date);
+            if(!obj.amount||parseNum(obj.amount)<=0)errs.push("Не указана сумма");
+            if(polType==="osago"&&!obj.company)errs.push("Не указана компания");
+            obj.polType=polType;
+            obj.date=parsedDate;
+            obj.dateStart=parseDate(obj.dateStart||"");
+            obj.dateEnd=parseDate(obj.dateEnd||"");
+            obj.paidDate=parseDate(obj.paidDate||"");
+            obj.paid=parseBool(obj.paid);
+            obj.amount=parseNum(obj.amount);
+            obj.discount=parseNum(obj.discount||0);
+            obj.paidAmount=obj.paid?parseNum(obj.paidAmount):null;
+            obj.paymentType=obj.paid?(obj.paymentType||null):null;
+            obj.paidAt=obj.paid&&obj.paidDate?(new Date(obj.paidDate).toISOString()):null;
+            obj.power=parseInt(obj.power)||0;
+            obj.agentUid=obj.agentUid||null;
+            obj._id=genUid();
+            obj._monthKey=selMonth;
+            obj._rowNum=i+1;
+            obj._sheetName=sname;
+            obj._errors=errs;
+            obj._valid=errs.length===0;
+            allRows.push(obj);
+          }
+        });
+        if(!allRows.length){alert("Данных для импорта не найдено. Данные должны начинаться с 5-й строки.");return;}
+        setImportPreview({rows:allRows,month:selMonth});
+      }catch(err){alert("Ошибка чтения файла: "+err.message);}
+    };
+    reader.readAsArrayBuffer(f);
+  };
+
+  const confirmImport=validPols=>{
+    setImportPreview(null);
+    if(opCurrentMonth.length>0){
+      setImportPending({pols:validPols,month:selMonth});
+    }else{
+      saveOpMonth(validPols);
+      alert("Импортировано "+validPols.length+" записей за "+fmtMonth(selMonth));
+    }
+  };
+
+  const exportIncomeExcel=async()=>{
+    const wb=new JSZip();
+    const month=selMonth;
+    const rows=officeExpenses[month]||[];
+    const opPols=cashMonthPols||[];
+    const totalExp=rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
+    const osagoGross=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+(p.amount||0),0);
+    const volGross=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>s+(p.amount||0),0);
+    const totalGross=osagoGross+volGross;
+    const agentCommissions=agentData.reduce((s,a)=>s+a.totalAgent,0)+effVol.reduce((s,v)=>s+v.agentComm,0);
+    const netIncome=totalGross-agentCommissions-totalExp;
+
+    const sTitle={font:{bold:true,sz:14,color:{rgb:"1E293B"}},fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}},alignment:{horizontal:"center"}};
+    const sSec={font:{bold:true,sz:12,color:{rgb:"FFFFFF"}},fill:{patternType:"solid",fgColor:{rgb:"3730A3"}},alignment:{horizontal:"left"}};
+    const sColHdr={font:{bold:true,sz:11,color:{rgb:"374151"}},fill:{patternType:"solid",fgColor:{rgb:"F0F4F8"}},alignment:{horizontal:"center"}};
+    const sTxt=(rgb)=>({font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:rgb||"FFFFFF"}},alignment:{horizontal:"left"}});
+    const sNum=(rgb)=>({font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:rgb||"FFFFFF"}},alignment:{horizontal:"right"}});
+
+    const mkCell=(v,s,t)=>({v,t:t||"s",s});
+    const mkRow=cells=>cells;
+
+    // Sheet 1: Summary
+    const s1Data=[
+      [mkCell("Сводка — "+fmtMonth(month),sTitle,"s")],
+      [],
+      [mkCell("Показатель",sColHdr),mkCell("Сумма (AMD)",sColHdr)],
+      [mkCell("Валовые продажи АПРА",sTxt()),mkCell(osagoGross,sNum(),"n")],
+      [mkCell("Валовые продажи Добровольные",sTxt()),mkCell(volGross,sNum(),"n")],
+      [mkCell("Итого валовые",sTxt("DBEAFE")),mkCell(totalGross,sNum("DBEAFE"),"n")],
+      [],
+      [mkCell("Комиссии агентов",sTxt("FEE2E2")),mkCell(agentCommissions,sNum("FEE2E2"),"n")],
+      [mkCell("Расходы офиса",sTxt("FEE2E2")),mkCell(totalExp,sNum("FEE2E2"),"n")],
+      [],
+      [mkCell("Чистый доход",sTxt("DCFCE7")),mkCell(netIncome,sNum("DCFCE7"),"n")],
+    ];
+    const ws1=XLSXStyle.utils.aoa_to_sheet(s1Data.map(r=>r.map(c=>c&&c.v!==undefined?c:({v:"",t:"s",s:sTxt()}))));
+    s1Data.forEach((row,ri)=>row.forEach((cell,ci)=>{if(cell&&cell.s){const addr=XLSXStyle.utils.encode_cell({r:ri,c:ci});if(ws1[addr])ws1[addr].s=cell.s;}}));
+    ws1["!merges"]=[{s:{r:0,c:0},e:{r:0,c:1}}];
+    ws1["!cols"]=[{wch:35},{wch:18}];
+
+    // Sheet 2: Expenses
+    const expRows=[[mkCell("Расходы — "+fmtMonth(month),sTitle)],[],[mkCell("Категория",sColHdr),mkCell("Название",sColHdr),mkCell("Сумма",sColHdr)],...rows.map(r=>[mkCell(r.cat||"",sTxt()),mkCell(r.name||"",sTxt()),mkCell(r.amount||0,sNum(),"n")]),[],[mkCell("ИТОГО",sTxt("FEE2E2")),mkCell("",sTxt("FEE2E2")),mkCell(totalExp,sNum("FEE2E2"),"n")]];
+    const ws2=XLSXStyle.utils.aoa_to_sheet(expRows.map(r=>r.map(c=>c&&c.v!==undefined?c:({v:"",t:"s",s:sTxt()}))));
+    expRows.forEach((row,ri)=>row.forEach((cell,ci)=>{if(cell&&cell.s){const addr=XLSXStyle.utils.encode_cell({r:ri,c:ci});if(ws2[addr])ws2[addr].s=cell.s;}}));
+    ws2["!merges"]=[{s:{r:0,c:0},e:{r:0,c:2}}];
+    ws2["!cols"]=[{wch:20},{wch:30},{wch:16}];
+
+    // Sheet 3: Income sources
+    const incSources=[["АПРА",osagoGross],["Добровольные",volGross]];
+    const incRows=[[mkCell("Доходы — "+fmtMonth(month),sTitle)],[],[mkCell("Источник",sColHdr),mkCell("Сумма",sColHdr)],...incSources.map(([n,v])=>[mkCell(n,sTxt()),mkCell(v,sNum(),"n")])]
+    const ws3=XLSXStyle.utils.aoa_to_sheet(incRows.map(r=>r.map(c=>c&&c.v!==undefined?c:({v:"",t:"s",s:sTxt()}))));
+    incRows.forEach((row,ri)=>row.forEach((cell,ci)=>{if(cell&&cell.s){const addr=XLSXStyle.utils.encode_cell({r:ri,c:ci});if(ws3[addr])ws3[addr].s=cell.s;}}));
+    ws3["!merges"]=[{s:{r:0,c:0},e:{r:0,c:1}}];
+    ws3["!cols"]=[{wch:25},{wch:16}];
+
+    // Build xlsx via XLSXStyle then inject charts via JSZip
+    const xlsxBlob=XLSXStyle.write({SheetNames:["Сводка","Расходы","Доходы"],Sheets:{Сводка:ws1,Расходы:ws2,Доходы:ws3}},{type:"array",bookType:"xlsx"});
+    const zip=await JSZip.loadAsync(xlsxBlob);
+
+    // Add pie chart for income
+    const pieXml=buildPieChartXml("Источники дохода",incSources.map(s=>s[0]),incSources.map(s=>s[1]));
+    zip.file("xl/charts/chart1.xml",pieXml);
+    zip.file("xl/drawings/drawing1.xml",buildDrawingXml("rId1",3,4,9,18));
+    zip.file("xl/drawings/_rels/drawing1.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>`);
+
+    // Add bar chart for expenses
+    const expLabels=rows.map(r=>r.name||r.cat||"");
+    const expVals=rows.map(r=>parseFloat(r.amount)||0);
+    const barXml=buildBarChartXml("Расходы по категориям",expLabels,expVals);
+    zip.file("xl/charts/chart2.xml",barXml);
+    zip.file("xl/drawings/drawing2.xml",buildDrawingXml("rId1",3,4,9,18));
+    zip.file("xl/drawings/_rels/drawing2.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart2.xml"/></Relationships>`);
+
+    // Patch Content_Types.xml
+    const ctXml=await zip.file("[Content_Types].xml").async("string");
+    const ctPatched=ctXml.replace("</Types>",`<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/charts/chart2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/drawings/drawing2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+    zip.file("[Content_Types].xml",ctPatched);
+
+    const out=await zip.generateAsync({type:"uint8array"});
+    const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download="Доходы_"+month+".xlsx";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
   const agName=a=>{const n=getName(a.uid);if(n)return n;if(a.uid.startsWith("__raw__"))return a.uid.replace("__raw__","")+" (нет в справочнике)";return a.uid;};
 
   const exportPayroll=(agentData,agentDir,month)=>{
@@ -1211,7 +1459,7 @@ export default function App(){
   const backupJson=JSON.stringify({version:6,agentDir,rates,volRates,exceptions},null,2);
 
   return(
-    <div style={{fontFamily:"system-ui,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#111"}}>
+    <div style={{fontFamily:"system-ui,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#1e293b",background:"#dde3ed",minHeight:"100vh"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <h2 style={{margin:0,fontSize:20}}>Калькулятор комиссий</h2>
@@ -1224,7 +1472,7 @@ export default function App(){
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {panels.map(([id,label,count])=>(
-            <button key={id} onClick={()=>setPanel(panel===id?null:id)} style={{...btn(panel===id?"#eff6ff":"#f9fafb",panel===id?"#1d4ed8":"#374151"),border:"1px solid #d1d5db",fontWeight:500}}>
+            <button key={id} onClick={()=>setPanel(panel===id?null:id)} style={{...btn(panel===id?"#eff6ff":"#f9fafb",panel===id?"#1d4ed8":"#374151"),border:"2px solid "+(panel===id?"#6366f1":"#94a3b8"),fontWeight:panel===id?700:500}}>
               {label}{count!=null?" ("+count+")":""}
             </button>
           ))}
@@ -1235,10 +1483,10 @@ export default function App(){
         </div>
       </div>
 
-      <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:16,gap:0}}>
-        {[["commissions","💰 Комиссии"],["policydb","📋 База полисов"],["officesales","🏢 Продажи офиса"],["cashbook","📒 Касса"],["payroll","📝 Начисления"],["manager","👔 Менеджер"],["income","📊 Доходы офиса"]].filter(([id])=>isAdmin||!["commissions","manager","income"].includes(id)).map(([id,label])=>(
+      <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
+        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"]].filter(([id])=>isAdmin||!["commissions","manager","income"].includes(id)).map(([id,label,activeCol,activeBg])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
-            style={{...btn(tab===id?"#2563eb":"transparent",tab===id?"#fff":"#6b7280"),borderRadius:"6px 6px 0 0",fontSize:14,padding:"9px 22px",marginBottom:"-2px",border:"2px solid "+(tab===id?"#2563eb":"transparent"),fontWeight:tab===id?700:400}}>
+            style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
             {label}
           </button>
         ))}
@@ -1357,8 +1605,13 @@ export default function App(){
             <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
             <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               {savedOk&&<span style={{color:"#16a34a",fontSize:12,fontWeight:600}}>✓ Сохранено</span>}
+              {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
               {(storedPols.length>0||storedVol.length>0)&&uploadedFiles.length===0&&volSession.length===0&&<span style={{fontSize:11,color:"#6b7280"}}>{"📥 "+storedPols.length+" полисов из хранилища"}</span>}
               <button onClick={saveMonth} style={btn("#16a34a",undefined,{fontSize:11})}>💾 Сохранить месяц</button>
+              {isAdmin&&(isLocked
+                ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
+                :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
+              )}
             </div>
           </div>
 
@@ -1582,8 +1835,79 @@ export default function App(){
                 <option value="unpaid">Неоплаченные</option>
                 <option value="paid">Оплаченные</option>
               </select>
-              <button onClick={openOpNew} style={btn("#2563eb",undefined,{marginLeft:"auto",fontSize:13,padding:"7px 16px"})}>+ Добавить полис</button>
+              {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
+              {isAdmin&&(isLocked
+                ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
+                :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
+              )}
+              {(!isLocked||isAdmin)&&<button onClick={openOpNew} style={btn("#2563eb",undefined,{marginLeft:"auto",fontSize:13,padding:"7px 16px"})}>+ Добавить полис</button>}
+              {isAdmin&&<>
+                <button onClick={downloadOfficeTemplate} style={btn("#0891b2",undefined,{fontSize:13,padding:"7px 16px"})}>📋 Шаблон Excel</button>
+                <button onClick={()=>importOfficeRef.current.click()} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 16px"})}>⬆ Импорт</button>
+                <input ref={importOfficeRef} type="file" accept=".xlsx,.xls" onChange={handleImportOfficeFile} style={{display:"none"}}/>
+                <span title={"Как заполнять шаблон:\n\nСтрока 1 — технические имена полей (не менять)\nСтрока 2 — названия колонок\nСтрока 3 — подсказки: синие = обязательные, серые = необязательные\nСтрока 4 — ПРИМЕР (жёлтая, не удалять)\nСтрока 5 и ниже — ваши данные\n\nФормат дат: ДД.ММ.ГГГГ (например: 15.01.2024)\nОплачено: TRUE или FALSE\nСпособ оплаты: cash / acba / ineco\nСрок (term): L — годовой, SH — краткосрочный"} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:26,height:26,borderRadius:"50%",background:"#e0f2fe",color:"#0369a1",fontWeight:700,fontSize:13,cursor:"help",border:"1.5px solid #7dd3fc",userSelect:"none"}}>i</span>
+              </>}
             </div>
+
+            {/* Import preview panel */}
+            {importPreview&&(()=>{
+              const validRows=importPreview.rows.filter(r=>r._valid);
+              const errorRows=importPreview.rows.filter(r=>!r._valid);
+              return(
+              <div style={{background:"#f8fafc",border:"2px solid #6366f1",borderRadius:10,padding:"16px 20px",marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                  <div style={{fontWeight:700,fontSize:15,color:"#1e293b"}}>Предпросмотр импорта — {fmtMonth(importPreview.month)}</div>
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{background:"#dcfce7",color:"#166534",borderRadius:20,padding:"3px 12px",fontSize:13,fontWeight:600}}>✓ Валидных: {validRows.length}</span>
+                    {errorRows.length>0&&<span style={{background:"#fee2e2",color:"#991b1b",borderRadius:20,padding:"3px 12px",fontSize:13,fontWeight:600}}>✗ Ошибок: {errorRows.length}</span>}
+                  </div>
+                </div>
+                <div style={{overflowX:"auto",maxHeight:360,overflowY:"auto",borderRadius:6,border:"1px solid #e2e8f0",marginBottom:12}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#e0e7ff",position:"sticky",top:0,zIndex:1}}>
+                      {["Стр.","Лист","Статус","Страхователь","Дата","Компания","Сумма","№ полиса","Ошибки"].map(h=><th key={h} style={{...th,background:"#e0e7ff",color:"#3730a3",fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{importPreview.rows.map((r,i)=>{
+                      const bg=r._valid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"#fff1f2":"#fee2e2");
+                      return(
+                      <tr key={r._id} style={{background:bg,borderBottom:"1px solid #e2e8f0"}}>
+                        <td style={{...td,color:"#6b7280",textAlign:"center"}}>{r._rowNum}</td>
+                        <td style={{...td,fontSize:11,color:"#6b7280",whiteSpace:"nowrap"}}>{r._sheetName}</td>
+                        <td style={{...td,textAlign:"center"}}>{r._valid?<span style={{background:"#16a34a",color:"white",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ OK</span>:<span style={{background:"#dc2626",color:"white",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:600}}>✗ Ошибка</span>}</td>
+                        <td style={{...td,fontWeight:r._valid?600:400,color:r._valid?"#1e293b":"#991b1b"}}>{r.insuredName||"—"}</td>
+                        <td style={{...td,whiteSpace:"nowrap"}}>{r.date||"—"}</td>
+                        <td style={td}>{r.company||"—"}</td>
+                        <td style={{...td,textAlign:"right"}}>{r.amount>0?r.amount.toLocaleString():"—"}</td>
+                        <td style={{...td,fontSize:11,color:"#6b7280"}}>{r.policyNum||"—"}</td>
+                        <td style={{...td,color:"#dc2626",fontSize:11}}>{r._errors.join("; ")||""}</td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                  {validRows.length>0
+                    ?<button onClick={()=>confirmImport(validRows)} style={btn("#16a34a",undefined,{fontSize:13,padding:"7px 18px"})}>Импортировать валидные ({validRows.length})</button>
+                    :<span style={{fontSize:13,color:"#dc2626",fontWeight:600}}>Нет строк без ошибок</span>
+                  }
+                  <button onClick={()=>setImportPreview(null)} style={btn("#6b7280",undefined,{fontSize:13,padding:"7px 18px"})}>Отмена</button>
+                  {errorRows.length>0&&<span style={{fontSize:12,color:"#6b7280"}}>Строки с ошибками будут пропущены</span>}
+                </div>
+              </div>
+              );
+            })()}
+
+            {/* Import confirmation modal */}
+            {importPending&&(
+              <div style={{background:"#fffbeb",border:"2px solid #f59e0b",borderRadius:10,padding:"16px 20px",marginBottom:12,display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#92400e"}}>⚠ Данные за {fmtMonth(importPending.month)} уже существуют ({opCurrentMonth.length} зап.)</div>
+                <div style={{fontSize:13,color:"#78350f"}}>Импортируется {importPending.pols.length} записей. Что сделать с существующими?</div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <button onClick={()=>{saveOpMonth(importPending.pols);setImportPending(null);}} style={btn("#dc2626",undefined,{fontSize:13,padding:"7px 18px"})}>Заменить полностью</button>
+                  <button onClick={()=>{saveOpMonth([...opCurrentMonth,...importPending.pols]);setImportPending(null);}} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 18px"})}>Добавить к существующим</button>
+                  <button onClick={()=>setImportPending(null)} style={btn("#6b7280",undefined,{fontSize:13,padding:"7px 18px"})}>Отмена</button>
+                </div>
+              </div>
+            )}
 
             {/* Search */}
             <div style={{marginBottom:12}}>
@@ -1759,8 +2083,8 @@ export default function App(){
                       <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value}))} placeholder="Имя Фамилия" style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14}}/>
                     </div>
                     <div>
-                      <div style={flbl}>№ полиса</div>
-                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:e.target.value}))} placeholder="Номер полиса" style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                      <div style={flbl}>№ полиса{isLocked&&opEditPol&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
+                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:e.target.value}))} placeholder="Номер полиса" disabled={isLocked&&!!opEditPol} style={{...finp,width:"100%",boxSizing:"border-box",...(isLocked&&opEditPol?{background:"#f1f5f9",color:"#94a3b8",cursor:"not-allowed"}:{})}}/>
                     </div>
                     <div>
                       <div style={flbl}>Телефон</div>
@@ -1884,8 +2208,8 @@ export default function App(){
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Финансы</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
-                      <div style={flbl}>Страховая премия (AMD) *</div>
-                      <input type="number" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:e.target.value}))} placeholder="0" style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right"}}/>
+                      <div style={flbl}>Страховая премия (AMD) *{isLocked&&opEditPol&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
+                      <input type="number" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:e.target.value}))} placeholder="0" disabled={isLocked&&!!opEditPol} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...(isLocked&&opEditPol?{background:"#f1f5f9",color:"#94a3b8",cursor:"not-allowed"}:{})}}/>
                     </div>
                     <div>
                       <div style={flbl}>Скидка (AMD)</div>
@@ -2556,7 +2880,12 @@ export default function App(){
               <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
               <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
               <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
-              <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+              <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+                {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
+                {isAdmin&&(isLocked
+                  ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
+                  :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
+                )}
                 {opResults.length>0&&<button onClick={()=>exportManagerXlsx(agentData,cfg,agentDir,selMonth,exceptions)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
                 <button onClick={()=>setShowMgrSettings(v=>!v)} style={{...btn(showMgrSettings?"#7c3aed":"#f3f4f6",showMgrSettings?"#fff":"#374151",{border:"1px solid #d1d5db"}),fontSize:12}}>⚙️ Настройки</button>
               </div>
@@ -2765,6 +3094,9 @@ export default function App(){
         );
         return(
           <div style={{maxWidth:960}}>
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+              <button onClick={exportIncomeExcel} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
+            </div>
             {/* Сводка */}
             <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
               {[
