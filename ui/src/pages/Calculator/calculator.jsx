@@ -16,7 +16,7 @@ const EXPIRY_OPTIONS=[];
 for(let y=2025;y<=2031;y++)for(let m=1;m<=12;m++)EXPIRY_OPTIONS.push(`${y}-${String(m).padStart(2,"0")}`);
 
 const DEFAULT_RATES={
-  officeRates:{Nairi:16,Ingo:7,Liga:5,Sil:10,Rego:5},
+  officeRates:{Nairi:25,Ingo:7,Liga:5,Sil:10,Rego:5},
   armeniaOffice:{"1-9":11,"10-14":10,"15-25":7},
   agentRates:{Nairi:8,Ingo:3,Liga:2,Sil:5,Rego:2},
   armeniaAgent:{"1-9":6,"10-14":5,"15-25":3},
