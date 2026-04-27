@@ -679,6 +679,10 @@ export default function App(){
   const[expNewName,setExpNewName]=useState("");
   const[lockedMonths,setLockedMonths]=useState({});
   const[monthSnapshot,setMonthSnapshot]=useState(null);
+  const[searchQuery,setSearchQuery]=useState("");
+  const[searchResults,setSearchResults]=useState(null);
+  const[searchLoading,setSearchLoading]=useState(false);
+  const[searchViewPol,setSearchViewPol]=useState(null);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);}else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}catch{setAgentDir(SEED_AGENTS);}
@@ -729,7 +733,7 @@ export default function App(){
   const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
-  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income"]:(currentEmployee?.tabs||[]);
+  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search"]:[...(currentEmployee?.tabs||[]),"search"];
 
   const saveAppSettings=(updates={})=>{
     const s={adminPin,employees,officeStaff,...updates};
@@ -896,6 +900,37 @@ export default function App(){
 
   const allExcs=useMemo(()=>agentData.flatMap(a=>a.policies.filter(p=>p.exception).map(p=>({...p,agentUid:a.uid}))),[agentData]);
   const detail=agentData.find(a=>a.uid===activeAgent);
+
+  const runSearch=async()=>{
+    const q=searchQuery.trim().toLowerCase();
+    if(q.length<2)return;
+    setSearchLoading(true);setSearchResults(null);
+    const results=[];
+    const norm=s=>String(s||"").toLowerCase().replace(/\s/g,"");
+    const qn=norm(q);
+    const match=p=>[p.insuredName,p.carPlate,p.policyNum,p.phone].some(v=>norm(v).includes(qn));
+    try{
+      const mk1=await calcStorage.list("month:").catch(()=>({keys:[]}));
+      for(const key of(mk1.keys||[])){
+        const r=await calcStorage.get(key).catch(()=>null);
+        if(!r?.value)continue;
+        const d=JSON.parse(r.value);
+        const mk=key.replace("month:","");
+        [...(d.policies||[]),...(d.voluntary||[])].forEach(p=>{if(match(p))results.push({...p,_source:"agent",_monthKey:mk});});
+      }
+      const mk2=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
+      for(const key of(mk2.keys||[])){
+        const r=await calcStorage.get(key).catch(()=>null);
+        if(!r?.value)continue;
+        const pols=JSON.parse(r.value);
+        const mk=key.replace("officePol:","");
+        pols.forEach(p=>{if(match(p))results.push({...p,_source:"office",_monthKey:mk});});
+      }
+      results.sort((a,b)=>b._monthKey.localeCompare(a._monthKey));
+      setSearchResults(results);
+    }catch{setSearchResults([]);}
+    setSearchLoading(false);
+  };
 
   const saveMonth=()=>{
     const pols=agentData.flatMap(a=>a.policies);
@@ -1524,7 +1559,7 @@ export default function App(){
       </div>
 
       <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
-        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
+        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
             style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
             {label}
@@ -3304,6 +3339,176 @@ export default function App(){
           </div>
         );
       })()}
+
+      {tab==="search"&&(
+        <div style={{maxWidth:1100}}>
+          <div style={{background:"white",borderRadius:10,padding:20,marginBottom:16,border:"1px solid #e2e8f0"}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:14,color:"#1e293b"}}>🔍 Глобальный поиск по всем месяцам</div>
+            <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&runSearch()} placeholder="Имя, рег. номер, номер полиса, телефон..." style={{...inp,flex:1,minWidth:260,padding:"9px 14px",fontSize:14}} autoFocus/>
+              <button onClick={runSearch} disabled={searchLoading||searchQuery.trim().length<2} style={{...btn("#1d4ed8"),padding:"9px 22px",fontSize:14,opacity:searchQuery.trim().length<2?0.5:1}}>{searchLoading?"Поиск...":"Найти"}</button>
+              {searchResults!==null&&<button onClick={()=>{setSearchResults(null);setSearchQuery("");}} style={btn("#64748b",undefined,{fontSize:12})}>✕ Очистить</button>}
+            </div>
+            <div style={{fontSize:12,color:"#94a3b8",marginTop:8}}>Поиск по: страхователь, рег. номер, номер полиса, телефон — агентские и офисные продажи за все месяцы</div>
+          </div>
+
+          {searchLoading&&<div style={{textAlign:"center",padding:40,color:"#64748b",fontSize:14}}>⏳ Загрузка данных...</div>}
+
+          {searchResults!==null&&!searchLoading&&(
+            searchResults.length===0
+              ?<div style={{textAlign:"center",padding:40,color:"#94a3b8",fontSize:14}}>Ничего не найдено</div>
+              :<div style={{background:"white",borderRadius:10,border:"1px solid #e2e8f0",overflow:"hidden"}}>
+                <div style={{padding:"10px 16px",background:"#f8fafc",borderBottom:"1px solid #e2e8f0",fontSize:13,color:"#64748b",fontWeight:600}}>
+                  Найдено: {searchResults.length} {searchResults.length===1?"запись":searchResults.length<5?"записи":"записей"}
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr>
+                      <th style={th}>Месяц</th>
+                      <th style={th}>Тип</th>
+                      <th style={{...th,textAlign:"left"}}>Страхователь</th>
+                      <th style={th}>Телефон</th>
+                      <th style={th}>Рег. номер</th>
+                      <th style={th}>№ полиса</th>
+                      <th style={th}>Компания</th>
+                      <th style={th}>Агент</th>
+                      <th style={th}>Сумма</th>
+                      <th style={th}>Оплата</th>
+                      <th style={th}></th>
+                    </tr></thead>
+                    <tbody>
+                      {searchResults.map((p,i)=>{
+                        const agName=p.agentUid?(getName(p.agentUid)||p.agentUid):"—";
+                        const isPaid=p._source==="office"?p.paid:null;
+                        return(
+                          <tr key={i} style={{background:i%2===0?"white":"#f8fafc",cursor:"pointer"}} onClick={()=>setSearchViewPol(p)}>
+                            <td style={{...td,whiteSpace:"nowrap",fontWeight:600,color:"#1d4ed8"}}>{fmtMonth(p._monthKey)}</td>
+                            <td style={{...td,whiteSpace:"nowrap"}}>
+                              <span style={{background:p._source==="office"?"#ede9fe":"#dbeafe",color:p._source==="office"?"#6d28d9":"#1d4ed8",borderRadius:5,padding:"2px 6px",fontSize:11,fontWeight:600}}>
+                                {p._source==="office"?"🏢 Офис":"💰 Агент"}
+                              </span>
+                            </td>
+                            <td style={{...td,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>{p.insuredName||"—"}</td>
+                            <td style={{...td,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11}}>{p.phone||"—"}</td>
+                            <td style={{...td,whiteSpace:"nowrap",fontFamily:"monospace"}}>{p.carPlate||"—"}</td>
+                            <td style={{...td,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11}}>{p.policyNum||"—"}</td>
+                            <td style={td}>{p.company||"—"}</td>
+                            <td style={{...td,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{agName}</td>
+                            <td style={{...td,textAlign:"right",whiteSpace:"nowrap",fontWeight:600}}>{p.amount?fmt(p.amount):"—"}</td>
+                            <td style={{...td,whiteSpace:"nowrap"}}>
+                              {isPaid===true&&<span style={{color:"#15803d",fontWeight:600}}>✓ {fmt(p.paidAmount||0)}</span>}
+                              {isPaid===false&&<span style={{color:"#dc2626",fontWeight:600}}>✗ Не опл.</span>}
+                              {isPaid===null&&<span style={{color:"#94a3b8"}}>—</span>}
+                            </td>
+                            <td style={{...td,whiteSpace:"nowrap"}}>
+                              <button onClick={e=>{e.stopPropagation();setSearchViewPol(p);}} style={btn("#0f172a",undefined,{fontSize:11,padding:"3px 10px"})}>👁 Открыть</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+          )}
+        </div>
+      )}
+
+      {searchViewPol&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)setSearchViewPol(null);}}>
+          <div style={{background:"#f1f5f9",borderRadius:16,width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
+
+            {/* Заголовок */}
+            <div style={{background:"#1e293b",borderRadius:"16px 16px 0 0",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:17,color:"white"}}>{searchViewPol.insuredName||"—"}</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:3}}>
+                  {fmtMonth(searchViewPol._monthKey)}&nbsp;·&nbsp;
+                  {searchViewPol._source==="office"?"🏢 Продажи офиса":"💰 Агентские продажи"}
+                  {searchViewPol.company&&<>&nbsp;·&nbsp;{searchViewPol.company}</>}
+                </div>
+              </div>
+              <button onClick={()=>setSearchViewPol(null)} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",fontSize:20,color:"white",borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+
+            {(()=>{
+              const p=searchViewPol;
+              const isOsago=p.polType!=="voluntary";
+              const agName=p.agentUid?(getName(p.agentUid)||p.agentUid):"—";
+              const fmtTerm=t=>t==="L"?"L (от 3 месяцев)":t==="SH"?"SH (краткосрочный)":t||"—";
+              const fmtPay2=t=>t==="cash"?"Наличные":t==="acba"?"ACBA":t==="ineco"?"Ineco":t||"—";
+              const v=x=>x!=null&&String(x).trim()?String(x).trim():"—";
+
+              const Section=({title,color,children})=>(
+                <div style={{margin:"14px 16px 0"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:color||"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:8,paddingLeft:4}}>{title}</div>
+                  <div style={{background:"white",borderRadius:10,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>{children}</div>
+                </div>
+              );
+              const Row=({label,value,mono,bold,color})=>(
+                <div style={{display:"flex",alignItems:"center",padding:"9px 14px",borderBottom:"1px solid #f1f5f9"}}>
+                  <div style={{width:155,flexShrink:0,fontSize:12,color:"#64748b",fontWeight:600}}>{label}</div>
+                  <div style={{fontSize:13,color:color||(value==="—"?"#cbd5e1":"#1e293b"),fontWeight:bold?700:500,fontFamily:mono?"monospace":"inherit"}}>{value}</div>
+                </div>
+              );
+
+              return(
+                <div style={{paddingBottom:20}}>
+
+                  <Section title="Страхователь" color="#1d4ed8">
+                    <Row label="ФИО" value={v(p.insuredName)} bold/>
+                    <Row label="Телефон" value={v(p.phone)} mono/>
+                    <Row label="Оператор / Агент" value={agName}/>
+                    <Row label="Комментарий" value={v(p.comment)}/>
+                  </Section>
+
+                  <Section title="Полис" color="#6d28d9">
+                    <Row label="Тип" value={isOsago?"🚗 ОСАГО":"🛡 Добровольный"}/>
+                    {!isOsago&&<Row label="Продукт" value={v(p.productName)}/>}
+                    <Row label="Компания" value={v(p.company)}/>
+                    <Row label="№ полиса" value={v(p.policyNum)} mono bold/>
+                    <Row label="Дата составления" value={v(p.date)}/>
+                    {isOsago&&<>
+                      <Row label="Срок" value={p.term?fmtTerm(p.term):"—"}/>
+                      <Row label="Дата вступления в силу" value={v(p.dateStart||p.startDateFmt)}/>
+                      <Row label="Дата окончания" value={v(p.dateEnd||p.endDateFmt)}/>
+                      <Row label="Статус полиса" value={v(p.polStatus)}/>
+                    </>}
+                  </Section>
+
+                  {isOsago&&(
+                    <Section title="Транспортное средство" color="#0f766e">
+                      <Row label="Марка / Модель" value={v(p.car)}/>
+                      <Row label="Рег. номер" value={v(p.carPlate)} mono/>
+                      <Row label="Регион" value={v(p.region)}/>
+                      <Row label="КБМ (БМ)" value={v(p.bm)}/>
+                      <Row label="Мощность" value={p.power?p.power+" л.с.":"—"}/>
+                    </Section>
+                  )}
+
+                  <Section title="Финансы" color="#15803d">
+                    <Row label="Страховая премия" value={p.amount?fmt(p.amount):"—"} bold color={p.amount?"#1d4ed8":undefined}/>
+                    <Row label="Скидка" value={p.discount&&Number(p.discount)>0?fmt(p.discount):"—"}/>
+                    <Row label="К оплате" value={p.amount!=null?fmt((Number(p.amount)||0)-(Number(p.discount)||0)):"—"} bold/>
+                    {p._source==="office"
+                      ?p.paid
+                        ?<>
+                          <Row label="Статус оплаты" value="✓ Оплачено" bold color="#15803d"/>
+                          <Row label="Сумма оплаты" value={p.paidAmount?fmt(p.paidAmount):"—"} bold color="#15803d"/>
+                          <Row label="Дата оплаты" value={v(p.paidDate)}/>
+                          <Row label="Способ оплаты" value={fmtPay2(p.paymentType)}/>
+                        </>
+                        :<Row label="Статус оплаты" value="✗ Не оплачено" bold color="#dc2626"/>
+                      :<Row label="Статус оплаты" value="— (агентский полис)" color="#94a3b8"/>
+                    }
+                  </Section>
+
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
     </div>
   );
