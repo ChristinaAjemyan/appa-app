@@ -1071,18 +1071,23 @@ export default function App(){
     logAction("unlock_month","Открыт месяц: "+fmtMonth(selMonth));
   };
 
-  const loadDB=()=>{
+  const loadDB=async()=>{
     setDbLoaded(false);
-    calcStorage.list("month:").then(res=>{
-      if(!res||!res.keys||!res.keys.length){setDbPols([]);setDbLoaded(true);return;}
-      const all=[];let done=0;
-      res.keys.forEach(key=>{
-        calcStorage.get(key).then(r=>{
-          if(r&&r.value){try{const d=JSON.parse(r.value);const mk=key.replace("month:","");(d.policies||[]).forEach(p=>all.push({...p,_monthKey:mk}));}catch{}}
-          done++;if(done===res.keys.length){setDbPols(all);setDbLoaded(true);}
-        }).catch(()=>{done++;if(done===res.keys.length){setDbPols(all);setDbLoaded(true);}});
-      });
-    }).catch(()=>{setDbPols([]);setDbLoaded(true);});
+    const all=[];
+    const isoToFmt=d=>{if(!d)return"";const p=d.split("-");return p.length===3?`${p[2]}.${p[1]}.${p[0]}`:d;};
+    try{
+      const res=await calcStorage.list("month:").catch(()=>({keys:[]}));
+      await Promise.all((res.keys||[]).map(async key=>{
+        try{const r=await calcStorage.get(key);if(r&&r.value){const d=JSON.parse(r.value);const mk=key.replace("month:","");(d.policies||[]).forEach(p=>all.push({...p,_monthKey:mk,_source:"agent"}));}}catch{}
+      }));
+    }catch{}
+    try{
+      const res2=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
+      await Promise.all((res2.keys||[]).map(async key=>{
+        try{const r=await calcStorage.get(key);if(r&&r.value){const mk=key.replace("officePol:","");JSON.parse(r.value).filter(p=>!p.insuredName?.includes("ПРИМЕР")).forEach(p=>{all.push({...p,_monthKey:mk,_source:"office",endDate:p.dateEnd||null,startDateFmt:isoToFmt(p.dateStart),endDateFmt:isoToFmt(p.dateEnd)});});}}catch{}
+      }));
+    }catch{}
+    setDbPols(all);setDbLoaded(true);
   };
 
   const loadOfficeSales=async()=>{
@@ -1589,7 +1594,7 @@ export default function App(){
     const zip=new JSZip();
     const byAgent={};
     pols.forEach(p=>{const k=p.agentUid||"__unknown__";if(!byAgent[k])byAgent[k]=[];byAgent[k].push(p);});
-    const HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Агент","Регион","Сумма","БМ","Мощность"];
+    const HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Агент","Регион","Сумма","БМ","Мощность","Источник","Комментарий"];
     const PHONE_COL=4;
     const br={style:"thin",color:{rgb:"AAAAAA"}};
     const borders={top:br,bottom:br,left:br,right:br};
@@ -1608,14 +1613,14 @@ export default function App(){
       });
       agPols.forEach((p,ri)=>{
         const agName=getName(p.agentUid)||p.agentCode||"";
-        const vals=[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",agName,p.region||"",p.amount||0,p.bm||"",p.power||""];
+        const vals=[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",agName,p.region||"",p.amount||0,p.bm||"",p.power||"",p._source==="office"?"Офис":"Агент",p.comment||""];
         vals.forEach((v,c)=>{
           const t=typeof v==="number"?"n":"s";
           ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t,s:c===PHONE_COL?sPhone:sCell};
         });
       });
       ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:agPols.length,c:HEADERS.length-1}});
-      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:24},{wch:8},{wch:14},{wch:6},{wch:8}];
+      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:24},{wch:8},{wch:14},{wch:6},{wch:8},{wch:10},{wch:30}];
       XLSXStyle.utils.book_append_sheet(wb,ws,"Продления");
       const out=XLSXStyle.write(wb,{bookType:"xlsx",type:"array"});
       const safe=s=>String(s).replace(/[/\\:*?"<>|]/g,"_");
@@ -2024,7 +2029,7 @@ export default function App(){
           {dbLoaded&&filteredDB.length>0&&(
             <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb"}}>
               <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead><tr>{["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег.номер","Начало","Окончание","Агент","Регион","Сумма"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                <thead><tr>{["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег.номер","Начало","Окончание","Агент","Регион","Сумма","Источник","Комментарий"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>{filteredDB.map((p,i)=>(
                   <tr key={i} style={{background:i%2===0?"white":"#fafafa"}}>
                     <td style={{...td,fontSize:11,color:"#6b7280"}}>{fmtMonth(p._monthKey)}</td>
@@ -2033,8 +2038,10 @@ export default function App(){
                     <td style={{...td,color:"#6b7280"}}>{p.car}</td><td style={{...td,fontSize:11}}>{p.carPlate}</td>
                     <td style={{...td,fontSize:11,color:"#6b7280"}}>{p.startDateFmt}</td>
                     <td style={{...td,fontSize:11,fontWeight:600,color:"#dc2626"}}>{p.endDateFmt}</td>
-                    <td style={td}>{getName(p.agentUid)||p.agentCode}</td>
+                    <td style={td}>{p._source==="office"?"—":(getName(p.agentUid)||p.agentCode)}</td>
                     <td style={td}>{p.region}</td><td style={td}>{fmt(p.amount)}</td>
+                    <td style={{...td,textAlign:"center"}}>{p._source==="office"?<span style={{background:"#dbeafe",color:"#1d4ed8",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:600}}>🏢 Офис</span>:<span style={{background:"#f0fdf4",color:"#15803d",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:600}}>👤 Агент</span>}</td>
+                    <td style={{...td,fontSize:11,color:"#6b7280",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.comment||""}</td>
                   </tr>
                 ))}</tbody>
               </table>
