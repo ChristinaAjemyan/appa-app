@@ -662,6 +662,10 @@ export default function App(){
   const[opPayData,setOpPayData]=useState({});
   const[opSearch,setOpSearch]=useState("");
   const[opStatusFilter,setOpStatusFilter]=useState("all");
+  const[opDateFrom,setOpDateFrom]=useState("");
+  const[opDateTo,setOpDateTo]=useState("");
+  const[opEndFrom,setOpEndFrom]=useState("");
+  const[opEndTo,setOpEndTo]=useState("");
   const[cashDays,setCashDays]=useState({});
   const[cashLoaded,setCashLoaded]=useState(false);
   const[cashExpandDay,setCashExpandDay]=useState(null);
@@ -1590,42 +1594,100 @@ export default function App(){
     _dlXlsx(wb,name.slice(0,30)+"_"+month+".xlsx");
   };
 
+  const exportOfficeSalesExcel=(pols,monthLabel)=>{
+    if(!pols.length)return;
+    const fmtPay=t=>({cash:"Наличные",acba:"ACBA",ineco:"INECO"})[t]||t||"—";
+    const isoToDisplay=d=>{if(!d)return"";const p=d.split("-");return p.length===3?`${p[2]}.${p[1]}.${p[0]}`:d;};
+    const br={style:"thin",color:{rgb:"AAAAAA"}};
+    const borders={top:br,bottom:br,left:br,right:br};
+    const sHdr={fill:{patternType:"solid",fgColor:{rgb:"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
+    const sHdrPhone={fill:{patternType:"solid",fgColor:{rgb:"FDE047"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
+    const sCellPaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"F0FDF4"}}};
+    const sCellUnpaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"FFF1F2"}}};
+    const sPhonePaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}}};
+    const sPhoneUnpaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"FFE4E6"}}};
+    const sTot={font:{bold:true,sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}}};
+    const HEADERS=["Месяц","Страхователь","Телефон","Компания","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Начало","Окончание","Статус оплаты","Дата оплаты","Способ оплаты","Комментарий"];
+    const PHONE_COL=2;
+    const ws={};
+    HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr});
+    pols.forEach((p,ri)=>{
+      const isPaid=!!p.paid;
+      const sc=isPaid?sCellPaid:sCellUnpaid;
+      const sp=isPaid?sPhonePaid:sPhoneUnpaid;
+      const vals=[
+        fmtMonth(p._monthKey||selMonth),
+        p.insuredName||"",p.phone||"",p.company||"",p.policyNum||"",
+        p.polType==="voluntary"?"Добровольный":"ОСАГО",
+        p.amount||0,p.discount||0,(p.amount||0)-(p.discount||0),
+        isoToDisplay(p.date),isoToDisplay(p.dateStart),isoToDisplay(p.dateEnd),
+        isPaid?"Оплачен":"Не оплачен",
+        isoToDisplay((p.paidAt||"").slice(0,10)),
+        fmtPay(p.paymentType),
+        p.comment||""
+      ];
+      vals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:sc});
+    });
+    const totRow=pols.length+1;
+    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),"","","",`Оплачено: ${pols.filter(p=>p.paid).length}`,`Не оплачено: ${pols.filter(p=>!p.paid).length}`,"",""];
+    totVals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:typeof v==="number"?"n":"s",s:sTot});
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:totRow,c:HEADERS.length-1}});
+    ws["!cols"]=[{wch:13},{wch:26},{wch:17},{wch:10},{wch:17},{wch:14},{wch:14},{wch:10},{wch:12},{wch:14},{wch:12},{wch:12},{wch:13},{wch:13},{wch:14},{wch:30}];
+    const wb=XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Продажи офиса");
+    _dlXlsx(wb,`Продажи_офиса_${monthLabel||selMonth}.xlsx`);
+  };
+
   const exportRenewalsZip=async(pols,expiryLabel)=>{
     const zip=new JSZip();
-    const byAgent={};
-    pols.forEach(p=>{const k=p.agentUid||"__unknown__";if(!byAgent[k])byAgent[k]=[];byAgent[k].push(p);});
-    const HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Агент","Регион","Сумма","БМ","Мощность","Источник","Комментарий"];
-    const PHONE_COL=4;
+    const safe=s=>String(s).replace(/[/\\:*?"<>|]/g,"_");
     const br={style:"thin",color:{rgb:"AAAAAA"}};
     const borders={top:br,bottom:br,left:br,right:br};
     const sHdr={fill:{patternType:"solid",fgColor:{rgb:"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
     const sHdrPhone={fill:{patternType:"solid",fgColor:{rgb:"FDE047"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
     const sCell={font:{sz:10},border:borders};
     const sPhone={fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},font:{sz:10},border:borders};
+    const sHdrOffice={fill:{patternType:"solid",fgColor:{rgb:"DBEAFE"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}};
+
+    const buildSheet=(rows,headers,phoneCol,rowFn)=>{
+      const ws={};
+      headers.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===phoneCol?sHdrPhone:sHdr});
+      rows.forEach((p,ri)=>{
+        const vals=rowFn(p);
+        vals.forEach((v,c)=>{ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===phoneCol?sPhone:sCell};});
+      });
+      ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rows.length,c:headers.length-1}});
+      return ws;
+    };
+
+    // Агентские полисы — по файлу на агента
+    const agentPols=pols.filter(p=>p._source!=="office");
+    const byAgent={};
+    agentPols.forEach(p=>{const k=p.agentUid||"__unknown__";if(!byAgent[k])byAgent[k]=[];byAgent[k].push(p);});
+    const AGT_HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Агент","Регион","Сумма","БМ","Мощность"];
     Object.entries(byAgent).forEach(([uid,agPols])=>{
       const ag=agentDir[uid];
       const name=ag?(ag.name+" "+ag.surname).trim():(getName(uid)||uid||"Неизвестно");
       const ic=(ag&&ag.internalCode)||"";
+      const ws=buildSheet(agPols,AGT_HEADERS,4,p=>[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",getName(p.agentUid)||p.agentCode||"",p.region||"",p.amount||0,p.bm||"",p.power||""]);
+      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:24},{wch:8},{wch:14},{wch:6},{wch:8}];
       const wb=XLSXStyle.utils.book_new();
-      const ws={};
-      HEADERS.forEach((h,c)=>{
-        ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr};
-      });
-      agPols.forEach((p,ri)=>{
-        const agName=getName(p.agentUid)||p.agentCode||"";
-        const vals=[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",agName,p.region||"",p.amount||0,p.bm||"",p.power||"",p._source==="office"?"Офис":"Агент",p.comment||""];
-        vals.forEach((v,c)=>{
-          const t=typeof v==="number"?"n":"s";
-          ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t,s:c===PHONE_COL?sPhone:sCell};
-        });
-      });
-      ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:agPols.length,c:HEADERS.length-1}});
-      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:24},{wch:8},{wch:14},{wch:6},{wch:8},{wch:10},{wch:30}];
       XLSXStyle.utils.book_append_sheet(wb,ws,"Продления");
-      const out=XLSXStyle.write(wb,{bookType:"xlsx",type:"array"});
-      const safe=s=>String(s).replace(/[/\\:*?"<>|]/g,"_");
-      zip.file(`${safe(ic)}_${safe(name).slice(0,30)}.xlsx`,new Uint8Array(out));
+      zip.file(`${safe(ic)}_${safe(name).slice(0,30)}.xlsx`,new Uint8Array(XLSXStyle.write(wb,{bookType:"xlsx",type:"array"})));
     });
+
+    // Офисные полисы — отдельный файл
+    const officePols=pols.filter(p=>p._source==="office");
+    if(officePols.length>0){
+      const OFF_HEADERS=["Месяц","№ полиса","Компания","Страхователь","Телефон","Марка","Рег. номер","Начало","Окончание","Регион","Сумма","Скидка","Тип полиса","Статус оплаты","Комментарий"];
+      const ws=buildSheet(officePols,OFF_HEADERS,4,p=>[fmtMonth(p._monthKey),p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.car||"",p.carPlate||"",p.startDateFmt||"",p.endDateFmt||"",p.region||"",p.amount||0,p.discount||0,p.polType==="voluntary"?"Добровольный":"ОСАГО",p.paid?"Оплачен":"Не оплачен",p.comment||""]);
+      OFF_HEADERS.forEach((h,c)=>{const cell=ws[XLSXStyle.utils.encode_cell({r:0,c})];if(cell)cell.s=c===4?sHdrPhone:sHdrOffice;});
+      ws["!cols"]=[{wch:13},{wch:17},{wch:10},{wch:26},{wch:17},{wch:20},{wch:13},{wch:12},{wch:12},{wch:8},{wch:14},{wch:12},{wch:14},{wch:14},{wch:30}];
+      const wb=XLSXStyle.utils.book_new();
+      XLSXStyle.utils.book_append_sheet(wb,ws,"Продажи офиса");
+      zip.file(`_Продажи_офиса.xlsx`,new Uint8Array(XLSXStyle.write(wb,{bookType:"xlsx",type:"array"})));
+    }
+
     const blob=await zip.generateAsync({type:"blob"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
@@ -2067,7 +2129,18 @@ export default function App(){
         const opSrch=opSearch.trim().toLowerCase();
         const matchesText=p=>!opSrch||(p.insuredName||"").toLowerCase().includes(opSrch)||(p.phone||"").includes(opSrch)||(p.policyNum||"").toLowerCase().includes(opSrch)||(p.car||"").toLowerCase().includes(opSrch)||(p.carPlate||"").toLowerCase().includes(opSrch);
         const matchesStatus=p=>opStatusFilter==="all"||(opStatusFilter==="paid"&&p.paid)||(opStatusFilter==="unpaid"&&!p.paid);
-        const filterPol=p=>matchesText(p)&&matchesStatus(p);
+        const matchesDates=p=>{
+          const d=p.date||"";const e=p.dateEnd||"";
+          if(opDateFrom&&d&&d<opDateFrom)return false;
+          if(opDateTo&&d&&d>opDateTo)return false;
+          if(opEndFrom&&e&&e<opEndFrom)return false;
+          if(opEndTo&&e&&e>opEndTo)return false;
+          return true;
+        };
+        const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p);
+        const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
+        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");};
+        const allFiltered=[...opPrevUnpaid,...opCurrentMonth].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const osagoList=opCurrentMonth.filter(p=>(p.polType||"osago")==="osago");
         const volList=opCurrentMonth.filter(p=>p.polType==="voluntary");
@@ -2084,6 +2157,7 @@ export default function App(){
                 <option value="unpaid">Неоплаченные</option>
                 <option value="paid">Оплаченные</option>
               </select>
+              {opLoaded&&allFiltered.length>0&&<button onClick={()=>exportOfficeSalesExcel(allFiltered,selMonth)} style={btn("#16a34a",undefined,{fontSize:12,padding:"6px 12px"})}>⬇ Экспорт Excel</button>}
               {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
               {isAdmin&&(isLocked
                 ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
@@ -2159,8 +2233,32 @@ export default function App(){
             )}
 
             {/* Search */}
-            <div style={{marginBottom:12}}>
+            <div style={{marginBottom:8}}>
               <input value={opSearch} onChange={e=>setOpSearch(e.target.value)} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 12px",boxSizing:"border-box"}}/>
+            </div>
+
+            {/* Date filters */}
+            <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 14px"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:13,color:"#111827",fontWeight:700,textAlign:"center"}}>Дата заключения</span>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <input type="date" value={opDateFrom} onChange={e=>setOpDateFrom(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
+                  <span style={{color:"#9ca3af",fontSize:13}}>—</span>
+                  <input type="date" value={opDateTo} onChange={e=>setOpDateTo(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:13,color:"#111827",fontWeight:700,textAlign:"center"}}>Дата окончания</span>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <input type="date" value={opEndFrom} onChange={e=>setOpEndFrom(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
+                  <span style={{color:"#9ca3af",fontSize:13}}>—</span>
+                  <input type="date" value={opEndTo} onChange={e=>setOpEndTo(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
+                </div>
+              </div>
+              {(hasDateFilter||opSrch||opStatusFilter!=="all")&&(
+                <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить фильтры</button>
+              )}
+              {hasDateFilter&&<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Показано: {allFiltered.length}</span>}
             </div>
 
             {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
