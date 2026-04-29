@@ -28,8 +28,10 @@ const DEFAULT_VOL_RATES={rates:[]};
 const DEFAULT_MGR_RATES={
   managerRates:{Nairi:16,Ingo:7,Liga:5,Sil:10,Rego:5},
   armeniaManager:{"1-9":11,"10-14":10,"15-25":7},
-  operatorRates:{Nairi:[16,14,12,10,8,6],Ingo:[7,6,5,4,3,2],Liga:[5,4,3,3,2,2],Sil:[10,9,8,7,6,5],Rego:[5,4,3,3,2,2]},
-  armeniaOperator:{"1-9":[11,10,9,8,7,6],"10-14":[10,9,8,7,6,5],"15-25":[7,6,5,4,3,2]},
+  armeniaShortManager:20,
+  operatorRates:{Nairi:[6,8,10,12,14,16],Ingo:[2,3,4,5,6,7],Liga:[2,2,3,3,4,5],Sil:[5,6,7,8,9,10],Rego:[2,2,3,3,4,5]},
+  armeniaOperator:{"1-9":[6,7,8,9,10,11],"10-14":[5,6,7,8,9,10],"15-25":[2,3,4,5,6,7]},
+  armeniaShortOperator:[10,10,12,12,15,15],
   tierThresholds:[0,500000,1000000,1500000,2000000,2500000],
   tierFixes:[0,20000,30000,40000,50000,70000],
   operatorUids:[],
@@ -339,11 +341,11 @@ const excReason=(p,excepts,agentUid)=>{
 const getArmGroup=bm=>bm<=9?"1-9":bm<=14?"10-14":"15-25";
 const getTierMgr=(sales,thresholds)=>{let t=1;for(let i=1;i<thresholds.length;i++)if(sales>=thresholds[i])t=i+1;return t;};
 const getMgrPolicyRate=(p,cfg)=>{
-  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaManager&&cfg.armeniaManager["1-9"])||0;return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
+  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
   return(cfg.managerRates&&cfg.managerRates[p.company])||0;
 };
 const getOpPolicyRate=(p,tier,cfg)=>{
-  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortOperator!=null?cfg.armeniaShortOperator:20);const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
+  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
   return(cfg.operatorRates&&cfg.operatorRates[p.company]&&cfg.operatorRates[p.company][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
@@ -592,6 +594,9 @@ function MgrRatesPanel({cfg,onSave}){
       <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{COMPANIES.map(c=><th key={c} style={th}>{c}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600,color:"#374151"}}>{t}</td>{COMPANIES.map(c=><td key={c} style={td}>{ni(((local.operatorRates||{})[c]||[])[i],v=>updArr(local.operatorRates[c]||[],i,v,"operatorRates."+c))}</td>)}</tr>)}</tbody></table></div>
       <h4 style={{margin:"0 0 4px",color:"#059669"}}>% оператора Armenia по ступеням</h4>
       <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{ARM_GROUPS.map(g=><th key={g} style={th}>{"Арм."+g}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600}}>{t}</td>{ARM_GROUPS.map(g=><td key={g} style={td}>{ni(((local.armeniaOperator||{})[g]||[])[i],v=>updArr((local.armeniaOperator||{})[g]||[],i,v,"armeniaOperator."+g))}</td>)}</tr>)}</tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#dc2626"}}>Armenia — короткий срок (до 87 дней)</h4>
+      <p style={{margin:"0 0 8px",fontSize:11,color:"#6b7280"}}>Менеджер получает фиксированный %, оператор — по ступени.</p>
+      <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>% менеджера</th>{TIERS.map(t=><th key={t} style={th}>{"Оп."+t}</th>)}</tr></thead><tbody><tr><td style={td}>{ni(local.armeniaShortManager!=null?local.armeniaShortManager:20,v=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.armeniaShortManager=parseFloat(v)||0;return n;}))}</td>{(local.armeniaShortOperator||DEFAULT_MGR_RATES.armeniaShortOperator).map((v,i)=><td key={i} style={td}>{ni(v,val=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));if(!Array.isArray(n.armeniaShortOperator))n.armeniaShortOperator=[...DEFAULT_MGR_RATES.armeniaShortOperator];n.armeniaShortOperator[i]=parseFloat(val)||0;return n;}))}</td>)}</tr></tbody></table></div>
       <h4 style={{margin:"0 0 4px",color:"#d97706"}}>Пороги ступеней и фиксированная часть (AMD)</h4>
       <div style={{overflowX:"auto",marginBottom:14}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Параметр</th>{TIERS.map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody>
         <tr><td style={{...td,fontWeight:600}}>Порог</td>{(local.tierThresholds||[]).map((v,i)=><td key={i} style={td}>{ni(v,val=>{setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.tierThresholds[i]=parseFloat(val)||0;return n;});},80)}</td>)}</tr>
@@ -640,8 +645,8 @@ export default function App(){
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
-    {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false},
-    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales"],viewOnly:true},
+    {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false,notifType:"unpaid"},
+    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales"],viewOnly:true,notifType:"expiring7"},
   ];
   const[role,setRole]=useState(null);
   const[currentEmployee,setCurrentEmployee]=useState(null);
@@ -690,6 +695,20 @@ export default function App(){
   const[searchViewPol,setSearchViewPol]=useState(null);
   const[notifs,setNotifs]=useState([]);
   const[showNotifs,setShowNotifs]=useState(false);
+  const[bookmarks,setBookmarks]=useState([]);
+  const[dueReminders,setDueReminders]=useState([]);
+  const[bkmFormOpen,setBkmFormOpen]=useState(false);
+  const[bkmFormData,setBkmFormData]=useState({text:"",reminderAt:"",policyRef:null});
+  const[bkmArchiveOpen,setBkmArchiveOpen]=useState(false);
+  const[tasks,setTasks]=useState([]);
+  const[tasksLoaded,setTasksLoaded]=useState(false);
+  const[taskTab,setTaskTab]=useState("active");
+  const[selectedTask,setSelectedTask]=useState(null);
+  const[taskFormOpen,setTaskFormOpen]=useState(false);
+  const[taskFormData,setTaskFormData]=useState({title:"",description:"",deadline:"",priority:"normal",assignedTo:""});
+  const[taskComment,setTaskComment]=useState("");
+  const[taskRevComment,setTaskRevComment]=useState("");
+  const[showRevInput,setShowRevInput]=useState(false);
   const[chartData,setChartData]=useState(null);
   const[chartLoading,setChartLoading]=useState(false);
   const[chartHover,setChartHover]=useState(null);
@@ -750,7 +769,7 @@ export default function App(){
   const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
-  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search"]:[...(currentEmployee?.tabs||[]),"search"];
+  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
 
   const saveAppSettings=(updates={})=>{
     const s={adminPin,employees,officeStaff,...updates};
@@ -777,12 +796,15 @@ export default function App(){
       return updated;
     });
   };
-  const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);setNotifs([]);setShowNotifs(false);};
+  const logout=()=>{setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);setNotifs([]);setShowNotifs(false);setBookmarks([]);setDueReminders([]);setBkmFormOpen(false);setTasks([]);setSelectedTask(null);setTaskFormOpen(false);};
   const buildNotifications=async()=>{
     try{
+      const ntype=role==="admin"?"none":(currentEmployee?.notifType||"none");
+      if(ntype==="none"){setNotifs([]);return;}
       const mk=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
       const today=new Date();today.setHours(0,0,0,0);
       const in30=new Date(today.getTime()+30*24*60*60*1000);
+      const in7=new Date(today.getTime()+7*24*60*60*1000);
       const parseD=s=>{if(!s)return null;const[d,m,y]=s.split(".");if(!d||!m||!y)return null;return new Date(+y,+m-1,+d);};
       const all=[];
       for(const key of(mk.keys||[])){
@@ -792,13 +814,15 @@ export default function App(){
         const month=key.replace("officePol:","");
         for(const p of pols){
           if(!p.insuredName||p.insuredName.includes("ПРИМЕР"))continue;
-          if(!p.paid){
-            all.push({...p,_monthKey:month,_ntype:"unpaid"});
-          }else if(p.polType==="osago"&&p.dateEnd){
+          if((ntype==="unpaid"||ntype==="all")&&!p.paid){
+            all.push({...p,_monthKey:month,_source:"office",_ntype:"unpaid"});
+          }
+          if((ntype==="expiring7"||ntype==="expiring30"||ntype==="all")&&p.polType==="osago"&&p.dateEnd){
             const end=parseD(p.dateEnd);
-            if(end&&end>=today&&end<=in30){
+            const limit=ntype==="expiring7"?in7:in30;
+            if(end&&end>=today&&end<=limit){
               const days=Math.ceil((end-today)/(24*60*60*1000));
-              all.push({...p,_monthKey:month,_ntype:"expiring",_daysLeft:days});
+              all.push({...p,_monthKey:month,_source:"office",_ntype:"expiring",_daysLeft:days});
             }
           }
         }
@@ -808,6 +832,44 @@ export default function App(){
   };
   useEffect(()=>{if(role)buildNotifications();},[role]);
   useEffect(()=>{if(role)buildNotifications();},[tab]);
+
+  const bkmKey=role==="admin"?"bookmarks:admin":(currentEmployee?`bookmarks:${currentEmployee.id}`:null);
+  const loadBookmarks=async(key)=>{
+    const k=key||bkmKey;if(!k)return;
+    try{
+      const r=await calcStorage.get(k).catch(()=>null);
+      if(r?.value){
+        const data=JSON.parse(r.value);
+        const cutoff=Date.now()-6*30*24*60*60*1000;
+        setBookmarks(data.filter(b=>!(b.status==="done"&&(b.doneAt||0)<cutoff)));
+      }
+    }catch{}
+  };
+  const saveBookmarks=(list)=>{setBookmarks(list);if(bkmKey)calcStorage.set(bkmKey,JSON.stringify(list)).catch(()=>{});};
+  const checkDueReminders=(list)=>{
+    const now=Date.now();
+    const due=(list||bookmarks).filter(b=>b.status==="active"&&b.reminderAt&&!b.reminderFired&&new Date(b.reminderAt).getTime()<=now);
+    setDueReminders(due);
+  };
+  const loadTasks=async()=>{
+    try{
+      const r=await calcStorage.get("tasks").catch(()=>null);
+      if(r?.value)setTasks(JSON.parse(r.value));
+      else setTasks([]);
+    }catch{setTasks([]);}
+    setTasksLoaded(true);
+  };
+  const saveTasks=(list)=>{setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(()=>{});};
+  const currentUserId=role==="admin"?"admin":(currentEmployee?.id||"");
+  const currentUserName=role==="admin"?"Администратор":(currentEmployee?.name||"");
+  const taskUnread=tasks.filter(t=>(t.unreadFor||[]).includes(currentUserId)&&t.status!=="closed");
+  useEffect(()=>{if(role){loadBookmarks();loadTasks();}},[role]);
+  useEffect(()=>{checkDueReminders();},[bookmarks]);
+  useEffect(()=>{
+    if(!role)return;
+    const id=setInterval(()=>{checkDueReminders();buildNotifications();loadTasks();},5*60*1000);
+    return()=>clearInterval(id);
+  },[role,bookmarks]);
   const loadChartData=async()=>{
     setChartLoading(true);
     try{
@@ -1749,7 +1811,7 @@ export default function App(){
           }
           <button onClick={()=>setShowNotifs(p=>!p)} style={{...btn(showNotifs?"#1d4ed8":"#f1f5f9",showNotifs?"#fff":"#1e293b",{position:"relative",padding:"5px 13px",fontSize:16,lineHeight:1}),border:"2px solid "+(showNotifs?"#1d4ed8":"#94a3b8")}}>
             🔔
-            {notifs.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{notifs.length}</span>}
+            {(notifs.length+dueReminders.length+taskUnread.length)>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{notifs.length+dueReminders.length+taskUnread.length}</span>}
           </button>
           <button onClick={logout} style={btn("#64748b",undefined,{fontSize:12})}>Выйти</button>
         </div>
@@ -1768,10 +1830,11 @@ export default function App(){
       </div>
 
       <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
-        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
-          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();}}
-            style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
+        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"],["bookmarks","🔖 Закладки","#b45309","#fef3c7"],["tasks","📋 Задачи","#be185d","#fce7f3"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
+          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();}}
+            style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",position:"relative"}}>
             {label}
+            {id==="tasks"&&taskUnread.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",minWidth:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1}}>{taskUnread.length}</span>}
           </button>
         ))}
       </div>
@@ -3862,7 +3925,10 @@ export default function App(){
                   {searchViewPol.company&&<>&nbsp;·&nbsp;{searchViewPol.company}</>}
                 </div>
               </div>
-              <button onClick={()=>setSearchViewPol(null)} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",fontSize:20,color:"white",borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>{const p=searchViewPol;setBkmFormData({text:"",reminderAt:"",policyRef:{insuredName:p.insuredName||"",policyNum:p.policyNum||"",company:p.company||"",polType:p.polType||"osago",phone:p.phone||"",_monthKey:p._monthKey||"",_source:p._source||"office"}});setBkmFormOpen(true);setSearchViewPol(null);setTab("bookmarks");}} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.25)",cursor:"pointer",fontSize:12,color:"white",borderRadius:8,padding:"6px 11px",fontWeight:600}}>🔖 Закладка</button>
+                <button onClick={()=>setSearchViewPol(null)} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",fontSize:20,color:"white",borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              </div>
             </div>
 
             {(()=>{
@@ -3943,6 +4009,297 @@ export default function App(){
           </div>
         </div>
       )}
+
+      {tab==="bookmarks"&&(()=>{
+        const active=bookmarks.filter(b=>b.status==="active").sort((a,b)=>{if(!a.reminderAt&&!b.reminderAt)return b.createdAt-a.createdAt;if(!a.reminderAt)return 1;if(!b.reminderAt)return -1;return new Date(a.reminderAt)-new Date(b.reminderAt);});
+        const archive=bookmarks.filter(b=>b.status==="done").sort((a,b)=>b.doneAt-a.doneAt);
+        const fmtDt=s=>{if(!s)return"";try{const d=new Date(s);return d.toLocaleDateString("ru-RU")+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return s;}};
+        const isDue=b=>b.reminderAt&&new Date(b.reminderAt).getTime()<=Date.now();
+        const addBkm=()=>{
+          if(!(bkmFormData.text||"").trim())return;
+          const nb={id:genUid(),createdAt:Date.now(),text:bkmFormData.text.trim(),reminderAt:bkmFormData.reminderAt||"",policyRef:bkmFormData.policyRef||null,status:"active",doneAt:null,reminderFired:false};
+          saveBookmarks([nb,...bookmarks]);
+          setBkmFormData({text:"",reminderAt:"",policyRef:null});
+          setBkmFormOpen(false);
+        };
+        const markDone=id=>{const list=bookmarks.map(b=>b.id===id?{...b,status:"done",doneAt:Date.now()}:b);saveBookmarks(list);setDueReminders(prev=>prev.filter(b=>b.id!==id));};
+        const deleteBkm=id=>saveBookmarks(bookmarks.filter(b=>b.id!==id));
+        const dismissReminder=id=>{const list=bookmarks.map(b=>b.id===id?{...b,reminderFired:true}:b);saveBookmarks(list);};
+        return(
+          <div style={{maxWidth:860}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <h3 style={{margin:0,fontSize:16,color:"#1e293b"}}>🔖 Мои закладки</h3>
+              <button onClick={()=>{setBkmFormData({text:"",reminderAt:"",policyRef:null});setBkmFormOpen(p=>!p);}} style={btn("#b45309")}>+ Новая закладка</button>
+            </div>
+
+            {bkmFormOpen&&(
+              <div style={{background:"white",border:"2px solid #fed7aa",borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 2px 12px rgba(180,83,9,0.1)"}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#92400e"}}>Новая закладка {bkmFormData.policyRef&&<span style={{background:"#fef3c7",borderRadius:6,padding:"2px 8px",fontSize:11,marginLeft:6}}>📋 {bkmFormData.policyRef.insuredName||bkmFormData.policyRef.policyNum}</span>}</div>
+                <textarea value={bkmFormData.text} onChange={e=>setBkmFormData(p=>({...p,text:e.target.value}))} placeholder="Текст заметки..." rows={3} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:10}}/>
+                <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>⏰ Напоминание:</span>
+                    <input type="datetime-local" value={bkmFormData.reminderAt} onChange={e=>setBkmFormData(p=>({...p,reminderAt:e.target.value}))} style={{...inp,fontSize:12,padding:"4px 8px"}}/>
+                  </div>
+                  {bkmFormData.policyRef&&<button onClick={()=>setBkmFormData(p=>({...p,policyRef:null}))} style={{...btn("#f3f4f6","#374151",{fontSize:11,border:"1px solid #d1d5db"})}}>✕ Убрать полис</button>}
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <button onClick={addBkm} disabled={!(bkmFormData.text||"").trim()} style={btn("#b45309")}>💾 Сохранить</button>
+                  <button onClick={()=>{setBkmFormOpen(false);setBkmFormData({text:"",reminderAt:"",policyRef:null});}} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>Отмена</button>
+                </div>
+              </div>
+            )}
+
+            {active.length===0&&!bkmFormOpen&&(
+              <div style={{textAlign:"center",color:"#94a3b8",padding:"60px 20px"}}>
+                <div style={{fontSize:40,marginBottom:12}}>🔖</div>
+                <div style={{fontWeight:600,fontSize:14,color:"#64748b",marginBottom:6}}>Нет активных закладок</div>
+                <div style={{fontSize:12}}>Нажмите «+ Новая закладка» или добавьте закладку из карточки полиса</div>
+              </div>
+            )}
+
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {active.map(b=>{
+                const due=isDue(b);
+                return(
+                  <div key={b.id} style={{background:"white",borderRadius:12,border:"1px solid "+(due?"#fca5a5":"#e5e7eb"),boxShadow:"0 1px 6px rgba(0,0,0,0.07)",overflow:"hidden",position:"relative"}}>
+                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:due?"#ef4444":"#f59e0b"}}/>
+                    <div style={{padding:"12px 14px 12px 20px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:600,color:"#1e293b",whiteSpace:"pre-wrap",lineHeight:1.5,marginBottom:b.reminderAt||b.policyRef?8:0}}>{b.text}</div>
+                          {b.policyRef&&(
+                            <div onClick={()=>{setSearchViewPol({...b.policyRef,_source:b.policyRef._source||"office"});}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"3px 9px",fontSize:11,color:"#1d4ed8",fontWeight:600,cursor:"pointer",marginBottom:6}}>
+                              📋 {b.policyRef.insuredName||b.policyRef.policyNum||"Полис"} {b.policyRef.company&&"· "+b.policyRef.company}
+                            </div>
+                          )}
+                          {b.reminderAt&&(
+                            <div style={{fontSize:11,color:due?"#dc2626":"#6b7280",fontWeight:due?700:500,display:"flex",alignItems:"center",gap:4}}>
+                              {due?"🔔":"⏰"} {fmtDt(b.reminderAt)}{due&&" — срабатывает"}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          {due&&<button onClick={()=>dismissReminder(b.id)} title="Скрыть напоминание" style={{...btn("#fef3c7","#92400e",{fontSize:11,border:"1px solid #fcd34d"})}}>🔕</button>}
+                          <button onClick={()=>markDone(b.id)} title="Выполнено" style={{...btn("#f0fdf4","#15803d",{fontSize:11,border:"1px solid #86efac"})}}>✓ Готово</button>
+                          <button onClick={()=>deleteBkm(b.id)} title="Удалить" style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {archive.length>0&&(
+              <div style={{marginTop:20}}>
+                <button onClick={()=>setBkmArchiveOpen(p=>!p)} style={{...btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12}),marginBottom:10}}>
+                  {bkmArchiveOpen?"▼":"▶"} Архив ({archive.length})
+                </button>
+                {bkmArchiveOpen&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {archive.map(b=>(
+                      <div key={b.id} style={{background:"#f8fafc",borderRadius:10,border:"1px solid #e5e7eb",padding:"10px 14px",opacity:0.7}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div>
+                            <div style={{fontSize:13,color:"#64748b",whiteSpace:"pre-wrap",lineHeight:1.4,textDecoration:"line-through"}}>{b.text}</div>
+                            {b.policyRef&&<div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>📋 {b.policyRef.insuredName||b.policyRef.policyNum}</div>}
+                            <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>Выполнено: {b.doneAt?new Date(b.doneAt).toLocaleDateString("ru-RU"):""}</div>
+                          </div>
+                          <button onClick={()=>deleteBkm(b.id)} style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {tab==="tasks"&&(()=>{
+        const allUsers=[{id:"admin",name:"Администратор"},...employees.map(e=>({id:e.id,name:e.name}))];
+        const otherUsers=allUsers.filter(u=>u.id!==currentUserId);
+        const PRIORITIES={low:{l:"Низкий",c:"#6b7280",bg:"#f3f4f6"},normal:{l:"Обычный",c:"#1d4ed8",bg:"#dbeafe"},high:{l:"Высокий",c:"#d97706",bg:"#fef3c7"},urgent:{l:"Срочный",c:"#dc2626",bg:"#fee2e2"}};
+        const STATUS_META={new:{l:"Новая",c:"#1d4ed8",bg:"#dbeafe"},inprogress:{l:"В процессе",c:"#d97706",bg:"#fef3c7"},done:{l:"Выполнена",c:"#15803d",bg:"#dcfce7"},revision:{l:"На корректировку",c:"#dc2626",bg:"#fee2e2"},closed:{l:"Закрыта",c:"#6b7280",bg:"#f3f4f6"}};
+        const activeTasks=tasks.filter(t=>t.status!=="closed"&&(t.createdBy===currentUserId||t.assignedTo===currentUserId));
+        const doneTasks=tasks.filter(t=>t.status==="closed"&&(t.createdBy===currentUserId||t.assignedTo===currentUserId));
+        const fmtDate=s=>{if(!s)return"";try{const d=new Date(s+"T00:00");return d.toLocaleDateString("ru-RU");}catch{return s;}};
+        const fmtTs=ts=>{const d=new Date(ts);return d.toLocaleDateString("ru-RU")+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});};
+        const markRead=t=>{const upd=tasks.map(x=>x.id===t.id?{...x,unreadFor:(x.unreadFor||[]).filter(u=>u!==currentUserId)}:x);saveTasks(upd);};
+        const openTask=t=>{setSelectedTask(t);markRead(t);setTaskRevComment("");setShowRevInput(false);setTaskComment("");};
+
+        const createTask=()=>{
+          if(!(taskFormData.title||"").trim()||!taskFormData.assignedTo)return;
+          const assignee=allUsers.find(u=>u.id===taskFormData.assignedTo);
+          const nt={id:genUid(),createdAt:Date.now(),createdBy:currentUserId,createdByName:currentUserName,assignedTo:taskFormData.assignedTo,assignedToName:assignee?.name||"",title:taskFormData.title.trim(),description:taskFormData.description.trim(),deadline:taskFormData.deadline,priority:taskFormData.priority||"normal",status:"new",comments:[],unreadFor:[taskFormData.assignedTo],doneAt:null,closedAt:null};
+          saveTasks([nt,...tasks]);
+          setTaskFormData({title:"",description:"",deadline:"",priority:"normal",assignedTo:""});
+          setTaskFormOpen(false);
+        };
+        const acceptTask=t=>{const upd=tasks.map(x=>x.id===t.id?{...x,status:"inprogress",unreadFor:[x.createdBy]}:x);saveTasks(upd);setSelectedTask(p=>({...p,status:"inprogress",unreadFor:[t.createdBy]}));};
+        const markDoneTask=t=>{const upd=tasks.map(x=>x.id===t.id?{...x,status:"done",doneAt:Date.now(),unreadFor:[x.createdBy]}:x);saveTasks(upd);setSelectedTask(p=>({...p,status:"done",unreadFor:[t.createdBy]}));};
+        const closeTask=t=>{const upd=tasks.map(x=>x.id===t.id?{...x,status:"closed",closedAt:Date.now(),unreadFor:[x.assignedTo]}:x);saveTasks(upd);setSelectedTask(p=>({...p,status:"closed"}));};
+        const sendRevision=t=>{if(!(taskRevComment||"").trim())return;const c={id:genUid(),createdAt:Date.now(),authorId:currentUserId,authorName:currentUserName,text:"🔄 На корректировку: "+taskRevComment.trim()};const upd=tasks.map(x=>x.id===t.id?{...x,status:"revision",unreadFor:[x.assignedTo],comments:[...x.comments,c]}:x);saveTasks(upd);setSelectedTask(p=>({...p,status:"revision",comments:[...p.comments,c]}));setTaskRevComment("");setShowRevInput(false);};
+        const addComment=t=>{if(!(taskComment||"").trim())return;const c={id:genUid(),createdAt:Date.now(),authorId:currentUserId,authorName:currentUserName,text:taskComment.trim()};const other=currentUserId===t.createdBy?t.assignedTo:t.createdBy;const upd=tasks.map(x=>x.id===t.id?{...x,comments:[...x.comments,c],unreadFor:[...new Set([...(x.unreadFor||[]),other])]}:x);saveTasks(upd);setSelectedTask(p=>({...p,comments:[...p.comments,c]}));setTaskComment("");};
+
+        const TaskCard=({t})=>{
+          const pr=PRIORITIES[t.priority]||PRIORITIES.normal;
+          const st=STATUS_META[t.status]||STATUS_META.new;
+          const isUnread=(t.unreadFor||[]).includes(currentUserId);
+          const isOverdue=t.deadline&&new Date(t.deadline+"T23:59")<=new Date()&&t.status!=="closed";
+          return(
+            <div onClick={()=>openTask(t)} style={{background:"white",borderRadius:12,border:"1px solid "+(isUnread?"#f9a8d4":"#e5e7eb"),boxShadow:"0 1px 6px rgba(0,0,0,0.07)",padding:"12px 14px",cursor:"pointer",position:"relative",borderLeft:"4px solid "+pr.c}}>
+              {isUnread&&<span style={{position:"absolute",top:10,right:10,width:8,height:8,borderRadius:"50%",background:"#dc2626"}}/>}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                <span style={{background:st.bg,color:st.c,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700}}>{st.l}</span>
+                <span style={{background:pr.bg,color:pr.c,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}}>{pr.l}</span>
+                {isOverdue&&<span style={{background:"#fee2e2",color:"#dc2626",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700}}>⚠ Просрочена</span>}
+              </div>
+              <div style={{fontWeight:700,fontSize:14,color:"#1e293b",marginBottom:4}}>{t.title}</div>
+              <div style={{fontSize:11,color:"#64748b",display:"flex",gap:10,flexWrap:"wrap"}}>
+                <span>От: {t.createdByName}</span>
+                <span>Кому: {t.assignedToName}</span>
+                {t.deadline&&<span style={{color:isOverdue?"#dc2626":"#6b7280"}}>📅 {fmtDate(t.deadline)}</span>}
+                {t.comments.length>0&&<span>💬 {t.comments.length}</span>}
+              </div>
+            </div>
+          );
+        };
+
+        const sel=selectedTask?tasks.find(x=>x.id===selectedTask.id)||selectedTask:null;
+
+        return(
+          <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+            {/* Левая панель */}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div style={{display:"flex",gap:6}}>
+                  {[["active","Активные",activeTasks.length],["done","Завершённые",doneTasks.length]].map(([k,l,cnt])=>(
+                    <button key={k} onClick={()=>setTaskTab(k)} style={{padding:"6px 16px",borderRadius:8,border:"2px solid "+(taskTab===k?"#be185d":"#d1d5db"),background:taskTab===k?"#fce7f3":"#f9fafb",color:taskTab===k?"#be185d":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                      {l} <span style={{background:taskTab===k?"#be185d":"#e5e7eb",color:taskTab===k?"white":"#6b7280",borderRadius:10,padding:"1px 7px",fontSize:11,marginLeft:3}}>{cnt}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={()=>{setTaskFormData({title:"",description:"",deadline:"",priority:"normal",assignedTo:""});setTaskFormOpen(p=>!p);}} style={btn("#be185d")}>+ Новая задача</button>
+              </div>
+
+              {taskFormOpen&&(
+                <div style={{background:"white",border:"2px solid #fbcfe8",borderRadius:12,padding:16,marginBottom:14}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#9d174d",marginBottom:12}}>Новая задача</div>
+                  <input value={taskFormData.title} onChange={e=>setTaskFormData(p=>({...p,title:e.target.value}))} placeholder="Заголовок задачи *" style={{...inp,width:"100%",boxSizing:"border-box",marginBottom:8,fontSize:13}}/>
+                  <textarea value={taskFormData.description} onChange={e=>setTaskFormData(p=>({...p,description:e.target.value}))} placeholder="Описание (необязательно)" rows={2} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:8}}/>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                    <select value={taskFormData.assignedTo} onChange={e=>setTaskFormData(p=>({...p,assignedTo:e.target.value}))} style={{...inp,padding:"6px 8px",fontSize:12}}>
+                      <option value="">Выбрать исполнителя *</option>
+                      {otherUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                    <select value={taskFormData.priority} onChange={e=>setTaskFormData(p=>({...p,priority:e.target.value}))} style={{...inp,padding:"6px 8px",fontSize:12}}>
+                      {Object.entries(PRIORITIES).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+                    </select>
+                    <input type="date" value={taskFormData.deadline} onChange={e=>setTaskFormData(p=>({...p,deadline:e.target.value}))} style={{...inp,padding:"6px 8px",fontSize:12}}/>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={createTask} disabled={!(taskFormData.title||"").trim()||!taskFormData.assignedTo} style={btn("#be185d")}>💾 Создать</button>
+                    <button onClick={()=>setTaskFormOpen(false)} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>Отмена</button>
+                  </div>
+                </div>
+              )}
+
+              {(taskTab==="active"?activeTasks:doneTasks).length===0
+                ?<div style={{textAlign:"center",color:"#94a3b8",padding:"60px 20px"}}>
+                  <div style={{fontSize:40,marginBottom:12}}>📋</div>
+                  <div style={{fontWeight:600,fontSize:14,color:"#64748b"}}>{taskTab==="active"?"Нет активных задач":"Нет завершённых задач"}</div>
+                </div>
+                :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {(taskTab==="active"?activeTasks:doneTasks).map(t=><TaskCard key={t.id} t={t}/>)}
+                </div>
+              }
+            </div>
+
+            {/* Правая панель — детали задачи */}
+            {sel&&(
+              <div style={{width:400,flexShrink:0,background:"white",borderRadius:14,border:"1px solid #e5e7eb",boxShadow:"0 2px 16px rgba(0,0,0,0.09)",overflow:"hidden"}}>
+                <div style={{background:"#1e293b",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1,paddingRight:8}}>
+                    <div style={{fontWeight:700,fontSize:15,color:"white",marginBottom:4}}>{sel.title}</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {(()=>{const st=STATUS_META[sel.status]||STATUS_META.new;return<span style={{background:st.bg,color:st.c,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700}}>{st.l}</span>;})()}
+                      {(()=>{const pr=PRIORITIES[sel.priority]||PRIORITIES.normal;return<span style={{background:pr.bg,color:pr.c,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}}>{pr.l}</span>;})()}
+                    </div>
+                  </div>
+                  <button onClick={()=>setSelectedTask(null)} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",fontSize:18,color:"white",borderRadius:6,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+                </div>
+                <div style={{padding:"14px 16px",maxHeight:"70vh",overflowY:"auto"}}>
+                  <div style={{fontSize:12,color:"#64748b",marginBottom:8,display:"flex",gap:12,flexWrap:"wrap"}}>
+                    <span>От: <b>{sel.createdByName}</b></span>
+                    <span>Кому: <b>{sel.assignedToName}</b></span>
+                    {sel.deadline&&<span>📅 <b>{fmtDate(sel.deadline)}</b></span>}
+                  </div>
+                  {sel.description&&<div style={{background:"#f8fafc",borderRadius:8,padding:"10px 12px",fontSize:13,color:"#374151",marginBottom:12,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sel.description}</div>}
+
+                  {/* Кнопки действий */}
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                    {sel.status==="new"&&sel.assignedTo===currentUserId&&(
+                      <button onClick={()=>acceptTask(sel)} style={btn("#d97706")}>✅ Принять задачу</button>
+                    )}
+                    {sel.status==="inprogress"&&sel.assignedTo===currentUserId&&(
+                      <button onClick={()=>markDoneTask(sel)} style={btn("#15803d")}>✓ Выполнено</button>
+                    )}
+                    {sel.status==="revision"&&sel.assignedTo===currentUserId&&(
+                      <button onClick={()=>acceptTask(sel)} style={btn("#d97706")}>↩ Принять в работу</button>
+                    )}
+                    {sel.status==="done"&&sel.createdBy===currentUserId&&(
+                      <>
+                        <button onClick={()=>closeTask(sel)} style={btn("#15803d")}>✅ Принять работу</button>
+                        <button onClick={()=>setShowRevInput(p=>!p)} style={btn("#dc2626")}>🔄 На корректировку</button>
+                      </>
+                    )}
+                  </div>
+                  {showRevInput&&sel.status==="done"&&(
+                    <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:8,padding:10,marginBottom:12}}>
+                      <textarea value={taskRevComment} onChange={e=>setTaskRevComment(e.target.value)} placeholder="Комментарий к корректировке..." rows={2} style={{width:"100%",boxSizing:"border-box",border:"1px solid #fca5a5",borderRadius:6,padding:"6px 8px",fontSize:12,fontFamily:"inherit",resize:"none",marginBottom:6}}/>
+                      <button onClick={()=>sendRevision(sel)} disabled={!(taskRevComment||"").trim()} style={btn("#dc2626",undefined,{fontSize:12})}>Отправить</button>
+                    </div>
+                  )}
+
+                  {/* Комментарии */}
+                  {sel.comments.length>0&&(
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Комментарии</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {sel.comments.map(c=>{
+                          const isMe=c.authorId===currentUserId;
+                          return(
+                            <div key={c.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:6,alignItems:"flex-end"}}>
+                              <div style={{background:isMe?"#dbeafe":"#f1f5f9",borderRadius:isMe?"12px 12px 2px 12px":"12px 12px 12px 2px",padding:"8px 10px",maxWidth:"85%"}}>
+                                <div style={{fontSize:11,color:isMe?"#1d4ed8":"#64748b",fontWeight:600,marginBottom:2}}>{c.authorName}</div>
+                                <div style={{fontSize:12,color:"#1e293b",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{c.text}</div>
+                                <div style={{fontSize:10,color:"#94a3b8",marginTop:3,textAlign:isMe?"right":"left"}}>{fmtTs(c.createdAt)}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Поле для нового комментария */}
+                  {sel.status!=="closed"&&(
+                    <div style={{borderTop:"1px solid #e5e7eb",paddingTop:10}}>
+                      <div style={{display:"flex",gap:6}}>
+                        <input value={taskComment} onChange={e=>setTaskComment(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&addComment(sel)} placeholder="Написать комментарий..." style={{...inp,flex:1,fontSize:12,padding:"6px 10px"}}/>
+                        <button onClick={()=>addComment(sel)} disabled={!(taskComment||"").trim()} style={btn("#be185d",undefined,{fontSize:12,padding:"6px 12px"})}>→</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {showAudit&&isAdmin&&(()=>{
         const ACTION_META={
@@ -4039,6 +4396,59 @@ export default function App(){
               </div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:12}}>
+              {dueReminders.length>0&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>🔔 Напоминания</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {dueReminders.map((b,i)=>(
+                      <div key={b.id} style={{background:"#fffbeb",borderRadius:12,border:"1px solid #fcd34d",overflow:"hidden",position:"relative",cursor:"pointer"}} onClick={()=>{setShowNotifs(false);setTab("bookmarks");}}>
+                        <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:"#f59e0b"}}/>
+                        <div style={{padding:"10px 12px 10px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#92400e",marginBottom:3,whiteSpace:"pre-wrap"}}>{b.text}</div>
+                            {b.policyRef&&<div style={{fontSize:11,color:"#b45309"}}>📋 {b.policyRef.insuredName||b.policyRef.policyNum}</div>}
+                          </div>
+                          <button onClick={e=>{e.stopPropagation();const list=bookmarks.map(x=>x.id===b.id?{...x,reminderFired:true}:x);saveBookmarks(list);}} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1}}>×</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {taskUnread.length>0&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#be185d",textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>📋 Задачи</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {taskUnread.map(t=>{
+                      const isAssignee=t.assignedTo===currentUserId;
+                      const lastComment=t.comments&&t.comments.length>0?t.comments[t.comments.length-1]:null;
+                      const hasNewComment=lastComment&&lastComment.authorId!==currentUserId;
+                      // Определяем цвет и сообщение по статусу + роли
+                      const meta=(()=>{
+                        if(t.status==="new"&&isAssignee)return{icon:"📋",title:"Новая задача",sub:"От: "+t.createdByName,bg:"#eff6ff",border:"#93c5fd",strip:"#3b82f6",col:"#1d4ed8"};
+                        if(t.status==="inprogress"&&!isAssignee)return{icon:"▶️",title:"Принята в работу",sub:t.assignedToName+" начал выполнение",bg:"#fffbeb",border:"#fcd34d",strip:"#f59e0b",col:"#92400e"};
+                        if(t.status==="done"&&!isAssignee)return{icon:"✅",title:"Ожидает подтверждения",sub:t.assignedToName+" отметил как выполнено",bg:"#f0fdf4",border:"#86efac",strip:"#22c55e",col:"#15803d"};
+                        if(t.status==="revision"&&isAssignee)return{icon:"🔄",title:"На корректировку",sub:"Проверьте комментарий создателя",bg:"#fff1f2",border:"#fca5a5",strip:"#ef4444",col:"#dc2626"};
+                        if(hasNewComment)return{icon:"💬",title:"Новый комментарий",sub:lastComment.authorName+": "+lastComment.text.slice(0,35)+(lastComment.text.length>35?"…":""),bg:"#f5f3ff",border:"#c4b5fd",strip:"#8b5cf6",col:"#6d28d9"};
+                        return{icon:"📌",title:t.title,sub:"",bg:"#f8fafc",border:"#e2e8f0",strip:"#94a3b8",col:"#475569"};
+                      })();
+                      return(
+                        <div key={t.id} onClick={()=>{setShowNotifs(false);setTab("tasks");setSelectedTask(t);const upd=tasks.map(x=>x.id===t.id?{...x,unreadFor:(x.unreadFor||[]).filter(u=>u!==currentUserId)}:x);saveTasks(upd);}} style={{background:meta.bg,borderRadius:14,border:"1px solid "+meta.border,overflow:"hidden",position:"relative",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
+                          <div style={{position:"absolute",left:0,top:0,bottom:0,width:5,background:meta.strip}}/>
+                          <div style={{padding:"13px 14px 13px 22px",display:"flex",gap:12,alignItems:"flex-start"}}>
+                            <div style={{fontSize:26,lineHeight:1,flexShrink:0,marginTop:2}}>{meta.icon}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:800,color:meta.col,marginBottom:4}}>{meta.title}</div>
+                              <div style={{fontSize:14,fontWeight:700,color:"#1e293b",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                              {meta.sub&&<div style={{fontSize:12,color:"#64748b",lineHeight:1.4}}>{meta.sub}</div>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {notifs.length===0
                 ?<div style={{textAlign:"center",color:"#94a3b8",marginTop:80,padding:"0 20px"}}>
                   <div style={{fontSize:48,marginBottom:16}}>🎉</div>
@@ -4053,7 +4463,7 @@ export default function App(){
                   const icon=isExp?"⏰":"💳";
                   const title=isExp?`Истекает через ${p._daysLeft} дн.`:"Не оплачен";
                   return(
-                    <div key={i} style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 2px 10px rgba(15,23,42,0.09)",border:"1px solid #e2e8f0",position:"relative"}}>
+                    <div key={i} onClick={()=>{setShowNotifs(false);setSearchViewPol(p);}} style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 2px 10px rgba(15,23,42,0.09)",border:"1px solid #e2e8f0",position:"relative",cursor:"pointer"}}>
                       <div style={{position:"absolute",left:0,top:0,bottom:0,width:5,background:stripCol}}/>
                       <div style={{padding:"12px 14px 14px 20px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
