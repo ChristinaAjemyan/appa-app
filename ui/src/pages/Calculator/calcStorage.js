@@ -10,11 +10,12 @@ export const calcStorage = {
 
   async set(key, jsonStr) {
     const value = JSON.parse(jsonStr);
-    await fetch(`${BASE}/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${BASE}/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value }),
     });
+    if (!res.ok) throw new Error(`Storage save failed (${res.status})`);
   },
 
   async list(prefix) {

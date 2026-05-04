@@ -32,9 +32,10 @@ router.get('/:key', async (req, res) => {
 router.put('/:key', async (req, res) => {
   try {
     const { value } = req.body;
-    const [record] = await db.CalcResultStorage.upsert({ key: req.params.key, value });
-    res.json({ key: record.key, value: record.value });
+    await db.CalcResultStorage.upsert({ key: req.params.key, value });
+    res.json({ ok: true });
   } catch (err) {
+    console.error('calc_result_storage PUT error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
