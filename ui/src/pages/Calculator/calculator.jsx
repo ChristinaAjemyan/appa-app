@@ -296,20 +296,6 @@ function parseVolRows(rows){
   }).filter(p=>p.amount>0||p.productName);
 }
 
-function parseOfficeRows(rows){
-  if(rows.length<2)return{profit:0,rows:[],fileName:""};
-  const headers=rows[0].map(h=>String(h).toLowerCase().trim());
-  const profitIdx=headers.findIndex(h=>h.includes("прибыль")||h.includes("profit"));
-  const companyIdx=headers.findIndex(h=>h.includes("компани")||h.includes("company"));
-  const amountIdx=headers.findIndex(h=>h.includes("страховая")||h.includes("сумма")||h.includes("amount"));
-  const parsed=rows.slice(1).map((r,i)=>({
-    _id:"off-"+i,
-    company:companyIdx>=0?String(r[companyIdx]||""):"",
-    amount:parseFloat(String(r[amountIdx>=0?amountIdx:0]||"").replace(/\s/g,"").replace(",","."))||0,
-    profit:profitIdx>=0?parseFloat(String(r[profitIdx]||"").replace(/\s/g,"").replace(",","."))||0:0,
-  })).filter(r=>r.profit!==0||r.amount!==0);
-  return{profit:parsed.reduce((s,r)=>s+r.profit,0),rows:parsed};
-}
 
 function checkCond(v,cond){
   const sv=String(v||"");const n=Number(v);const cv=Number(cond.value);const cv2=Number(cond.value2);
@@ -630,8 +616,6 @@ export default function App(){
   const[storedPols,setStoredPols]=useState([]);
   const[volSession,setVolSession]=useState([]);
   const[storedVol,setStoredVol]=useState([]);
-  const[officeSession,setOfficeSession]=useState(null);
-  const[storedOffice,setStoredOffice]=useState({profit:0,rows:[]});
   const[dbPols,setDbPols]=useState([]);
   const[dbLoaded,setDbLoaded]=useState(false);
   const[expiryF,setExpiryF]=useState(CURRENT_MONTH);
@@ -652,7 +636,7 @@ export default function App(){
   const[showAllPayroll,setShowAllPayroll]=useState(false);
   const[officeCodes,setOfficeCodes]=useState([]);
   const[newOfficeCode,setNewOfficeCode]=useState("");
-  const fileRef=useRef();const backRef=useRef();const officeFileRef=useRef();const importOfficeRef=useRef();
+  const fileRef=useRef();const backRef=useRef();const importOfficeRef=useRef();
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
@@ -717,7 +701,6 @@ export default function App(){
   const[rnResults,setRnResults]=useState(null);
   const[rnLoading,setRnLoading]=useState(false);
   const[tasks,setTasks]=useState([]);
-  const[tasksLoaded,setTasksLoaded]=useState(false);
   const[taskTab,setTaskTab]=useState("active");
   const[selectedTask,setSelectedTask]=useState(null);
   const[taskFormOpen,setTaskFormOpen]=useState(false);
@@ -753,11 +736,10 @@ export default function App(){
   })();},[]);
 
   useEffect(()=>{
-    setUploadedFiles([]);setVolSession([]);setOfficeSession(null);setActiveAgent(null);setOfficeCodes([]);setNewOfficeCode("");
+    setUploadedFiles([]);setVolSession([]);setActiveAgent(null);setOfficeCodes([]);setNewOfficeCode("");
     (async()=>{
       try{const r=await calcStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
-      try{const r=await calcStorage.get("officeStore:"+selMonth).catch(()=>null);if(r&&r.value)setStoredOffice(JSON.parse(r.value));else setStoredOffice({profit:0,rows:[]});}catch{setStoredOffice({profit:0,rows:[]});}
-      try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
+try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
       try{const r=await calcStorage.get("monthSnapshot:"+selMonth).catch(()=>null);if(r&&r.value)setMonthSnapshot(JSON.parse(r.value));else setMonthSnapshot(null);}catch{setMonthSnapshot(null);}
     })();
   },[selMonth]);
@@ -881,7 +863,6 @@ export default function App(){
       if(r?.value)setTasks(JSON.parse(r.value));
       else setTasks([]);
     }catch{setTasks([]);}
-    setTasksLoaded(true);
   };
   const saveTasks=(list)=>{setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(()=>{});};
   const currentUserId=role==="admin"?"admin":(currentEmployee?.id||"");
@@ -1095,22 +1076,8 @@ export default function App(){
   };
   const removeFile=co=>{if(co==="voluntary")setVolSession([]);else setUploadedFiles(p=>p.filter(f=>f.company!==co));};
 
-  const handleOfficeFile=e=>{
-    const file=e.target.files[0];if(!file)return;
-    const reader=new FileReader();
-    reader.onload=evt=>{
-      const wb=XLSX.read(evt.target.result,{type:"array",cellDates:true});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""}).filter(r=>r.some(c=>c!=="")).map(r=>r.map(c=>c instanceof Date?c:String(c)));
-      const result=parseOfficeRows(rows);
-      result.fileName=file.name;
-      setOfficeSession(result);
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value="";
-  };
 
-  const officeData=officeSession||storedOffice;
+
 
   const sessionPols=useMemo(()=>{
     try{
@@ -1220,7 +1187,6 @@ export default function App(){
     const snap={rates,volRates,exceptions,agentDir,managerConfig};
     calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:effVol})).catch(()=>{});
     calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
-    if(officeSession)calcStorage.set("officeStore:"+selMonth,JSON.stringify(officeSession)).catch(()=>{});
     setSavedOk(true);setTimeout(()=>setSavedOk(false),2500);
   };
 
@@ -1366,6 +1332,7 @@ export default function App(){
   const deleteAmexTopup=async(id)=>{
     if(!window.confirm("Удалить запись о пополнении?"))return;
     const _removed=amexTopups.find(t=>t.id===id);const updated=amexTopups.filter(t=>t.id!==id);
+    setAmexTopups(updated);
     await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(()=>{});
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
@@ -1577,27 +1544,6 @@ export default function App(){
 
   const agName=a=>{const n=getName(a.uid);if(n)return n;if(a.uid.startsWith("__raw__"))return a.uid.replace("__raw__","")+" (нет в справочнике)";return a.uid;};
 
-  const exportPayroll=(agentData,agentDir,month)=>{
-    const wb=XLSX.utils.book_new();
-    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
-    const header1=["Имя агента","768-код",...ALL_COMPANIES.flatMap(c=>[c,""]),"Итого","Подпись"];
-    const header2=["","", ...ALL_COMPANIES.flatMap(()=>["кол-во","сумма"]),"",""];
-    const rows=[header1,header2];
-    agentData.filter(a=>a.totalAgent>0).forEach(a=>{
-      const ic=(agentDir[a.uid]&&agentDir[a.uid].internalCode)||"";
-      const row=[gn(a.uid),ic];
-      ALL_COMPANIES.forEach(c=>{
-        const pols=a.policies.filter(p=>p.company===c&&!p.exception);
-        const sum=pols.reduce((s,p)=>s+p.agentComm,0);
-        row.push(pols.length>0?pols.length:"",sum>0?sum:"");
-      });
-      row.push(a.totalAgent,"");
-      rows.push(row);
-    });
-    const ws=XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb,ws,"Начисления "+fmtMonth(month));
-    XLSX.writeFile(wb,"Начисления_"+month+".xlsx");
-  };
 
   const polCols=["№ полиса","Компания","Страхователь","Марка","Рег.номер","Телефон","Начало","Окончание","Регион","БМ","Сумма","Ставка %","Начислено"];
   const polRow=p=>[p.policyNum,p.company,p.insuredName,p.car,p.carPlate,p.phone,p.startDateFmt,p.endDateFmt,p.region,p.bm,p.amount,p.exception?0:(p.agentRate||0),p.exception?0:p.agentComm];
