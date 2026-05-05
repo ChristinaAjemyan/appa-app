@@ -1392,7 +1392,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       try{
         const wb=XLSX.read(new Uint8Array(evt.target.result),{type:"array"});
         const isValidDate=s=>{if(!s)return false;return/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(s).getTime());};
-        const parseDate=s=>{if(!s)return"";const m=String(s).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;return String(s).trim();};
+        const parseDate=s=>{if(!s)return"";const num=Number(s);if(!isNaN(num)&&num>10000&&num<200000){const d=new Date(Date.UTC(1899,11,30)+num*86400000);if(!isNaN(d.getTime()))return`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;}const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;if(/^\d{4}-\d{2}-\d{2}$/.test(String(s)))return String(s).trim();return String(s).trim();};
         const parseBool=v=>{const s=String(v).trim().toLowerCase();return s==="true"||s==="1"||s==="yes";};
         const parseNum=v=>{const n=parseFloat(String(v).replace(/\s/g,"").replace(",","."));return isNaN(n)?0:n;};
         const allRows=[];
