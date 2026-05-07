@@ -305,7 +305,8 @@ function checkCond(v,cond){
   return false;
 }
 function checkExc(p,excepts,agentUid){
-  return excepts.filter(e=>e.enabled&&e.company===p.company).some(exc=>{
+  const co=detectCo(p.company)||p.company;
+  return excepts.filter(e=>e.enabled&&e.company===co).some(exc=>{
     if(exc.excludedAgents&&exc.excludedAgents.length&&exc.excludedAgents.includes(agentUid))return false;
     if(exc.type==="brand_whitelist"){
       if(!isExcBrand(p.car))return false;
@@ -325,7 +326,8 @@ const condLabel=c=>{
   if(c.op==="between")return f+" "+c.value+"–"+c.value2;return"";
 };
 const excReason=(p,excepts,agentUid)=>{
-  const exc=excepts.find(e=>e.enabled&&e.company===p.company&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(p.car)||p.term==="SH"))&&e.conditions.every(c=>checkCond(p[c.field],c)));
+  const co=detectCo(p.company)||p.company;
+  const exc=excepts.find(e=>e.enabled&&e.company===co&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(p.car)||p.term==="SH"))&&e.conditions.every(c=>checkCond(p[c.field],c)));
   if(!exc)return"—";const parts=exc.conditions.map(condLabel);if(exc.type==="brand_whitelist")parts.push("Марка: "+p.car);return parts.join(" + ");
 };
 
@@ -1517,55 +1519,63 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     // ── Sheet: Офис — ОСАГО ──────────────────────────────────────
     const mkOfficeOsagoSheet=()=>{
       const ws={};const pols=opReal.filter(p=>(p.polType||'osago')==='osago');
-      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Компания','Ставка %','Страховая премия ֏','Скидка ֏','Доход офиса ֏  (=премия×ставка%−скидка)']);
+      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Компания','Ставка %','Страховая премия ֏','Скидка ֏','Статус / Исключение','Доход офиса ֏  (=премия×ставка%−скидка)']);
       let tAmt=0,tDisc=0,tInc=0;
       pols.forEach((p,i)=>{
         const r=i+1,rn=r+1,ev=i%2===0;
-        const rate=getOfficeRate(p,effRates),disc=p.discount||0,inc=Math.max(0,Math.round(p.amount*rate/100)-disc);
+        const exc=checkExc(p,effExceptions,p.agentUid);
+        const reason=exc?excReason(p,effExceptions,p.agentUid)||'Исключён':'Зачёт';
+        const rate=getOfficeRate(p,effRates),disc=p.discount||0;
+        const inc=exc?0:Math.max(0,Math.round(p.amount*rate/100)-disc);
         tAmt+=p.amount||0;tDisc+=disc;tInc+=inc;
-        cel(ws,r,0,r,getS(false,ev,'n'));
-        cel(ws,r,1,p.agentUid||'ОФИС',getS(false,ev));
-        cel(ws,r,2,p.policyNum||'',getS(false,ev,'b'));
-        cel(ws,r,3,p.insuredName||'',getS(false,ev));
-        cel(ws,r,4,detectCo(p.company)||p.company||'',getS(false,ev));
-        cel(ws,r,5,rate,getS(false,ev,'n'));
-        cel(ws,r,6,p.amount||0,getS(false,ev,'n'));
-        cel(ws,r,7,disc,getS(false,ev,'n'));
-        cel(ws,r,8,inc,getS(false,ev,'f'),`G${rn}*F${rn}/100-H${rn}`);
+        cel(ws,r,0,r,getS(exc,ev,'n'));
+        cel(ws,r,1,p.agentUid||'ОФИС',getS(exc,ev));
+        cel(ws,r,2,p.policyNum||'',getS(exc,ev,'b'));
+        cel(ws,r,3,p.insuredName||'',getS(exc,ev));
+        cel(ws,r,4,detectCo(p.company)||p.company||'',getS(exc,ev));
+        cel(ws,r,5,exc?0:rate,getS(exc,ev,'n'));
+        cel(ws,r,6,p.amount||0,getS(exc,ev,'n'));
+        cel(ws,r,7,disc,getS(exc,ev,'n'));
+        cel(ws,r,8,reason,getS(exc,ev));
+        cel(ws,r,9,inc,getS(exc,ev,'f'),exc?`0`:`G${rn}*F${rn}/100-H${rn}`);
       });
       const rt=pols.length+1;
-      totRow(ws,rt,9,[{c:6,v:tAmt,formula:false},{c:7,v:tDisc,formula:false},{c:8,v:tInc,formula:true,formula:true}]);
-      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:8})].f=`SUM(I2:I${rt})`;
-      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:8}});
-      ws['!cols']=[5,20,14,30,12,9,18,12,28].map(w=>({wch:w}));
+      totRow(ws,rt,10,[{c:6,v:tAmt},{c:7,v:tDisc},{c:9,v:tInc,formula:true}]);
+      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:9})].f=`SUM(J2:J${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:9}});
+      ws['!cols']=[5,20,14,30,12,9,18,12,32,28].map(w=>({wch:w}));
       return ws;
     };
 
     // ── Sheet: Офис — Добровольные ──────────────────────────────
     const mkOfficeVolSheet=()=>{
       const ws={};const pols=opReal.filter(p=>p.polType==='voluntary');
-      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Продукт','Ставка %','Страховая премия ֏','Скидка ֏','Доход офиса ֏  (=премия×ставка%−скидка)']);
+      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Продукт','Ставка %','Страховая премия ֏','Скидка ֏','Статус / Исключение','Доход офиса ֏  (=премия×ставка%−скидка)']);
       let tAmt=0,tDisc=0,tInc=0;
       pols.forEach((p,i)=>{
         const r=i+1,rn=r+1,ev=i%2===0;
+        const exc=checkExc(p,effExceptions,p.agentUid);
+        const reason=exc?excReason(p,effExceptions,p.agentUid)||'Исключён':'Зачёт';
         const vr=(effVolRates.rates||[]).find(rv=>rv.name===p.productName);
-        const rate=vr?.officeRate||0,disc=p.discount||0,inc=Math.max(0,Math.round(p.amount*rate/100)-disc);
+        const rate=exc?0:(vr?.officeRate||0),disc=p.discount||0;
+        const inc=exc?0:Math.max(0,Math.round(p.amount*rate/100)-disc);
         tAmt+=p.amount||0;tDisc+=disc;tInc+=inc;
-        cel(ws,r,0,r,getS(false,ev,'n'));
-        cel(ws,r,1,p.agentUid||'ОФИС',getS(false,ev));
-        cel(ws,r,2,p.policyNum||'',getS(false,ev,'b'));
-        cel(ws,r,3,p.insuredName||'',getS(false,ev));
-        cel(ws,r,4,p.productName||'',getS(false,ev,'b'));
-        cel(ws,r,5,rate,getS(false,ev,'n'));
-        cel(ws,r,6,p.amount||0,getS(false,ev,'n'));
-        cel(ws,r,7,disc,getS(false,ev,'n'));
-        cel(ws,r,8,inc,getS(false,ev,'f'),`G${rn}*F${rn}/100-H${rn}`);
+        cel(ws,r,0,r,getS(exc,ev,'n'));
+        cel(ws,r,1,p.agentUid||'ОФИС',getS(exc,ev));
+        cel(ws,r,2,p.policyNum||'',getS(exc,ev,'b'));
+        cel(ws,r,3,p.insuredName||'',getS(exc,ev));
+        cel(ws,r,4,p.productName||'',getS(exc,ev,'b'));
+        cel(ws,r,5,rate,getS(exc,ev,'n'));
+        cel(ws,r,6,p.amount||0,getS(exc,ev,'n'));
+        cel(ws,r,7,disc,getS(exc,ev,'n'));
+        cel(ws,r,8,reason,getS(exc,ev));
+        cel(ws,r,9,inc,getS(exc,ev,'f'),exc?`0`:`G${rn}*F${rn}/100-H${rn}`);
       });
       const rt=pols.length+1;
-      totRow(ws,rt,9,[{c:6,v:tAmt},{c:7,v:tDisc},{c:8,v:tInc,formula:true}]);
-      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:8})].f=`SUM(I2:I${rt})`;
-      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:8}});
-      ws['!cols']=[5,20,14,30,20,9,18,12,28].map(w=>({wch:w}));
+      totRow(ws,rt,10,[{c:6,v:tAmt},{c:7,v:tDisc},{c:9,v:tInc,formula:true}]);
+      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:9})].f=`SUM(J2:J${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:9}});
+      ws['!cols']=[5,20,14,30,20,9,18,12,32,28].map(w=>({wch:w}));
       return ws;
     };
 
@@ -3911,8 +3921,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
         const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
         const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
-        const officeDirectOsago=opReal.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0)),0);
-        const officeDirectVol=opReal.filter(p=>p.polType==="voluntary").reduce((s,p)=>{const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
+        const officeDirectOsago=opReal.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;return s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0));},0);
+        const officeDirectVol=opReal.filter(p=>p.polType==="voluntary").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
         const osagoGross=osagoAgentIncome+officeDirectOsago;
         const volGross=volAgentIncome+officeDirectVol;
         const salesGross=osagoGross+volGross;
@@ -4023,8 +4033,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const missingRateWarnings=[];
         agentData.forEach(a=>a.policies.forEach(p=>{if(!p.exception&&p.officeRate===0)missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"ОСАГО (агент)",reason:`Нет ставки для «${p.company||"?"}»`});}));
         effVol.forEach(v=>{if(v.officeRate===0)missingRateWarnings.push({policyNum:v.policyNum||"—",insuredName:v.insuredName||"—",type:"Добровол. (агент)",reason:`Продукт «${v.productName||"?"}» не найден в справочнике`});});
-        opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(getOfficeRate(p,effRates)===0)missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"ОСАГО (офис прямой)",reason:`Нет ставки для «${p.company||"?"}»`});});
-        opReal.filter(p=>p.polType==="voluntary").forEach(p=>{if(!(effVolRates.rates||[]).find(r=>r.name===p.productName))missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"Добровол. (офис прямой)",reason:`Продукт «${p.productName||"?"}» не найден`});});
+        opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(!checkExc(p,effExceptions,p.agentUid)&&getOfficeRate(p,effRates)===0)missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"ОСАГО (офис прямой)",reason:`Нет ставки для «${p.company||"?"}»`});});
+        opReal.filter(p=>p.polType==="voluntary").forEach(p=>{if(!checkExc(p,effExceptions,p.agentUid)&&!(effVolRates.rates||[]).find(r=>r.name===p.productName))missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"Добровол. (офис прямой)",reason:`Продукт «${p.productName||"?"}» не найден`});});
         return(
           <div style={{maxWidth:960}}>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}}>
