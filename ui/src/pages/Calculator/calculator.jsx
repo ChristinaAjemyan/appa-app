@@ -1359,23 +1359,27 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
   const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormErrors([]);setOpFormOpen(true);};
-  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:"",paid_from_amex:pol.paid_from_amex||false});setOpFormErrors([]);setOpFormOpen(true);};
+  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false});setOpFormErrors([]);setOpFormOpen(true);};
   const openOpPay=(pol)=>{setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:new Date().toISOString().slice(0,10)});};
   const submitOpForm=()=>{
+    const editingPaid=!!(opEditPol?.paid)&&isAdmin;
     const errs=[];
-    if(!(opFD.insuredName||"").trim())errs.push("ФИО страхователя");
-    if(!(opFD.policyNum||"").trim())errs.push("№ полиса");
-    if(!(opFD.phone||"").trim())errs.push("Телефон");
-    if(!(opFD.agentUid||"").trim())errs.push("Оператор (принял полис)");
-    if(!opFD.date)errs.push("Дата составления");
-    if(!opFD.amount||parseFloat(opFD.amount)<=0)errs.push("Страховая премия (AMD)");
-    if(opFD.polType==="osago"){
-      if(!opFD.dateStart)errs.push("Дата вступления в силу");
-      if(!opFD.dateEnd)errs.push("Дата окончания");
-      if(!(opFD.carPlate||"").trim())errs.push("Рег. номер");
-      if(!opFD.bm)errs.push("БМ");
+    if(!editingPaid){
+      if(!(opFD.insuredName||"").trim())errs.push("ФИО страхователя");
+      if(!(opFD.policyNum||"").trim())errs.push("№ полиса");
+      if(!(opFD.phone||"").trim())errs.push("Телефон");
+      if(!(opFD.agentUid||"").trim())errs.push("Оператор (принял полис)");
+      if(!opFD.date)errs.push("Дата составления");
+      if(!opFD.amount||parseFloat(opFD.amount)<=0)errs.push("Страховая премия (AMD)");
+      if(opFD.polType==="osago"){
+        if(!opFD.dateStart)errs.push("Дата вступления в силу");
+        if(!opFD.dateEnd)errs.push("Дата окончания");
+        if(!(opFD.carPlate||"").trim())errs.push("Рег. номер");
+        if(!opFD.bm)errs.push("БМ");
+      }
     }
     if(errs.length){setOpFormErrors(errs);return;}
+    if(editingPaid&&!window.confirm("Вы изменяете данные уже оплаченного полиса.\n\nСтрахователь: "+(opFD.insuredName||opEditPol.insuredName||"—")+"\n№ полиса: "+(opFD.policyNum||opEditPol.policyNum||"—")+"\n\nПродолжить?"))return;
     setOpFormErrors([]);
     const _amt=parseFloat(opFD.amount)||0;
     const _disc=parseFloat(opFD.discount)||0;
@@ -1390,6 +1394,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       ?{paid:true,paidAt:new Date().toISOString(),paidAmount:parseFloat(opFD.amount||0)-(parseFloat(opFD.discount)||0),paymentType:opFD.paymentType,paidDate:today}
       :{};
     const data={...base,...typeData,...payData};
+    if(opEditPol?.paid&&opFD.paymentType)data.paymentType=opFD.paymentType;
     if(opEditPol)saveEditPol(opEditPol,data);else addOfficePol(data);
     setOpFormOpen(false);
   };
@@ -2681,13 +2686,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {opFormOpen&&(
               <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-                  {(()=>{const paidLock=!!(opEditPol?.paid);const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
+                  {(()=>{const paidLock=!!(opEditPol?.paid);const effectiveLock=paidLock&&!isAdmin;const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <h3 style={{margin:0,fontSize:16}}>{paidLock?"👁 Просмотр полиса":opEditPol?"✎ Редактировать полис":"➕ Новый полис"}</h3>
+                    <h3 style={{margin:0,fontSize:16}}>{paidLock&&!isAdmin?"👁 Просмотр полиса":paidLock&&isAdmin?"⚠ Редактировать оплаченный полис":opEditPol?"✎ Редактировать полис":"➕ Новый полис"}</h3>
                     {paidLock&&<span style={{background:"#dcfce7",color:"#166534",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>✓ Оплачен</span>}
                   </div>
+                  {paidLock&&isAdmin&&<div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#92400e"}}>⚠ Вы редактируете уже оплаченный полис. Изменения потребуют подтверждения.</div>}
                   {/* --- Тип продукта --- */}
-                  <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb",opacity:paidLock?0.6:1,pointerEvents:paidLock?"none":"auto"}}>
+                  <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb",opacity:effectiveLock?0.6:1,pointerEvents:effectiveLock?"none":"auto"}}>
                     {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].map(([k,l])=>(
                       <button key={k} onClick={()=>setOpFD(p=>({...initOpFD(),polType:k,insuredName:p.insuredName,phone:p.phone,policyNum:p.policyNum,agentUid:p.agentUid,date:p.date,comment:p.comment}))}
                         style={{flex:1,padding:"9px 0",fontSize:13,fontWeight:600,cursor:paidLock?"not-allowed":"pointer",border:"none",background:opFD.polType===k?"#2563eb":"#f8fafc",color:opFD.polType===k?"#fff":"#6b7280",transition:"all .15s"}}>
@@ -2700,11 +2706,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>ФИО страхователя{req}</div>
-                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(paidLock)}}/>
+                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>№ полиса{req}{(isLocked&&opEditPol||paidLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||paidLock)}}/>
+                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Телефон{req}</div>
@@ -2717,24 +2723,24 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Компания{req}</div>
-                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         {ALL_COMPANIES.map(c=><option key={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
-                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={flbl}>Дата составления{req}</div>
-                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Срок{req}</div>
-                      <div style={{display:"flex",gap:6,opacity:paidLock?0.6:1,pointerEvents:paidLock?"none":"auto"}}>
+                      <div style={{display:"flex",gap:6,opacity:effectiveLock?0.6:1,pointerEvents:effectiveLock?"none":"auto"}}>
                         {[["L","L (от 3 месяцев)"],["SH","SH (краткосрочный)"]].map(([k,l])=>(
                           <button key={k} onClick={()=>setOpFD(p=>({...p,term:k}))}
                             style={{...btn(opFD.term===k?"#1d4ed8":"#f3f4f6",opFD.term===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opFD.term===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
@@ -2745,40 +2751,40 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Дата вступления в силу{req}</div>
-                      <input type="date" value={opFD.dateStart||""} onChange={e=>setOpFD(p=>({...p,dateStart:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input type="date" value={opFD.dateStart||""} onChange={e=>setOpFD(p=>({...p,dateStart:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Дата окончания{req}</div>
-                      <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Транспортное средство</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Марка / модель авто</div>
-                      <input value={opFD.car||""} onChange={e=>setOpFD(p=>({...p,car:_ld(e.target.value,20)}))} placeholder="Toyota Camry..." maxLength={20} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input value={opFD.car||""} onChange={e=>setOpFD(p=>({...p,car:_ld(e.target.value,20)}))} placeholder="Toyota Camry..." maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Рег. номер{req}</div>
-                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Регион</div>
-                      <select value={opFD.region||""} onChange={e=>setOpFD(p=>({...p,region:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.region||""} onChange={e=>setOpFD(p=>({...p,region:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— выбрать —</option>
                         {["YR","AG","AR","AV","GH","LO","KT","SH","SY","VD","TV"].map(r=><option key={r} value={r}>{r}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={flbl}>БМ{req}</div>
-                      <select value={opFD.bm||""} onChange={e=>setOpFD(p=>({...p,bm:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.bm||""} onChange={e=>setOpFD(p=>({...p,bm:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— выбрать —</option>
                         {Array.from({length:25},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={flbl}>Мощность (л.с.)</div>
-                      <input type="text" value={opFD.power||""} onChange={e=>setOpFD(p=>({...p,power:_dig(e.target.value,4)}))} placeholder="л.с." maxLength={4} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input type="text" value={opFD.power||""} onChange={e=>setOpFD(p=>({...p,power:_dig(e.target.value,4)}))} placeholder="л.с." maxLength={4} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Статус полиса{req}</div>
@@ -2796,31 +2802,31 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Продукт</div>
                   <div style={{marginBottom:14}}>
                     {(volRates.rates||[]).length>0
-                      ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                           <option value="">— выбрать продукт —</option>
                           {(volRates.rates||[]).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
                         </select>
-                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     }
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Полис</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Компания{req}</div>
-                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         {ALL_COMPANIES.map(c=><option key={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
-                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
                       </select>
                     </div>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>Дата составления{req}</div>
-                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(paidLock)}}/>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
                     </div>
                   </div>
                   </>)}
@@ -2829,11 +2835,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Страховая премия (AMD){req}{isLocked&&opEditPol&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||paidLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||paidLock)}}/>
+                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Скидка (AMD){req}</div>
-                      <input type="text" value={opFD.discount||"0"} onChange={e=>setOpFD(p=>({...p,discount:_dig(e.target.value,5)}))} placeholder="0" maxLength={5} disabled={paidLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(paidLock)}}/>
+                      <input type="text" value={opFD.discount||"0"} onChange={e=>setOpFD(p=>({...p,discount:_dig(e.target.value,5)}))} placeholder="0" maxLength={5} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(effectiveLock)}}/>
                     </div>
                     <div style={{gridColumn:"1/-1",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:12,color:"#166534"}}>К оплате клиентом:</span>
@@ -2883,8 +2889,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                   {paidLock&&opEditPol&&(
                     <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#166534"}}>
-                      <div style={{fontWeight:700,marginBottom:4}}>✓ Данные об оплате</div>
-                      <div>Сумма: <strong>{fmt(opEditPol.paidAmount||0)}</strong> · Дата: <strong>{fmtPolDate(opEditPol.paidDate)}</strong> · Способ: <strong>{fmtPay(opEditPol.paymentType)}</strong></div>
+                      <div style={{fontWeight:700,marginBottom:6}}>✓ Данные об оплате</div>
+                      <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                        <span>Сумма: <strong>{fmt(opEditPol.paidAmount||0)}</strong></span>
+                        <span>Дата: <strong>{fmtPolDate(opEditPol.paidDate)}</strong></span>
+                        <span style={{display:"flex",alignItems:"center",gap:6}}>
+                          Способ:{isAdmin
+                            ?<select value={opFD.paymentType||""} onChange={e=>setOpFD(p=>({...p,paymentType:e.target.value}))} style={{...finp,padding:"2px 6px",fontSize:12,fontWeight:700,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:6,cursor:"pointer"}}>
+                                <option value="cash">💵 Наличные</option>
+                                <option value="acba">🏦 ACBA</option>
+                                <option value="ineco">🏦 ИНЭКО</option>
+                              </select>
+                            :<strong style={{marginLeft:4}}>{fmtPay(opEditPol.paymentType)}</strong>
+                          }
+                        </span>
+                      </div>
+                      {isAdmin&&<div style={{fontSize:11,color:"#15803d",marginTop:6}}>Нажмите «Сохранить изменения» чтобы применить.</div>}
                     </div>
                   )}
                   {opFormErrors.length>0&&(
