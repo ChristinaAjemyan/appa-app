@@ -1482,6 +1482,169 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
   };
 
+  const exportDetailedIncomeXlsx=()=>{
+    const wb=XLSXStyle.utils.book_new();
+    const EC=XLSXStyle.utils.encode_cell;
+    const ER=XLSXStyle.utils.encode_range;
+    const brd={top:{style:'thin',color:{rgb:'CBD5E1'}},bottom:{style:'thin',color:{rgb:'CBD5E1'}},left:{style:'thin',color:{rgb:'CBD5E1'}},right:{style:'thin',color:{rgb:'CBD5E1'}}};
+    const Sty=(fg,bold,rgb,align)=>({fill:fg?{patternType:'solid',fgColor:{rgb:fg}}:{patternType:'none'},font:{bold:!!bold,color:{rgb:rgb||'1E293B'},name:'Calibri',sz:10},border:brd,alignment:{horizontal:align||'left',vertical:'center'}});
+    const S_HDR=Sty('1E3A5F',true,'FFFFFF','center');
+    const S_TOT_L=Sty('FDE68A',true,'78350F','left');
+    const S_TOT_N=Sty('FDE68A',true,'78350F','right');
+    const S_TOT_F=Sty('FCD34D',true,'78350F','right');
+    const getS=(exc,even,type)=>{
+      if(exc)return type==='n'?Sty('FFF7ED',false,'B45309','right'):type==='f'?Sty('FEF3C7',false,'92400E','right'):Sty('FFF7ED',false,'B45309');
+      if(type==='n')return even?Sty('EFF6FF',false,'334155','right'):Sty(null,false,'334155','right');
+      if(type==='f')return even?Sty('DBEAFE',false,'1D4ED8','right'):Sty('F0F9FF',false,'1D4ED8','right');
+      if(type==='b')return even?Sty('EFF6FF',true,'0F172A'):Sty(null,true,'0F172A');
+      return even?Sty('EFF6FF',false,'334155'):Sty(null,false,'334155');
+    };
+    const cel=(ws,r,c,v,s,f)=>{const o={v:v??'',s,t:typeof v==='number'?'n':'s'};if(f)o.f=f;ws[EC({r,c})]=o;};
+    const hdr=(ws,arr)=>arr.forEach((h,c)=>cel(ws,0,c,h,S_HDR));
+    const totRow=(ws,row,ncols,sumCols,labelCol=0)=>{
+      for(let c=0;c<ncols;c++){
+        const sc=sumCols.find(x=>x.c===c);
+        if(c===labelCol)cel(ws,row,c,'ИТОГО',S_TOT_L);
+        else if(sc)cel(ws,row,c,sc.v,sc.formula?S_TOT_F:S_TOT_N,sc.formula?sc.formula:undefined);
+        else cel(ws,row,c,'',S_TOT_L);
+      }
+    };
+    const operatorUids=new Set(managerConfig?.operatorUids||[]);
+    const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР'));
+    const gName=uid=>{const a=agentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
+    const gCode=uid=>agentDir[uid]?.internalCode||uid||'';
+
+    // ── Sheet: Офис — ОСАГО ──────────────────────────────────────
+    const mkOfficeOsagoSheet=()=>{
+      const ws={};const pols=opReal.filter(p=>(p.polType||'osago')==='osago');
+      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Компания','Ставка %','Страховая премия ֏','Скидка ֏','Доход офиса ֏  (=премия×ставка%−скидка)']);
+      let tAmt=0,tDisc=0,tInc=0;
+      pols.forEach((p,i)=>{
+        const r=i+1,rn=r+1,ev=i%2===0;
+        const rate=getOfficeRate(p,effRates),disc=p.discount||0,inc=Math.max(0,Math.round(p.amount*rate/100)-disc);
+        tAmt+=p.amount||0;tDisc+=disc;tInc+=inc;
+        cel(ws,r,0,r,getS(false,ev,'n'));
+        cel(ws,r,1,p.agentUid||'ОФИС',getS(false,ev));
+        cel(ws,r,2,p.policyNum||'',getS(false,ev,'b'));
+        cel(ws,r,3,p.insuredName||'',getS(false,ev));
+        cel(ws,r,4,detectCo(p.company)||p.company||'',getS(false,ev));
+        cel(ws,r,5,rate,getS(false,ev,'n'));
+        cel(ws,r,6,p.amount||0,getS(false,ev,'n'));
+        cel(ws,r,7,disc,getS(false,ev,'n'));
+        cel(ws,r,8,inc,getS(false,ev,'f'),`G${rn}*F${rn}/100-H${rn}`);
+      });
+      const rt=pols.length+1;
+      totRow(ws,rt,9,[{c:6,v:tAmt,formula:false},{c:7,v:tDisc,formula:false},{c:8,v:tInc,formula:true,formula:true}]);
+      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:8})].f=`SUM(I2:I${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:8}});
+      ws['!cols']=[5,20,14,30,12,9,18,12,28].map(w=>({wch:w}));
+      return ws;
+    };
+
+    // ── Sheet: Офис — Добровольные ──────────────────────────────
+    const mkOfficeVolSheet=()=>{
+      const ws={};const pols=opReal.filter(p=>p.polType==='voluntary');
+      hdr(ws,['#','Код сотрудника / агента','№ полиса','Страхователь','Продукт','Ставка %','Страховая премия ֏','Скидка ֏','Доход офиса ֏  (=премия×ставка%−скидка)']);
+      let tAmt=0,tDisc=0,tInc=0;
+      pols.forEach((p,i)=>{
+        const r=i+1,rn=r+1,ev=i%2===0;
+        const vr=(effVolRates.rates||[]).find(rv=>rv.name===p.productName);
+        const rate=vr?.officeRate||0,disc=p.discount||0,inc=Math.max(0,Math.round(p.amount*rate/100)-disc);
+        tAmt+=p.amount||0;tDisc+=disc;tInc+=inc;
+        cel(ws,r,0,r,getS(false,ev,'n'));
+        cel(ws,r,1,p.agentUid||'ОФИС',getS(false,ev));
+        cel(ws,r,2,p.policyNum||'',getS(false,ev,'b'));
+        cel(ws,r,3,p.insuredName||'',getS(false,ev));
+        cel(ws,r,4,p.productName||'',getS(false,ev,'b'));
+        cel(ws,r,5,rate,getS(false,ev,'n'));
+        cel(ws,r,6,p.amount||0,getS(false,ev,'n'));
+        cel(ws,r,7,disc,getS(false,ev,'n'));
+        cel(ws,r,8,inc,getS(false,ev,'f'),`G${rn}*F${rn}/100-H${rn}`);
+      });
+      const rt=pols.length+1;
+      totRow(ws,rt,9,[{c:6,v:tAmt},{c:7,v:tDisc},{c:8,v:tInc,formula:true}]);
+      ws[EC({r:rt,c:6})].f=`SUM(G2:G${rt})`;ws[EC({r:rt,c:7})].f=`SUM(H2:H${rt})`;ws[EC({r:rt,c:8})].f=`SUM(I2:I${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:8}});
+      ws['!cols']=[5,20,14,30,20,9,18,12,28].map(w=>({wch:w}));
+      return ws;
+    };
+
+    // ── Sheet helper: Агенты/Менеджер ОСАГО ─────────────────────
+    const mkAgentOsagoSheet=(rows)=>{
+      const ws={};
+      hdr(ws,['#','Агент','Код','№ полиса','Страхователь','Компания','Ставка офиса %','Ставка агента %','Статус / Ограничение','Страховая премия ֏','Доход офиса ֏  (=премия×ставка%)','Выплата агенту ֏  (=премия×ставка%)','Прибыль офиса ֏  (=доход−выплата)']);
+      let tAmt=0,tOff=0,tAgt=0,tPrf=0,ri=1;
+      rows.forEach(({uid,policies})=>{
+        policies.forEach(p=>{
+          const exc=!!p.exception,ev=(ri-1)%2===0,rn=ri+1;
+          const reason=exc?excReason(p,effExceptions,uid)||'Исключён':'Зачёт';
+          tAmt+=p.amount||0;tOff+=p.officeComm||0;tAgt+=p.agentComm||0;tPrf+=(p.officeComm||0)-(p.agentComm||0);
+          cel(ws,ri,0,ri,getS(exc,ev,'n'));
+          cel(ws,ri,1,gName(uid),getS(exc,ev,'b'));
+          cel(ws,ri,2,gCode(uid),getS(exc,ev));
+          cel(ws,ri,3,p.policyNum||'',getS(exc,ev,'b'));
+          cel(ws,ri,4,p.insuredName||'',getS(exc,ev));
+          cel(ws,ri,5,detectCo(p.company)||p.company||'',getS(exc,ev));
+          cel(ws,ri,6,p.officeRate||0,getS(exc,ev,'n'));
+          cel(ws,ri,7,p.agentRate||0,getS(exc,ev,'n'));
+          cel(ws,ri,8,reason,getS(exc,ev));
+          cel(ws,ri,9,p.amount||0,getS(exc,ev,'n'));
+          cel(ws,ri,10,p.officeComm||0,getS(exc,ev,'f'),exc?`0`:`J${rn}*G${rn}/100`);
+          cel(ws,ri,11,p.agentComm||0,getS(exc,ev,'f'),exc?`0`:`J${rn}*H${rn}/100`);
+          cel(ws,ri,12,(p.officeComm||0)-(p.agentComm||0),getS(exc,ev,'f'),`K${rn}-L${rn}`);
+          ri++;
+        });
+      });
+      const rt=ri;
+      totRow(ws,rt,13,[{c:9,v:tAmt},{c:10,v:tOff,formula:true},{c:11,v:tAgt},{c:12,v:tPrf,formula:true}]);
+      ws[EC({r:rt,c:9})].f=`SUM(J2:J${rt})`;ws[EC({r:rt,c:10})].f=`SUM(K2:K${rt})`;ws[EC({r:rt,c:11})].f=`SUM(L2:L${rt})`;ws[EC({r:rt,c:12})].f=`SUM(M2:M${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:12}});
+      ws['!cols']=[5,22,12,14,30,12,14,14,28,18,28,28,28].map(w=>({wch:w}));
+      return ws;
+    };
+
+    // ── Sheet: Добровольные агентов ──────────────────────────────
+    const mkVolAgentsSheet=()=>{
+      const ws={};
+      hdr(ws,['#','Агент','Код','№ полиса','Страхователь','Продукт','Компания','Ставка офиса %','Ставка агента %','Страховая премия ֏','Доход офиса ֏  (=премия×ставка%)','Выплата агенту ֏  (=премия×ставка%)','Прибыль офиса ֏  (=доход−выплата)']);
+      let tAmt=0,tOff=0,tAgt=0,tPrf=0;
+      effVol.forEach((v,i)=>{
+        const r=i+1,rn=r+1,ev=i%2===0;
+        tAmt+=v.amount||0;tOff+=v.officeComm||0;tAgt+=v.agentComm||0;tPrf+=(v.officeComm||0)-(v.agentComm||0);
+        cel(ws,r,0,r,getS(false,ev,'n'));
+        cel(ws,r,1,gName(v.agentUid),getS(false,ev,'b'));
+        cel(ws,r,2,v.agentCode||gCode(v.agentUid),getS(false,ev));
+        cel(ws,r,3,v.policyNum||'',getS(false,ev,'b'));
+        cel(ws,r,4,v.insuredName||'',getS(false,ev));
+        cel(ws,r,5,v.productName||'',getS(false,ev,'b'));
+        cel(ws,r,6,v.company||'',getS(false,ev));
+        cel(ws,r,7,v.officeRate||0,getS(false,ev,'n'));
+        cel(ws,r,8,v.agentRate||0,getS(false,ev,'n'));
+        cel(ws,r,9,v.amount||0,getS(false,ev,'n'));
+        cel(ws,r,10,v.officeComm||0,getS(false,ev,'f'),`J${rn}*H${rn}/100`);
+        cel(ws,r,11,v.agentComm||0,getS(false,ev,'f'),`J${rn}*I${rn}/100`);
+        cel(ws,r,12,(v.officeComm||0)-(v.agentComm||0),getS(false,ev,'f'),`K${rn}-L${rn}`);
+      });
+      const rt=effVol.length+1;
+      totRow(ws,rt,13,[{c:9,v:tAmt},{c:10,v:tOff,formula:true},{c:11,v:tAgt},{c:12,v:tPrf,formula:true}]);
+      ws[EC({r:rt,c:9})].f=`SUM(J2:J${rt})`;ws[EC({r:rt,c:10})].f=`SUM(K2:K${rt})`;ws[EC({r:rt,c:11})].f=`SUM(L2:L${rt})`;ws[EC({r:rt,c:12})].f=`SUM(M2:M${rt})`;
+      ws['!ref']=ER({s:{r:0,c:0},e:{r:rt,c:12}});
+      ws['!cols']=[5,22,12,14,30,18,12,14,14,18,28,28,28].map(w=>({wch:w}));
+      return ws;
+    };
+
+    const agentRows=agentData.filter(a=>!operatorUids.has(a.uid)).map(a=>({uid:a.uid,policies:a.policies}));
+    const mgrRows=agentData.filter(a=>operatorUids.has(a.uid)).map(a=>({uid:a.uid,policies:a.policies}));
+
+    if(opReal.filter(p=>(p.polType||'osago')==='osago').length)XLSXStyle.utils.book_append_sheet(wb,mkOfficeOsagoSheet(),'Офис — ОСАГО');
+    if(opReal.filter(p=>p.polType==='voluntary').length)XLSXStyle.utils.book_append_sheet(wb,mkOfficeVolSheet(),'Офис — Добровол.');
+    if(agentRows.some(r=>r.policies.length))XLSXStyle.utils.book_append_sheet(wb,mkAgentOsagoSheet(agentRows),'Агенты — ОСАГО');
+    if(mgrRows.some(r=>r.policies.length))XLSXStyle.utils.book_append_sheet(wb,mkAgentOsagoSheet(mgrRows),'Менеджер — ОСАГО');
+    if(effVol.length)XLSXStyle.utils.book_append_sheet(wb,mkVolAgentsSheet(),'Добровол. агентов');
+
+    XLSXStyle.writeFile(wb,`Детальный_доход_${selMonth}.xlsx`);
+  };
+
   const exportIncomeExcel=async()=>{
     const wb=new JSZip();
     const month=selMonth;
@@ -3864,7 +4027,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         opReal.filter(p=>p.polType==="voluntary").forEach(p=>{if(!(effVolRates.rates||[]).find(r=>r.name===p.productName))missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"Добровол. (офис прямой)",reason:`Продукт «${p.productName||"?"}» не найден`});});
         return(
           <div style={{maxWidth:960}}>
-            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}}>
+              <button onClick={exportDetailedIncomeXlsx} style={btn("#0f766e",undefined,{fontSize:12})}>⬇ Подробный Excel (по полисам)</button>
               <button onClick={exportIncomeExcel} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
             </div>
             {ChartBlock}
