@@ -306,16 +306,17 @@ function checkCond(v,cond){
 }
 function checkExc(p,excepts,agentUid){
   const co=detectCo(p.company)||p.company;
+  const np={...p,region:normReg(p.region)||p.region};
   return excepts.filter(e=>e.enabled&&e.company===co).some(exc=>{
     if(exc.excludedAgents&&exc.excludedAgents.length&&exc.excludedAgents.includes(agentUid))return false;
     if(exc.type==="brand_whitelist"){
-      if(!isExcBrand(p.car))return false;
-      if(p.term==="SH")return false;
-      const regionOk=!p.region||p.region!=="YR";
+      if(!isExcBrand(np.car))return false;
+      if(np.term==="SH")return false;
+      const regionOk=!np.region||np.region!=="YR";
       const bmCond=exc.conditions.find(c=>c.field==="bm");
-      return regionOk&&(bmCond?checkCond(p.bm,bmCond):true);
+      return regionOk&&(bmCond?checkCond(np.bm,bmCond):true);
     }
-    return exc.conditions.every(c=>checkCond(p[c.field],c));
+    return exc.conditions.every(c=>checkCond(np[c.field],c));
   });
 }
 const condLabel=c=>{
@@ -327,19 +328,22 @@ const condLabel=c=>{
 };
 const excReason=(p,excepts,agentUid)=>{
   const co=detectCo(p.company)||p.company;
-  const exc=excepts.find(e=>e.enabled&&e.company===co&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(p.car)||p.term==="SH"))&&e.conditions.every(c=>checkCond(p[c.field],c)));
-  if(!exc)return"—";const parts=exc.conditions.map(condLabel);if(exc.type==="brand_whitelist")parts.push("Марка: "+p.car);return parts.join(" + ");
+  const np={...p,region:normReg(p.region)||p.region};
+  const exc=excepts.find(e=>e.enabled&&e.company===co&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(np.car)||np.term==="SH"))&&e.conditions.every(c=>checkCond(np[c.field],c)));
+  if(!exc)return"—";const parts=exc.conditions.map(condLabel);if(exc.type==="brand_whitelist")parts.push("Марка: "+np.car);return parts.join(" + ");
 };
 
-const getArmGroup=bm=>bm<=9?"1-9":bm<=14?"10-14":"15-25";
+const getArmGroup=bm=>{const n=Number(bm);if(n>=1&&n<=9)return"1-9";if(n>=10&&n<=14)return"10-14";return"15-25";};
 const getTierMgr=(sales,thresholds)=>{let t=1;for(let i=1;i<thresholds.length;i++)if(sales>=thresholds[i])t=i+1;return t;};
 const getMgrPolicyRate=(p,cfg)=>{
-  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
-  return(cfg.managerRates&&cfg.managerRates[p.company])||0;
+  const co=detectCo(p.company)||p.company;
+  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
+  return(cfg.managerRates&&cfg.managerRates[co])||0;
 };
 const getOpPolicyRate=(p,tier,cfg)=>{
-  if(p.company==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
-  return(cfg.operatorRates&&cfg.operatorRates[p.company]&&cfg.operatorRates[p.company][tier-1])||0;
+  const co=detectCo(p.company)||p.company;
+  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
+  return(cfg.operatorRates&&cfg.operatorRates[co]&&cfg.operatorRates[co][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
   const co=detectCo(p.company)||p.company;
@@ -1093,7 +1097,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         if(!company||!rows.length)return;
         parseCoRows(rows,company).forEach(p=>{
           const agentUid=codeLookup[company+":"+p.agentCode]||null;
-          result.push({...p,agentUid,exception:checkExc(p,exceptions,agentUid)});
+          result.push({...p,agentUid,exception:checkExc(p,effExceptions,agentUid)});
         });
       });
       return result;
