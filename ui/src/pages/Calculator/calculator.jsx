@@ -654,6 +654,7 @@ export default function App(){
   const[pinChangeMsg,setPinChangeMsg]=useState("");
   const[opCurrentMonth,setOpCurrentMonth]=useState([]);
   const[opPrevUnpaid,setOpPrevUnpaid]=useState([]);
+  const[opPrevAll,setOpPrevAll]=useState([]);
   const[opLoaded,setOpLoaded]=useState(false);
   const[opFormOpen,setOpFormOpen]=useState(false);
   const[opEditPol,setOpEditPol]=useState(null);
@@ -1235,12 +1236,16 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
       const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
       if(!otherKeys.length){setOpPrevUnpaid([]);setOpLoaded(true);return;}
-      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);return r&&r.value?JSON.parse(r.value):[];}catch{return[];}}));
-      setOpPrevUnpaid(results.flat().filter(p=>!p.paid).sort((a,b)=>new Date(a.date)-new Date(b.date)));
+      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const mk=key.replace("officePol:","");return JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk}));}return[];}catch{return[];}}));
+      const allPrev=results.flat().filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+      setOpPrevUnpaid(allPrev.filter(p=>!p.paid).sort((a,b)=>new Date(a.date)-new Date(b.date)));
+      setOpPrevAll(allPrev);
     }catch{setOpPrevUnpaid([]);}
     setOpLoaded(true);
   };
   useEffect(()=>{if(tab==="officesales")loadOfficeSales();},[tab,selMonth]);
+
+  const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
 
   const loadCashBook=async()=>{
     setCashLoaded(false);
@@ -1255,7 +1260,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             const mk=key.replace("officePol:","");
             const pols=JSON.parse(r.value);
             if(mk===selMonth){allPols.push(...pols);}
-            else{allPols.push(...pols.filter(p=>p.paid&&p.paidDate&&p.paidDate.startsWith(selMonth)));}
+            else{allPols.push(...pols.filter(p=>p.paid&&p.paidDate&&normPaidDate(p.paidDate).slice(0,7)===selMonth));}
           }
         }catch{}
       }));
@@ -1265,7 +1270,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
   const closeCashDay=(date)=>{
-    const pols=cashMonthPols.filter(p=>p.paid&&p.paidDate===date);
+    const pols=cashMonthPols.filter(p=>p.paid&&normPaidDate(p.paidDate)===date);
     const snapshot=pols.map(p=>({_id:p._id,insuredName:p.insuredName,polType:p.polType,productName:p.productName,car:p.car,carPlate:p.carPlate,policyNum:p.policyNum,company:p.company,phone:p.phone,date:p.date,amount:p.amount,discount:p.discount,paidAmount:p.paidAmount,paymentType:p.paymentType,paidDate:p.paidDate,agentUid:p.agentUid,comment:p.comment}));
     const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
     const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
@@ -2483,10 +2488,44 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               </div>
             )}
 
+            {/* Search results from other months (paid+unpaid) — only when search is active */}
+            {opLoaded&&opSrch&&(()=>{
+              const prevMatches=opPrevAll.filter(filterPol).filter(p=>!opPrevUnpaid.some(u=>u._id===p._id)||p.paid);
+              // show all prev matches (both paid and unpaid that match); unpaid already shown in yellow section above
+              const paidMatches=opPrevAll.filter(p=>p.paid&&matchesText(p));
+              if(!paidMatches.length)return null;
+              return(
+              <div style={{border:"1px solid #a5b4fc",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+                <div style={{background:"#eef2ff",padding:"10px 16px",fontWeight:700,fontSize:14,color:"#3730a3",display:"flex",alignItems:"center",gap:8}}>
+                  <span>🔍 Найдено в других месяцах — {paidMatches.length} оплач.</span>
+                </div>
+                <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#e0e7ff"}}>{["Тип","Дата сост.","Месяц","Страхователь","Телефон","Компания","Продукт / Авто","Рег.номер","№ полиса","Сумма","Оплачено","Тип оплаты"].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                  <tbody>{paidMatches.map((pol,i)=>(
+                    <tr key={pol._id} style={{background:i%2===0?"#f5f3ff":"#ede9fe",borderBottom:"1px solid #c4b5fd"}}>
+                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280",whiteSpace:"nowrap"}}>{fmtMonth(pol._monthKey)}</td>
+                      <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
+                      <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
+                      <td style={td}>{pol.company||"—"}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.polType==="voluntary"?(pol.productName||"—"):(pol.car||"—")}</td>
+                      <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
+                      <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
+                      <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></td>
+                      <td style={{...td,fontSize:11}}>{fmtPay(pol.paymentType)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+              </div>
+              );
+            })()}
+
             {/* Current month — ОСАГО */}
             {opLoaded&&(()=>{
               const list=osagoList.filter(filterPol);
-              const t=calcTotals(osagoList);
+              const t=calcTotals(list);
               return(
               <div style={{border:"1px solid #dbeafe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
                 <div style={{background:"#eff6ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
@@ -2539,7 +2578,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {/* Current month — Добровольные */}
             {opLoaded&&(()=>{
               const list=volList.filter(filterPol);
-              const t=calcTotals(volList);
+              const t=calcTotals(list);
               return(
               <div style={{border:"1px solid #e9d5ff",borderRadius:8,overflow:"hidden",marginBottom:20}}>
                 <div style={{background:"#f5f3ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
@@ -2596,8 +2635,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {/* Policy form modal */}
             {opFormOpen&&(
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
-                onClick={e=>{if(e.target===e.currentTarget)setOpFormOpen(false);}}>
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
                   {(()=>{const paidLock=!!(opEditPol?.paid);const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -2879,7 +2917,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         // Group live payments by paidDate
         const byDay={};
         cashMonthPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
-          const d=p.paidDate;
+          const d=normPaidDate(p.paidDate);
           if(!byDay[d])byDay[d]={cash:0,acba:0,ineco:0,pols:[]};
           const amt=p.paidAmount||0;
           if(p.paymentType==="acba")byDay[d].acba+=amt;
