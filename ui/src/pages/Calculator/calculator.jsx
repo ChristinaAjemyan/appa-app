@@ -664,6 +664,8 @@ export default function App(){
   const[opPayData,setOpPayData]=useState({});
   const[opSearch,setOpSearch]=useState("");
   const[opStatusFilter,setOpStatusFilter]=useState("all");
+  const[opUnpaidPage,setOpUnpaidPage]=useState(0);
+  const[opOsagoPage,setOpOsagoPage]=useState(0);
   const[opDateFrom,setOpDateFrom]=useState("");
   const[opDateTo,setOpDateTo]=useState("");
   const[opEndFrom,setOpEndFrom]=useState("");
@@ -1243,7 +1245,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }catch{setOpPrevUnpaid([]);}
     setOpLoaded(true);
   };
-  useEffect(()=>{if(tab==="officesales")loadOfficeSales();},[tab,selMonth]);
+  useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}},[tab,selMonth]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
 
@@ -2453,59 +2455,28 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
 
-            {/* Unpaid from previous months */}
-            {opLoaded&&opPrevUnpaid.filter(filterPol).length>0&&(
-              <div style={{border:"2px solid #fcd34d",borderRadius:8,overflow:"hidden",marginBottom:20}}>
-                <div style={{background:"#fffbeb",padding:"10px 16px",fontWeight:700,fontSize:14,color:"#92400e",display:"flex",alignItems:"center",gap:8}}>
-                  <span>⚠ Неоплаченные из предыдущих месяцев — {opPrevUnpaid.length}{opSrch&&opPrevUnpaid.filter(filterPol).length!==opPrevUnpaid.length?" (показано "+opPrevUnpaid.filter(filterPol).length+")":""}</span>
-                </div>
-                <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead><tr style={{background:"#fef9c3"}}>{["Тип","Дата сост.","Месяц","Страхователь","Телефон","Компания","Продукт / Авто","Срок","Статус","№ полиса","Сумма","К оплате","Агент","Коммент.",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
-                  <tbody>{opPrevUnpaid.filter(filterPol).map((pol,i)=>(
-                    <tr key={pol._id} style={{background:i%2===0?"white":"#fefce8",borderBottom:"1px solid #fde68a"}}>
-                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
-                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
-                      <td style={{...td,fontSize:11,color:"#6b7280",whiteSpace:"nowrap"}}>{fmtMonth(pol._monthKey)}</td>
-                      <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
-                      <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
-                      <td style={td}>{pol.company||"—"}</td>
-                      <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.polType==="voluntary"?(pol.productName||"—"):(pol.car||"—")}</td>
-                      <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
-                      <td style={{...td,fontSize:11}}>{pol.polStatus?<span style={{background:"#f3e8ff",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>{fmtPolStatus(pol.polStatus)}</span>:"—"}</td>
-                      <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
-                      <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
-                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
-                      <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
-                      <td style={{...td,fontSize:11,color:"#6b7280",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol.comment||""}</td>
-                      <td style={{...td,whiteSpace:"nowrap"}}>
-                        {!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
-                        {!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
-                        {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table></div>
-              </div>
-            )}
 
-            {/* Search results from other months (paid+unpaid) — only when search is active */}
+            {/* Unified search results — shown instead of sections when search is active */}
             {opLoaded&&opSrch&&(()=>{
-              const prevMatches=opPrevAll.filter(filterPol).filter(p=>!opPrevUnpaid.some(u=>u._id===p._id)||p.paid);
-              // show all prev matches (both paid and unpaid that match); unpaid already shown in yellow section above
-              const paidMatches=opPrevAll.filter(p=>p.paid&&matchesText(p));
-              if(!paidMatches.length)return null;
+              const allPols=[...opPrevAll,...opCurrentMonth.map(p=>({...p,_monthKey:p._monthKey||selMonth}))];
+              const seen=new Set();const unique=allPols.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
+              const results=unique.filter(filterPol).sort((a,b)=>new Date(b.date)-new Date(a.date));
+              if(!results.length)return <div style={{padding:32,textAlign:"center",color:"#9ca3af",fontSize:13}}>Ничего не найдено</div>;
               return(
               <div style={{border:"1px solid #a5b4fc",borderRadius:8,overflow:"hidden",marginBottom:16}}>
-                <div style={{background:"#eef2ff",padding:"10px 16px",fontWeight:700,fontSize:14,color:"#3730a3",display:"flex",alignItems:"center",gap:8}}>
-                  <span>🔍 Найдено в других месяцах — {paidMatches.length} оплач.</span>
+                <div style={{background:"#eef2ff",padding:"10px 16px",fontWeight:700,fontSize:14,color:"#3730a3"}}>
+                  🔍 Результаты поиска — {results.length} полис{results.length===1?"":"ов"}
                 </div>
                 <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead><tr style={{background:"#e0e7ff"}}>{["Тип","Дата сост.","Месяц","Страхователь","Телефон","Компания","Продукт / Авто","Рег.номер","№ полиса","Сумма","Оплачено","Тип оплаты"].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
-                  <tbody>{paidMatches.map((pol,i)=>(
-                    <tr key={pol._id} style={{background:i%2===0?"#f5f3ff":"#ede9fe",borderBottom:"1px solid #c4b5fd"}}>
-                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
+                  <thead><tr style={{background:"#e0e7ff"}}>{["Статус","Тип","Дата","Месяц","Страхователь","Телефон","Компания","Авто / Продукт","Рег.номер","№ полиса","Сумма","К оплате","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                  <tbody>{results.map((pol,i)=>{
+                    const isCur=pol._monthKey===selMonth;
+                    return(
+                    <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
+                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
+                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗</span>}</td>
                       <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
-                      <td style={{...td,fontSize:11,color:"#6b7280",whiteSpace:"nowrap"}}>{fmtMonth(pol._monthKey)}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}><span style={{background:isCur?"#dcfce7":"#f1f5f9",color:isCur?"#166534":"#475569",borderRadius:8,padding:"1px 7px",fontSize:11,fontWeight:600}}>{fmtMonth(pol._monthKey)}</span></td>
                       <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
                       <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
                       <td style={td}>{pol.company||"—"}</td>
@@ -2513,19 +2484,30 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
                       <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
                       <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
-                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></td>
-                      <td style={{...td,fontSize:11}}>{fmtPay(pol.paymentType)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
+                      <td style={{...td,fontSize:11}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
+                      <td style={{...td,whiteSpace:"nowrap"}}>
+                        {!pol.paid&&!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                        {!pol.paid&&!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                        {pol.paid&&actBtn("👁","#e0f2fe","#0369a1",()=>openOpEdit(pol))}
+                        {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
+                      </td>
                     </tr>
-                  ))}</tbody>
+                    );
+                  })}</tbody>
                 </table></div>
               </div>
               );
             })()}
 
             {/* Current month — ОСАГО */}
-            {opLoaded&&(()=>{
+            {opLoaded&&!opSrch&&(()=>{
               const list=osagoList.filter(filterPol);
               const t=calcTotals(list);
+              const PAGE=10;const totalPages=Math.ceil(list.length/PAGE);
+              const page=Math.min(opOsagoPage,Math.max(0,totalPages-1));
+              const pageItems=list.slice(page*PAGE,(page+1)*PAGE);
               return(
               <div style={{border:"1px solid #dbeafe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
                 <div style={{background:"#eff6ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
@@ -2542,9 +2524,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет полисов ОСАГО за {fmtMonth(selMonth)}</div>
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
-                  :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  :<><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead><tr style={{background:"#dbeafe"}}>{["Статус","Дата сост.","Страхователь","Телефон","Компания","Марка авто","Рег.номер","Срок","Ст-с","№ полиса","Сумма","К оплате","Оператор","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
-                    <tbody>{list.map((pol,i)=>(
+                    <tbody>{pageItems.map((pol,i)=>(
                       <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
                         <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
@@ -2570,13 +2552,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       </tr>
                     ))}</tbody>
                   </table></div>
+                  {totalPages>1&&(
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,padding:"10px 16px",borderTop:"1px solid #dbeafe",background:"#eff6ff"}}>
+                      <button onClick={()=>setOpOsagoPage(p=>Math.max(0,p-1))} disabled={page===0} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"4px 12px"}),opacity:page===0?0.4:1}}>‹ Назад</button>
+                      <span style={{fontSize:13,color:"#6b7280"}}>Стр. {page+1} из {totalPages} ({list.length} всего)</span>
+                      <button onClick={()=>setOpOsagoPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"4px 12px"}),opacity:page===totalPages-1?0.4:1}}>Вперёд ›</button>
+                    </div>
+                  )}</>
                 }
               </div>
               );
             })()}
 
             {/* Current month — Добровольные */}
-            {opLoaded&&(()=>{
+            {opLoaded&&!opSrch&&(()=>{
               const list=volList.filter(filterPol);
               const t=calcTotals(list);
               return(
@@ -2621,6 +2610,61 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     ))}</tbody>
                   </table></div>
                 }
+              </div>
+              );
+            })()}
+
+            {/* All unpaid section */}
+            {opLoaded&&!opSrch&&allUnpaid.length>0&&(()=>{
+              const PAGE=10;
+              const totalPages=Math.ceil(allUnpaid.length/PAGE);
+              const page=Math.min(opUnpaidPage,totalPages-1);
+              const pageItems=allUnpaid.slice(page*PAGE,(page+1)*PAGE);
+              const totalAmt=allUnpaid.reduce((s,p)=>s+(p.amount||0),0);
+              const totalNet=allUnpaid.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0);
+              return(
+              <div style={{border:"1px solid #fca5a5",borderRadius:8,overflow:"hidden",marginBottom:20}}>
+                <div style={{background:"#fef2f2",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <span style={{fontWeight:700,fontSize:14,color:"#991b1b"}}>📋 Все неоплаченные — {allUnpaid.length}</span>
+                  <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap",alignItems:"center"}}>
+                    <span style={{color:"#374151"}}>Сумма: <strong>{fmt(totalAmt)}</strong></span>
+                    <span style={{color:"#dc2626"}}>К оплате: <strong>{fmt(totalNet)}</strong></span>
+                    <button onClick={()=>exportOfficeSalesExcel(allUnpaid,"все-неоплаченные")} style={btn("#16a34a",undefined,{fontSize:12,padding:"5px 10px"})}>⬇ Excel</button>
+                  </div>
+                </div>
+                <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#fee2e2"}}>{["Тип","Месяц","Дата сост.","Страхователь","Телефон","Компания","Продукт / Авто","Рег.номер","Срок","№ полиса","Сумма","К оплате","Агент","Коммент.",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                  <tbody>{pageItems.map((pol,i)=>(
+                    <tr key={pol._id} style={{background:i%2===0?"white":"#fff5f5",borderBottom:"1px solid #fecaca"}}>
+                      <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}><span style={{background:pol._monthKey===selMonth?"#dcfce7":"#fef9c3",color:pol._monthKey===selMonth?"#166534":"#92400e",borderRadius:8,padding:"1px 7px",fontSize:11,fontWeight:600}}>{fmtMonth(pol._monthKey||selMonth)}</span></td>
+                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
+                      <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
+                      <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
+                      <td style={td}>{pol.company||"—"}</td>
+                      <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.polType==="voluntary"?(pol.productName||"—"):(pol.car||"—")}</td>
+                      <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
+                      <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
+                      <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
+                      <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626"}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
+                      <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
+                      <td style={{...td,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol.comment||"—"}</td>
+                      <td style={{...td,whiteSpace:"nowrap"}}>
+                        {!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
+                        {!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
+                        {isAdmin&&actBtn("✕","#fff1f2","#dc2626",()=>deleteOfficePol(pol))}
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+                {totalPages>1&&(
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,padding:"10px 16px",borderTop:"1px solid #fecaca",background:"#fef2f2"}}>
+                    <button onClick={()=>setOpUnpaidPage(p=>Math.max(0,p-1))} disabled={page===0} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"4px 12px"}),opacity:page===0?0.4:1}}>‹ Назад</button>
+                    <span style={{fontSize:13,color:"#6b7280"}}>Стр. {page+1} из {totalPages} ({allUnpaid.length} всего)</span>
+                    <button onClick={()=>setOpUnpaidPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"4px 12px"}),opacity:page===totalPages-1?0.4:1}}>Вперёд ›</button>
+                  </div>
+                )}
               </div>
               );
             })()}
