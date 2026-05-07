@@ -340,25 +340,27 @@ const getOpPolicyRate=(p,tier,cfg)=>{
   return(cfg.operatorRates&&cfg.operatorRates[p.company]&&cfg.operatorRates[p.company][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
-  if(agentUid&&rates.agentOverrides&&rates.agentOverrides[agentUid]&&rates.agentOverrides[agentUid][p.company]!==undefined)
-    return rates.agentOverrides[agentUid][p.company];
-  if(p.company==="Armenia"){
+  const co=detectCo(p.company)||p.company;
+  if(agentUid&&rates.agentOverrides&&rates.agentOverrides[agentUid]&&rates.agentOverrides[agentUid][co]!==undefined)
+    return rates.agentOverrides[agentUid][co];
+  if(co==="Armenia"){
     const isShort=p.term==="SH"||(p.days!=null&&p.days<88);
     if(isShort)return(rates.armeniaShort&&rates.armeniaShort.agentRate)||20;
     return(rates.armeniaAgent&&rates.armeniaAgent[getArmGroup(p.bm)])||0;
   }
-  if(p.company==="Nairi"&&(p.region==="YR"||p.region==="KT")){
+  if(co==="Nairi"&&(p.region==="YR"||p.region==="KT")){
     return p.bm>=1&&p.bm<=7?((rates.nairiRegion&&rates.nairiRegion.bm1_7)||10):((rates.nairiRegion&&rates.nairiRegion.bm8_25)||5);
   }
-  return(rates.agentRates&&rates.agentRates[p.company])||0;
+  return(rates.agentRates&&rates.agentRates[co])||0;
 };
 const getOfficeRate=(p,rates)=>{
-  if(p.company==="Armenia"){
+  const co=detectCo(p.company)||p.company;
+  if(co==="Armenia"){
     const isShort=p.term==="SH"||(p.days!=null&&p.days<88);
     if(isShort)return(rates.armeniaShort&&rates.armeniaShort.officeRate)||37;
     return(rates.armeniaOffice&&rates.armeniaOffice[getArmGroup(p.bm)])||0;
   }
-  return(rates.officeRates&&rates.officeRates[p.company])||0;
+  return(rates.officeRates&&rates.officeRates[co])||0;
 };
 
 function exportToExcel(agentData,effVol,agentDir,totals,excepts){
@@ -1245,7 +1247,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }catch{setOpPrevUnpaid([]);}
     setOpLoaded(true);
   };
-  useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}},[tab,selMonth]);
+  useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
 
@@ -3855,6 +3857,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </div>
           );
         })();
+        const missingRateWarnings=[];
+        agentData.forEach(a=>a.policies.forEach(p=>{if(!p.exception&&p.officeRate===0)missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"ОСАГО (агент)",reason:`Нет ставки для «${p.company||"?"}»`});}));
+        effVol.forEach(v=>{if(v.officeRate===0)missingRateWarnings.push({policyNum:v.policyNum||"—",insuredName:v.insuredName||"—",type:"Добровол. (агент)",reason:`Продукт «${v.productName||"?"}» не найден в справочнике`});});
+        opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(getOfficeRate(p,effRates)===0)missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"ОСАГО (офис прямой)",reason:`Нет ставки для «${p.company||"?"}»`});});
+        opReal.filter(p=>p.polType==="voluntary").forEach(p=>{if(!(effVolRates.rates||[]).find(r=>r.name===p.productName))missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"Добровол. (офис прямой)",reason:`Продукт «${p.productName||"?"}» не найден`});});
         return(
           <div style={{maxWidth:960}}>
             <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
@@ -3954,6 +3961,28 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               ))}
             </div>
+            {missingRateWarnings.length>0&&(
+              <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:8}}>⚠ Полисы вне расчёта ({missingRateWarnings.length})</div>
+                <div style={{fontSize:12,color:"#78350f",marginBottom:10}}>Эти полисы включены в объём продаж, но не учтены в доходах — не найдены ставки:</div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#fef3c7"}}>
+                    <th style={{...th,fontSize:12,padding:"4px 10px",textAlign:"left",color:"#92400e"}}>№ полиса</th>
+                    <th style={{...th,fontSize:12,padding:"4px 10px",textAlign:"left",color:"#92400e"}}>Страхователь</th>
+                    <th style={{...th,fontSize:12,padding:"4px 10px",textAlign:"left",color:"#92400e"}}>Тип</th>
+                    <th style={{...th,fontSize:12,padding:"4px 10px",textAlign:"left",color:"#92400e"}}>Причина</th>
+                  </tr></thead>
+                  <tbody>{missingRateWarnings.map((w,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid #fde68a",background:i%2===0?"#fffbeb":"#fff7ed"}}>
+                      <td style={{...td,fontSize:12,padding:"4px 10px",fontWeight:600}}>{w.policyNum}</td>
+                      <td style={{...td,fontSize:12,padding:"4px 10px"}}>{w.insuredName}</td>
+                      <td style={{...td,fontSize:12,padding:"4px 10px",color:"#92400e"}}>{w.type}</td>
+                      <td style={{...td,fontSize:12,padding:"4px 10px",color:"#dc2626"}}>{w.reason}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
             {/* Доходы от продаж */}
             <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
               <div style={{background:"#1d4ed8",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>💰 Доходы от продаж — {fmtMonth(selMonth)}</div>
