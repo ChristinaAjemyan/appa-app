@@ -1245,7 +1245,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const loadCashBook=async()=>{
     setCashLoaded(false);
     try{const r=await calcStorage.get("cashBook:"+selMonth).catch(()=>null);setCashDays(r&&r.value?JSON.parse(r.value):{});}catch{setCashDays({});}
-    try{const r=await calcStorage.get("officePol:"+selMonth).catch(()=>null);setCashMonthPols(r&&r.value?JSON.parse(r.value):[]);}catch{setCashMonthPols([]);}
+    try{
+      const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
+      const allPols=[];
+      await Promise.all((res.keys||[]).map(async key=>{
+        try{
+          const r=await calcStorage.get(key).catch(()=>null);
+          if(r&&r.value){
+            const mk=key.replace("officePol:","");
+            const pols=JSON.parse(r.value);
+            if(mk===selMonth){allPols.push(...pols);}
+            else{allPols.push(...pols.filter(p=>p.paid&&p.paidDate&&p.paidDate.startsWith(selMonth)));}
+          }
+        }catch{}
+      }));
+      setCashMonthPols(allPols);
+    }catch{setCashMonthPols([]);}
     setCashLoaded(true);
   };
   useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
