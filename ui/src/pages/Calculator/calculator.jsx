@@ -1240,7 +1240,31 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setDbPols(all);setDbLoaded(true);
   };
 
+  const migrateOfficePols=async()=>{
+    try{
+      const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
+      const allKeys=res.keys||[];if(!allKeys.length)return;
+      const buckets={};
+      for(const key of allKeys){const r=await calcStorage.get(key).catch(()=>null);if(r?.value)buckets[key]=JSON.parse(r.value);}
+      let changed=false;
+      for(const key of Object.keys(buckets)){
+        const bm=key.replace("officePol:","");
+        const misplaced=buckets[key].filter(p=>p.date&&p.date.slice(0,7)&&p.date.slice(0,7)!==bm);
+        if(!misplaced.length)continue;
+        changed=true;
+        buckets[key]=buckets[key].filter(p=>!p.date||!p.date.slice(0,7)||p.date.slice(0,7)===bm);
+        for(const p of misplaced){
+          const tm=p.date.slice(0,7);const tk="officePol:"+tm;
+          if(!buckets[tk])buckets[tk]=[];
+          if(!buckets[tk].find(ep=>ep._id===p._id))buckets[tk].push({...p,_monthKey:tm});
+        }
+      }
+      if(!changed)return;
+      for(const key of Object.keys(buckets))await calcStorage.set(key,JSON.stringify(buckets[key])).catch(()=>{});
+    }catch{}
+  };
   const loadOfficeSales=async()=>{
+    await migrateOfficePols();
     setOpLoaded(false);
     const mk=selMonth;
     try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
@@ -1305,7 +1329,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true});
-  const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);const _src=fd.paid_from_amex?"\u{1F4B3} Amex":"\u{1F3E6} Другой";logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);};
+  const addOfficePol=(fd)=>{
+    const policyMonth=(fd.date||selMonth).slice(0,7);
+    const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};
+    const pol={_id:genUid(),_monthKey:policyMonth,...fd,...defaults};
+    const _src=fd.paid_from_amex?"\u{1F4B3} Amex":"\u{1F3E6} Другой";
+    logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);
+    if(policyMonth===selMonth){saveOpMonth([...opCurrentMonth,pol]);return;}
+    calcStorage.get("officePol:"+policyMonth).catch(()=>null).then(r=>{
+      const existing=r&&r.value?JSON.parse(r.value):[];
+      if(!existing.find(p=>p._id===pol._id))calcStorage.set("officePol:"+policyMonth,JSON.stringify([...existing,pol])).catch(()=>{});
+    });
+    setOpPrevAll(prev=>[...prev.filter(p=>p._id!==pol._id),pol]);
+    if(!pol.paid)setOpPrevUnpaid(prev=>[...prev.filter(p=>p._id!==pol._id),pol].sort((a,b)=>new Date(a.date)-new Date(b.date)));
+  };
   const saveEditPol=async(pol,updates)=>{
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?{...p,...updates}:p));}
     else{
