@@ -2522,8 +2522,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");};
         const allFiltered=[...opPrevUnpaid,...opCurrentMonth].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
-        const osagoList=opCurrentMonth.filter(p=>(p.polType||"osago")==="osago");
-        const volList=opCurrentMonth.filter(p=>p.polType==="voluntary");
+        const basePols=(()=>{if(!hasDateFilter)return opCurrentMonth;const seen=new Set();return[...opPrevAll,...opCurrentMonth].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
+        const osagoList=basePols.filter(p=>(p.polType||"osago")==="osago");
+        const volList=basePols.filter(p=>p.polType==="voluntary");
         const sortPols=list=>[...list].sort((a,b)=>{let av,bv;if(tableSortCol==="amount"){av=Number(a.amount||0);bv=Number(b.amount||0);}else if(tableSortCol==="net"){av=Number(a.amount||0)-Number(a.discount||0);bv=Number(b.amount||0)-Number(b.discount||0);}else if(tableSortCol==="date"){av=(a.date||"").slice(0,10);bv=(b.date||"").slice(0,10);}else{av=(a[tableSortCol]||"").toLowerCase();bv=(b[tableSortCol]||"").toLowerCase();}return tableSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av<bv?1:av>bv?-1:0);});
         const srtIco=col=><span style={{marginLeft:3,fontSize:9,opacity:tableSortCol===col?1:0.35}}>{tableSortCol===col?(tableSortDir==="asc"?"▲":"▼"):"⇅"}</span>;
         const srtStyle=col=>({...tblH,cursor:"pointer",userSelect:"none",...(tableSortCol===col?{background:"#bfdbfe",color:"#1e40af"}:{})});
