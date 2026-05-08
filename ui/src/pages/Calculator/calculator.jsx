@@ -678,6 +678,7 @@ export default function App(){
   const[opDateTo,setOpDateTo]=useState("");
   const[opEndFrom,setOpEndFrom]=useState("");
   const[opEndTo,setOpEndTo]=useState("");
+  const[opCompanyFilter,setOpCompanyFilter]=useState("all");
   const[opAgentFilter,setOpAgentFilter]=useState("all");
   const[tableSortCol,setTableSortCol]=useState("date");
   const[tableSortDir,setTableSortDir]=useState("desc");
@@ -2555,11 +2556,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           if(opEndTo&&e&&e>opEndTo)return false;
           return true;
         };
+        const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
         const matchesAgent=p=>opAgentFilter==="all"||p.agentUid===opAgentFilter;
-        const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesAgent(p);
+        const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
-        const hasFilter=hasDateFilter||opAgentFilter!=="all";
-        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpAgentFilter("all");};
+        const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all";
+        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");};
         const allFiltered=[...opPrevUnpaid,...opCurrentMonth].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{if(!hasDateFilter)return opCurrentMonth;const seen=new Set();return[...opPrevAll,...opCurrentMonth].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
@@ -2679,6 +2681,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <span style={{color:"#9ca3af",fontSize:13}}>—</span>
                   <input type="date" value={opEndTo} onChange={e=>setOpEndTo(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
                 </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Компания</span>
+                <select value={opCompanyFilter} onChange={e=>setOpCompanyFilter(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:120}}>
+                  <option value="all">Все</option>
+                  {ALL_COMPANIES.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Оператор</span>
