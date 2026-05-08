@@ -678,6 +678,8 @@ export default function App(){
   const[opDateTo,setOpDateTo]=useState("");
   const[opEndFrom,setOpEndFrom]=useState("");
   const[opEndTo,setOpEndTo]=useState("");
+  const[tableSortCol,setTableSortCol]=useState("date");
+  const[tableSortDir,setTableSortDir]=useState("desc");
   const[cashDays,setCashDays]=useState({});
   const[cashLoaded,setCashLoaded]=useState(false);
   const[cashExpandDay,setCashExpandDay]=useState(null);
@@ -1254,6 +1256,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOpLoaded(true);
   };
   useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
+  useEffect(()=>{const uid=currentEmployee?.id||"admin";try{const s=localStorage.getItem("opSortPref:"+uid);if(s){const{col,dir}=JSON.parse(s);if(col)setTableSortCol(col);if(dir)setTableSortDir(dir);}}catch{}},[currentEmployee?.id]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
 
@@ -1300,6 +1303,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
   const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
+  const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true});
   const addOfficePol=(fd)=>{const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};const pol={_id:genUid(),_monthKey:selMonth,...fd,...defaults};saveOpMonth([...opCurrentMonth,pol]);const _src=fd.paid_from_amex?"\u{1F4B3} Amex":"\u{1F3E6} Другой";logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);};
   const saveEditPol=async(pol,updates)=>{
@@ -2506,7 +2510,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const matchesText=p=>!opSrch||(p.insuredName||"").toLowerCase().includes(opSrch)||(p.phone||"").includes(opSrch)||(p.policyNum||"").toLowerCase().includes(opSrch)||(p.car||"").toLowerCase().includes(opSrch)||(p.carPlate||"").toLowerCase().includes(opSrch);
         const matchesStatus=p=>opStatusFilter==="all"||(opStatusFilter==="paid"&&p.paid)||(opStatusFilter==="unpaid"&&!p.paid);
         const matchesDates=p=>{
-          const d=p.date||"";const e=p.dateEnd||"";
+          const d=(p.date||"").slice(0,10);const e=(p.dateEnd||"").slice(0,10);
           if(opDateFrom&&d&&d<opDateFrom)return false;
           if(opDateTo&&d&&d>opDateTo)return false;
           if(opEndFrom&&e&&e<opEndFrom)return false;
@@ -2520,6 +2524,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const osagoList=opCurrentMonth.filter(p=>(p.polType||"osago")==="osago");
         const volList=opCurrentMonth.filter(p=>p.polType==="voluntary");
+        const sortPols=list=>[...list].sort((a,b)=>{let av,bv;if(tableSortCol==="amount"){av=Number(a.amount||0);bv=Number(b.amount||0);}else if(tableSortCol==="net"){av=Number(a.amount||0)-Number(a.discount||0);bv=Number(b.amount||0)-Number(b.discount||0);}else if(tableSortCol==="date"){av=(a.date||"").slice(0,10);bv=(b.date||"").slice(0,10);}else{av=(a[tableSortCol]||"").toLowerCase();bv=(b[tableSortCol]||"").toLowerCase();}return tableSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av<bv?1:av>bv?-1:0);});
+        const srtIco=col=><span style={{marginLeft:3,fontSize:9,opacity:tableSortCol===col?1:0.35}}>{tableSortCol===col?(tableSortDir==="asc"?"▲":"▼"):"⇅"}</span>;
+        const srtStyle=col=>({...tblH,cursor:"pointer",userSelect:"none",...(tableSortCol===col?{background:"#bfdbfe",color:"#1e40af"}:{})});
 
         return(
           <div>
@@ -2687,7 +2694,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {/* Current month — ОСАГО */}
             {opLoaded&&!opSrch&&(()=>{
-              const list=osagoList.filter(filterPol);
+              const list=sortPols(osagoList.filter(filterPol));
               const t=calcTotals(list);
               const PAGE=10;const totalPages=Math.ceil(list.length/PAGE);
               const page=Math.min(opOsagoPage,Math.max(0,totalPages-1));
@@ -2709,7 +2716,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
                   :<><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                    <thead><tr style={{background:"#dbeafe"}}>{["Статус","Дата сост.","Страхователь","Телефон","Компания","Марка авто","Рег.номер","Срок","Ст-с","№ полиса","Сумма","К оплате","Оператор","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{background:"#dbeafe"}}>{[{l:"Статус"},{l:"Дата сост.",k:"date"},{l:"Страхователь",k:"insuredName"},{l:"Телефон"},{l:"Компания",k:"company"},{l:"Марка авто"},{l:"Рег.номер"},{l:"Срок"},{l:"Ст-с"},{l:"№ полиса"},{l:"Сумма",k:"amount"},{l:"К оплате",k:"net"},{l:"Оператор"},{l:"Оплачено"},{l:"Тип оплаты"},{l:""}].map(({l,k})=>k?<th key={l} style={srtStyle(k)} onClick={()=>setTableSort(k)}>{l}{srtIco(k)}</th>:<th key={l} style={tblH}>{l}</th>)}</tr></thead>
                     <tbody>{pageItems.map((pol,i)=>(
                       <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
                         <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
@@ -2750,7 +2757,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {/* Current month — Добровольные */}
             {opLoaded&&!opSrch&&(()=>{
-              const list=volList.filter(filterPol);
+              const list=sortPols(volList.filter(filterPol));
               const t=calcTotals(list);
               return(
               <div style={{border:"1px solid #e9d5ff",borderRadius:8,overflow:"hidden",marginBottom:20}}>
@@ -2769,7 +2776,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
                   :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                    <thead><tr style={{background:"#ede9fe"}}>{["Статус","Дата сост.","Страхователь","Телефон","Продукт","Компания","№ полиса","Сумма","К оплате","Оператор","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{background:"#ede9fe"}}>{[{l:"Статус"},{l:"Дата сост.",k:"date"},{l:"Страхователь",k:"insuredName"},{l:"Телефон"},{l:"Продукт"},{l:"Компания",k:"company"},{l:"№ полиса"},{l:"Сумма",k:"amount"},{l:"К оплате",k:"net"},{l:"Оператор"},{l:"Оплачено"},{l:"Тип оплаты"},{l:""}].map(({l,k})=>k?<th key={l} style={srtStyle(k)} onClick={()=>setTableSort(k)}>{l}{srtIco(k)}</th>:<th key={l} style={tblH}>{l}</th>)}</tr></thead>
                     <tbody>{list.map((pol,i)=>(
                       <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
                         <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
