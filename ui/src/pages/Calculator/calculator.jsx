@@ -2560,8 +2560,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const allFiltered=[...opPrevUnpaid,...opCurrentMonth].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{if(!hasDateFilter)return opCurrentMonth;const seen=new Set();return[...opPrevAll,...opCurrentMonth].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
-        const osagoList=basePols.filter(p=>(p.polType||"osago")==="osago");
-        const volList=basePols.filter(p=>p.polType==="voluntary");
+        const normPolType=t=>{const v=(t||"").toLowerCase().trim();return v==="voluntary"?"voluntary":"osago";};
+        const osagoList=basePols.filter(p=>normPolType(p.polType)==="osago");
+        const volList=basePols.filter(p=>normPolType(p.polType)==="voluntary");
         const sortPols=list=>[...list].sort((a,b)=>{let av,bv;if(tableSortCol==="amount"){av=Number(a.amount||0);bv=Number(b.amount||0);}else if(tableSortCol==="net"){av=Number(a.amount||0)-Number(a.discount||0);bv=Number(b.amount||0)-Number(b.discount||0);}else if(tableSortCol==="date"){av=(a.date||"").slice(0,10);bv=(b.date||"").slice(0,10);}else{av=(a[tableSortCol]||"").toLowerCase();bv=(b[tableSortCol]||"").toLowerCase();}return tableSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av<bv?1:av>bv?-1:0);});
         const srtIco=col=><span style={{marginLeft:3,fontSize:9,opacity:tableSortCol===col?1:0.35}}>{tableSortCol===col?(tableSortDir==="asc"?"▲":"▼"):"⇅"}</span>;
         const srtStyle=col=>({...tblH,cursor:"pointer",userSelect:"none",...(tableSortCol===col?{background:"#bfdbfe",color:"#1e40af"}:{})});
@@ -2679,7 +2680,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {(hasDateFilter||opSrch||opStatusFilter!=="all")&&(
                 <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить фильтры</button>
               )}
-              {hasDateFilter&&<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Показано: {allFiltered.length}</span>}
+              {hasDateFilter&&(()=>{const fo=osagoList.filter(filterPol).length;const fv=volList.filter(filterPol).length;return<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Показано: {fo+fv}{fv>0?` (🚗 ${fo} + 🛡 ${fv})`:""}</span>;})()}
             </div>
 
             {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
