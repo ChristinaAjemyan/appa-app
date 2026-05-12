@@ -2018,8 +2018,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const sPhonePaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}}};
     const sPhoneUnpaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"FFE4E6"}}};
     const sTot={font:{bold:true,sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}}};
-    const HEADERS=["Месяц","Страхователь","Телефон","Компания","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Начало","Окончание","Статус оплаты","Дата оплаты","Способ оплаты","Комментарий"];
-    const PHONE_COL=2;
+    const HEADERS=["Страхователь","Телефон","Компания","Рег.номер","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Комментарий"];
+    const PHONE_COL=1;
     const ws={};
     HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr});
     pols.forEach((p,ri)=>{
@@ -2027,23 +2027,19 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const sc=isPaid?sCellPaid:sCellUnpaid;
       const sp=isPaid?sPhonePaid:sPhoneUnpaid;
       const vals=[
-        fmtMonth(p._monthKey||selMonth),
-        p.insuredName||"",p.phone||"",p.company||"",p.policyNum||"",
+        p.insuredName||"",p.phone||"",p.company||"",p.carPlate||"",p.policyNum||"",
         p.polType==="voluntary"?"Добровольный":"ОСАГО",
         p.amount||0,p.discount||0,(p.amount||0)-(p.discount||0),
-        isoToDisplay(p.date),isoToDisplay(p.dateStart),isoToDisplay(p.dateEnd),
-        isPaid?"Оплачен":"Не оплачен",
-        isoToDisplay((p.paidAt||"").slice(0,10)),
-        fmtPay(p.paymentType),
+        isoToDisplay(p.date),
         p.comment||""
       ];
       vals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:sc});
     });
     const totRow=pols.length+1;
-    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),"","","",`Оплачено: ${pols.filter(p=>p.paid).length}`,`Не оплачено: ${pols.filter(p=>!p.paid).length}`,"",""];
+    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,""];
     totVals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:typeof v==="number"?"n":"s",s:sTot});
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:totRow,c:HEADERS.length-1}});
-    ws["!cols"]=[{wch:13},{wch:26},{wch:17},{wch:10},{wch:17},{wch:14},{wch:14},{wch:10},{wch:12},{wch:14},{wch:12},{wch:12},{wch:13},{wch:13},{wch:14},{wch:30}];
+    ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:12},{wch:17},{wch:14},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30}];
     const wb=XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb,ws,"Продажи офиса");
     _dlXlsx(wb,`Продажи_офиса_${monthLabel||selMonth}.xlsx`);
@@ -2540,7 +2536,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           const ma=(a[1].internalCode||"").match(/(\d+)$/);const mb=(b[1].internalCode||"").match(/(\d+)$/);
           return (ma?parseInt(ma[1]):99999)-(mb?parseInt(mb[1]):99999);
         });
-        const allUnpaid=[...opPrevUnpaid,...opCurrentMonth.filter(p=>!p.paid)].sort((a,b)=>new Date(a.date)-new Date(b.date));
+        const allUnpaid=[...opPrevUnpaid,...opCurrentMonth.filter(p=>!p.paid)].sort((a,b)=>new Date(b.date)-new Date(a.date));
         const currentPaid=opCurrentMonth.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
         const staffAgents=sortedAgents.filter(([,a])=>officeStaff.includes((a.internalCode||"").trim()));
         const tblH={...th,whiteSpace:"nowrap"};
@@ -2774,7 +2770,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
                   :<><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                    <thead><tr style={{background:"#dbeafe"}}>{[{l:"Статус"},{l:"Дата сост.",k:"date"},{l:"Страхователь",k:"insuredName"},{l:"Телефон"},{l:"Компания",k:"company"},{l:"Марка авто"},{l:"Рег.номер"},{l:"Срок"},{l:"Ст-с"},{l:"№ полиса"},{l:"Сумма",k:"amount"},{l:"К оплате",k:"net"},{l:"Оператор"},{l:"Оплачено"},{l:"Тип оплаты"},{l:""}].map(({l,k})=>k?<th key={l} style={srtStyle(k)} onClick={()=>setTableSort(k)}>{l}{srtIco(k)}</th>:<th key={l} style={tblH}>{l}</th>)}</tr></thead>
+                    <thead><tr style={{background:"#dbeafe"}}>{[{l:"Статус"},{l:"Дата сост.",k:"date"},{l:"Страхователь",k:"insuredName"},{l:"Телефон"},{l:"Компания",k:"company"},{l:"Марка авто"},{l:"Рег.номер"},{l:"№ полиса"},{l:"Сумма",k:"amount"},{l:"К оплате",k:"net"},{l:"Оператор"},{l:"Оплачено"},{l:"Тип оплаты"},{l:"Коммент."},{l:""}].map(({l,k})=>k?<th key={l} style={srtStyle(k)} onClick={()=>setTableSort(k)}>{l}{srtIco(k)}</th>:<th key={l} style={tblH}>{l}</th>)}</tr></thead>
                     <tbody>{pageItems.map((pol,i)=>(
                       <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
                         <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
@@ -2784,14 +2780,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <td style={td}>{pol.company}</td>
                         <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.car||"—"}</td>
                         <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
-                        <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
-                        <td style={{...td,fontSize:11}}>{pol.polStatus?<span style={{background:"#f3e8ff",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>{fmtPolStatus(pol.polStatus)}</span>:"—"}</td>
                         <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
                         <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
                         <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
                         <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?<><div style={{fontWeight:600}}>{fmt(pol.paidAmount||0)}</div><div style={{fontSize:10,color:"#6b7280"}}>{fmtPolDate(pol.paidDate)}</div></>:"—"}</td>
                         <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{pol.paid?fmtPay(pol.paymentType):"—"}</td>
+                        <td style={{...td,fontSize:11,color:"#6b7280",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={pol.comment||""}>{pol.comment||"—"}</td>
                         <td style={{...td,whiteSpace:"nowrap"}}>
                           {!pol.paid&&!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
                           {!pol.paid&&!isViewOnly&&actBtn("✓ Оплата","#16a34a","#fff",()=>openOpPay(pol))}
@@ -2882,22 +2877,19 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 </div>
                 <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead><tr style={{background:"#fee2e2"}}>{["Тип","Месяц","Дата сост.","Страхователь","Телефон","Компания","Продукт / Авто","Рег.номер","Срок","№ полиса","Сумма","К оплате","Агент","Коммент.",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{background:"#fee2e2"}}>{["Тип","Дата сост.","Страхователь","Телефон","Компания","Продукт / Авто","Рег.номер","№ полиса","Сумма","К оплате","Коммент.",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
                   <tbody>{pageItems.map((pol,i)=>(
                     <tr key={pol._id} style={{background:i%2===0?"white":"#fff5f5",borderBottom:"1px solid #fecaca"}}>
                       <td style={{...td,whiteSpace:"nowrap"}}>{pol.polType==="voluntary"?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>:<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>}</td>
-                      <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}><span style={{background:pol._monthKey===selMonth?"#dcfce7":"#fef9c3",color:pol._monthKey===selMonth?"#166534":"#92400e",borderRadius:8,padding:"1px 7px",fontSize:11,fontWeight:600}}>{fmtMonth(pol._monthKey||selMonth)}</span></td>
                       <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>{fmtPolDate(pol.date)}</td>
                       <td style={{...td,fontWeight:600}}>{pol.insuredName}</td>
                       <td style={{...td,fontSize:11}}>{pol.phone||"—"}</td>
                       <td style={td}>{pol.company||"—"}</td>
                       <td style={{...td,fontSize:11,color:"#6b7280"}}>{pol.polType==="voluntary"?(pol.productName||"—"):(pol.car||"—")}</td>
                       <td style={{...td,fontSize:11}}>{pol.carPlate||"—"}</td>
-                      <td style={{...td,textAlign:"center"}}>{pol.term?<span style={{background:pol.term==="L"?"#dbeafe":"#fef3c7",color:pol.term==="L"?"#1d4ed8":"#92400e",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:600}}>{pol.term}</span>:"—"}</td>
                       <td style={{...td,fontSize:11}}>{pol.policyNum||"—"}</td>
                       <td style={{...td,textAlign:"right"}}>{fmt(pol.amount)}</td>
                       <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626"}}>{fmt((pol.amount||0)-(pol.discount||0))}</td>
-                      <td style={{...td,fontSize:11}}>{getName(pol.agentUid)||"—"}</td>
                       <td style={{...td,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol.comment||"—"}</td>
                       <td style={{...td,whiteSpace:"nowrap"}}>
                         {!isViewOnly&&actBtn("✎","#f3f4f6","#374151",()=>openOpEdit(pol))}
