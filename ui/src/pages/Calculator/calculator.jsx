@@ -14,6 +14,7 @@ const _ld=(v,n)=>Array.from(v||"").filter(c=>/[A-Za-z0-9 ]/.test(c)).join("").sl
 const _dig=(v,n)=>Array.from(v||"").filter(c=>/[0-9]/.test(c)).join("").slice(0,n);
 const _now=new Date();
 const CURRENT_MONTH=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}`;
+const getThisMonth=()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;}
 const MIN_MONTH="2023-01";const MAX_MONTH="2030-12";
 const EXPIRY_OPTIONS=[];
 for(let y=2025;y<=2031;y++)for(let m=1;m<=12;m++)EXPIRY_OPTIONS.push(`${y}-${String(m).padStart(2,"0")}`);
@@ -171,7 +172,7 @@ function parseDate(raw){
   if(raw==null||raw==="")return null;
   if(raw instanceof Date)return isNaN(raw.getTime())?null:raw;
   const num=Number(raw);
-  if(!isNaN(num)&&num>10000&&num<200000){const d=new Date(Date.UTC(1899,11,30)+num*86400000);return isNaN(d.getTime())?null:d;}
+  if(!isNaN(num)&&num>10000&&num<50000){const d=new Date(Date.UTC(1899,11,30)+num*86400000);return isNaN(d.getTime())?null:d;}
   const s=String(raw).trim();if(!s)return null;
   const m1=s.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);if(m1)return new Date(+m1[3],+m1[2]-1,+m1[1]);
   const m2=s.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})$/);if(m2)return new Date(+m2[1],+m2[2]-1,+m2[3]);
@@ -263,7 +264,7 @@ function parseCoRows(rows,company){
     let days=null;
     if(sd&&ed){days=Math.round((ed.getTime()-sd.getTime())/86400000);}
     else if(termNum>0){days=termNum;if(sd)ed=new Date(sd.getTime()+termNum*86400000);}
-    const termAuto=days!==null?(days<88?"SH":"L"):termRaw||"";
+    const termAuto=days!==null?(days<=87?"SH":"L"):termRaw||"";
     const amt=parseFloat(String(get("amount")).replace(/\s/g,"").replace(",","."))||0;
     return{_id:`${company}-${idx}`,company,agentCode:getCode("agentCode"),policyNum:get("policyNum"),
       amount:amt,region:normReg(get("region")),bm:parseInt(get("bm"))||0,
@@ -329,7 +330,7 @@ const condLabel=c=>{
 const excReason=(p,excepts,agentUid)=>{
   const co=detectCo(p.company)||p.company;
   const np={...p,region:normReg(p.region)||p.region};
-  const exc=excepts.find(e=>e.enabled&&e.company===co&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(np.car)||np.term==="SH"))&&e.conditions.every(c=>checkCond(np[c.field],c)));
+  const exc=excepts.find(e=>e.enabled&&e.company===co&&!(e.excludedAgents&&e.excludedAgents.includes(agentUid))&&!(e.type==="brand_whitelist"&&(!isExcBrand(np.car)||np.term==="SH"))&&!(e.type==="brand_whitelist"&&np.region==="YR")&&e.conditions.every(c=>checkCond(np[c.field],c)));
   if(!exc)return"—";const parts=exc.conditions.map(condLabel);if(exc.type==="brand_whitelist")parts.push("Марка: "+np.car);return parts.join(" + ");
 };
 
@@ -337,12 +338,12 @@ const getArmGroup=bm=>{const n=Number(bm);if(n>=1&&n<=9)return"1-9";if(n>=10&&n<
 const getTierMgr=(sales,thresholds)=>{let t=1;for(let i=1;i<thresholds.length;i++)if(sales>=thresholds[i])t=i+1;return t;};
 const getMgrPolicyRate=(p,cfg)=>{
   const co=detectCo(p.company)||p.company;
-  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
+  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
   return(cfg.managerRates&&cfg.managerRates[co])||0;
 };
 const getOpPolicyRate=(p,tier,cfg)=>{
   const co=detectCo(p.company)||p.company;
-  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<88);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
+  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
   return(cfg.operatorRates&&cfg.operatorRates[co]&&cfg.operatorRates[co][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
@@ -350,7 +351,7 @@ const getAgentRate=(p,agentUid,rates)=>{
   if(agentUid&&rates.agentOverrides&&rates.agentOverrides[agentUid]&&rates.agentOverrides[agentUid][co]!==undefined)
     return rates.agentOverrides[agentUid][co];
   if(co==="Armenia"){
-    const isShort=p.term==="SH"||(p.days!=null&&p.days<88);
+    const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);
     if(isShort)return(rates.armeniaShort&&rates.armeniaShort.agentRate)||20;
     return(rates.armeniaAgent&&rates.armeniaAgent[getArmGroup(p.bm)])||0;
   }
@@ -362,7 +363,7 @@ const getAgentRate=(p,agentUid,rates)=>{
 const getOfficeRate=(p,rates)=>{
   const co=detectCo(p.company)||p.company;
   if(co==="Armenia"){
-    const isShort=p.term==="SH"||(p.days!=null&&p.days<88);
+    const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);
     if(isShort)return(rates.armeniaShort&&rates.armeniaShort.officeRate)||37;
     return(rates.armeniaOffice&&rates.armeniaOffice[getArmGroup(p.bm)])||0;
   }
@@ -619,14 +620,14 @@ const valV=v=>{try{return v&&Array.isArray(v.rates);}catch{return false;}};
 
 export default function App(){
   const[tab,setTab]=useState("commissions");
-  const[selMonth,setSelMonth]=useState(CURRENT_MONTH);
+  const[selMonth,setSelMonth]=useState(getThisMonth);
   const[uploadedFiles,setUploadedFiles]=useState([]);
   const[storedPols,setStoredPols]=useState([]);
   const[volSession,setVolSession]=useState([]);
   const[storedVol,setStoredVol]=useState([]);
   const[dbPols,setDbPols]=useState([]);
   const[dbLoaded,setDbLoaded]=useState(false);
-  const[expiryF,setExpiryF]=useState(CURRENT_MONTH);
+  const[expiryF,setExpiryF]=useState(getThisMonth);
   const[activeAgent,setActiveAgent]=useState(null);
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
@@ -705,13 +706,14 @@ export default function App(){
   const[searchViewPol,setSearchViewPol]=useState(null);
   const[notifs,setNotifs]=useState([]);
   const[showNotifs,setShowNotifs]=useState(false);
+  const lastShuffleRef=useRef(0);
   const[bookmarks,setBookmarks]=useState([]);
   const[dueReminders,setDueReminders]=useState([]);
   const[bkmFormOpen,setBkmFormOpen]=useState(false);
   const[bkmFormData,setBkmFormData]=useState({text:"",reminderAt:"",policyRef:null});
   const[bkmArchiveOpen,setBkmArchiveOpen]=useState(false);
   const[rnSubTab,setRnSubTab]=useState("office");
-  const[rnMonth,setRnMonth]=useState(CURRENT_MONTH);
+  const[rnMonth,setRnMonth]=useState(getThisMonth);
   const[rnPeriod,setRnPeriod]=useState("all");
   const[rnResults,setRnResults]=useState(null);
   const[rnLoading,setRnLoading]=useState(false);
@@ -818,7 +820,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     });
   };
   const logout=()=>{logAction("logout","Выход из системы","—");setRole(null);setCurrentEmployee(null);setLoginPin("");setLoginError("");setPanel(null);setNotifs([]);setShowNotifs(false);setBookmarks([]);setDueReminders([]);setBkmFormOpen(false);setTasks([]);setSelectedTask(null);setTaskFormOpen(false);};
-  const buildNotifications=async()=>{
+  const buildNotifications=async(forceReshuffle=false)=>{
     try{
       const ntype=role==="admin"?"none":(currentEmployee?.notifType||"none");
       if(ntype==="none"){setNotifs([]);return;}
@@ -848,10 +850,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           }
         }
       }
-      setNotifs([...all].sort(()=>Math.random()-0.5).slice(0,5));
+      const now=Date.now();
+      if(forceReshuffle||now-lastShuffleRef.current>30*60*1000){lastShuffleRef.current=now;setNotifs([...all].sort(()=>Math.random()-0.5).slice(0,5));}
     }catch{setNotifs([]);}
   };
-  useEffect(()=>{if(role)buildNotifications();},[role]);
+  useEffect(()=>{if(role)buildNotifications(true);},[role]);
   useEffect(()=>{if(role)buildNotifications();},[tab]);
 
   const bkmKey=role==="admin"?"bookmarks:admin":(currentEmployee?`bookmarks:${currentEmployee.id}`:null);
@@ -1046,6 +1049,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const addAgent=()=>{
     if(!newName.trim())return;
+    const dups=[];
+    Object.entries(newCodes).forEach(([co,code])=>{if(!code.trim())return;const c=code.replace(/\s+/g,"").trim();Object.entries(agentDir).forEach(([,a])=>{const ex=(a.codes?.[co]||"").replace(/\s+/g,"").trim();if(ex&&ex===c)dups.push(`${co}: ${c} (${a.name} ${a.surname})`);});});
+    if(dups.length&&!window.confirm("⚠ Дублирующийся код агента:\n"+dups.join("\n")+"\n\nПродолжить?"))return;
     const id=genUid();
     saveDir({...agentDir,[id]:{name:newName.trim(),surname:newSur.trim(),internalCode:newIC.trim(),codes:{...newCodes}}});
     setNewName("");setNewSur("");setNewIC("");setNewCodes(Object.fromEntries(ALL_COMPANIES.map(c=>[c,""])));
@@ -1250,11 +1256,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       for(const key of allKeys){const r=await calcStorage.get(key).catch(()=>null);if(r?.value)buckets[key]=JSON.parse(r.value);}
       let changed=false;
       for(const key of Object.keys(buckets)){
-        const bm=key.replace("officePol:","");
-        const misplaced=buckets[key].filter(p=>p.date&&p.date.slice(0,7)&&p.date.slice(0,7)!==bm);
+        const bucketMonth=key.replace("officePol:","");
+        const misplaced=buckets[key].filter(p=>p.date&&p.date.slice(0,7)&&p.date.slice(0,7)!==bucketMonth);
         if(!misplaced.length)continue;
         changed=true;
-        buckets[key]=buckets[key].filter(p=>!p.date||!p.date.slice(0,7)||p.date.slice(0,7)===bm);
+        buckets[key]=buckets[key].filter(p=>!p.date||!p.date.slice(0,7)||p.date.slice(0,7)===bucketMonth);
         for(const p of misplaced){
           const tm=p.date.slice(0,7);const tk="officePol:"+tm;
           if(!buckets[tk])buckets[tk]=[];
@@ -1282,6 +1288,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOpLoaded(true);
   };
   useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
+  useEffect(()=>{setOpOsagoPage(0);setOpUnpaidPage(0);},[opSearch,opStatusFilter,opDateFrom,opDateTo,opEndFrom,opEndTo,opCompanyFilter,opAgentFilter]);
   useEffect(()=>{const uid=currentEmployee?.id||"admin";try{const s=localStorage.getItem("opSortPref:"+uid);if(s){const{col,dir}=JSON.parse(s);if(col)setTableSortCol(col);if(dir)setTableSortDir(dir);}}catch{}},[currentEmployee?.id]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
@@ -1339,8 +1346,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);
     if(policyMonth===selMonth){saveOpMonth([...opCurrentMonth,pol]);return;}
     calcStorage.get("officePol:"+policyMonth).catch(()=>null).then(r=>{
-      const existing=r&&r.value?JSON.parse(r.value):[];
-      if(!existing.find(p=>p._id===pol._id))calcStorage.set("officePol:"+policyMonth,JSON.stringify([...existing,pol])).catch(()=>{});
+      try{const existing=r&&r.value?JSON.parse(r.value):[];if(!existing.find(p=>p._id===pol._id))calcStorage.set("officePol:"+policyMonth,JSON.stringify([...existing,pol])).catch(()=>{});}catch{}
     });
     setOpPrevAll(prev=>[...prev.filter(p=>p._id!==pol._id),pol]);
     if(!pol.paid)setOpPrevUnpaid(prev=>[...prev.filter(p=>p._id!==pol._id),pol].sort((a,b)=>new Date(a.date)-new Date(b.date)));
@@ -1353,8 +1359,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const pols=r&&r.value?JSON.parse(r.value):[];
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.map(p=>p._id===pol._id?updated:p));
+      setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
-    const _dlbls={insuredName:"ФИО",phone:"Тел.",company:"Компания",policyNum:"№ полиса",date:"Дата",dateStart:"Начало",dateEnd:"Окончание",car:"Авто",carPlate:"Госномер",bm:"БМ",region:"Регион",power:"Мощность",term:"Срок",polStatus:"Статус",amount:"Сумма",discount:"Скидка",agentUid:"Оператор",comment:"Комментарий",productName:"Продукт",paid_from_amex:"Источник"};const _diffs=[];for(const[k,l]of Object.entries(_dlbls)){const ov=pol[k],nv=updates[k];if(String(ov??"")===String(nv??""))continue;let os=String(ov||"—"),ns=String(nv||"—");if(k==="amount"||k==="discount"){os=fmt(parseFloat(ov)||0);ns=fmt(parseFloat(nv)||0);}if(k==="paid_from_amex"){os=ov?"\u{1F4B3} Amex":"\u{1F3E6} Другой";ns=nv?"\u{1F4B3} Amex":"\u{1F3E6} Другой";}if(k==="agentUid"){os=getName(ov)||ov||"—";ns=getName(nv)||nv||"—";}if(os!==ns)_diffs.push(l+": "+os+" → "+ns);}logAction("edit_policy",(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+(_diffs.length?" — "+_diffs.join(", "):" (без изменений)"),pol._monthKey);
+    const _dlbls={insuredName:"ФИО",phone:"Тел.",company:"Компания",policyNum:"№ полиса",date:"Дата",dateStart:"Начало",dateEnd:"Окончание",car:"Авто",carPlate:"Госномер",bm:"БМ",region:"Регион",power:"Мощность",term:"Срок",polStatus:"Статус",amount:"Сумма",discount:"Скидка",agentUid:"Оператор",comment:"Комментарий",productName:"Продукт",paid_from_amex:"Источник"};const _diffs=[];for(const[k,l]of Object.entries(_dlbls)){const ov=pol[k],nv=updates[k];if(k==="paid_from_amex"){if(!!ov===!!nv)continue;}else if(String(ov??"")===String(nv??""))continue;let os=String(ov||"—"),ns=String(nv||"—");if(k==="amount"||k==="discount"){os=fmt(parseFloat(ov)||0);ns=fmt(parseFloat(nv)||0);}if(k==="paid_from_amex"){os=ov?"\u{1F4B3} Amex":"\u{1F3E6} Другой";ns=nv?"\u{1F4B3} Amex":"\u{1F3E6} Другой";}if(k==="agentUid"){os=getName(ov)||ov||"—";ns=getName(nv)||nv||"—";}if(os!==ns)_diffs.push(l+": "+os+" → "+ns);}logAction("edit_policy",(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+(_diffs.length?" — "+_diffs.join(", "):" (без изменений)"),pol._monthKey);
   };
   const acceptOpPayment=async(pol,payData)=>{
     const updated={...pol,...payData,paid:true,paidAt:new Date().toISOString()};
@@ -1364,6 +1371,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const pols=r&&r.value?JSON.parse(r.value):[];
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
+      setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
     logAction("pay_policy",(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(payData.paidAmount||0)+" ֏ / "+_fmtPayLog(payData.paymentType),pol._monthKey);
     setOpPayPol(null);
@@ -1376,6 +1384,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const pols=r&&r.value?JSON.parse(r.value):[];
       calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
+      setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
     }
     logAction("delete_policy",(pol.polType==="osago"?"ОСАГО":"Добровольный")+": "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(pol.amount||0)+" ֏",pol._monthKey);
   };
@@ -1470,7 +1479,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       try{
         const wb=XLSX.read(new Uint8Array(evt.target.result),{type:"array"});
         const isValidDate=s=>{if(!s)return false;return/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(s).getTime());};
-        const parseDate=s=>{if(!s)return"";const num=Number(s);if(!isNaN(num)&&num>10000&&num<200000){const d=new Date(Date.UTC(1899,11,30)+num*86400000);if(!isNaN(d.getTime()))return`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;}const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;if(/^\d{4}-\d{2}-\d{2}$/.test(String(s)))return String(s).trim();return String(s).trim();};
+        const parseDate=s=>{if(!s)return"";const num=Number(s);if(!isNaN(num)&&num>10000&&num<50000){const d=new Date(Date.UTC(1899,11,30)+num*86400000);if(!isNaN(d.getTime()))return`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;}const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;if(/^\d{4}-\d{2}-\d{2}$/.test(String(s)))return String(s).trim();return String(s).trim();};
         const parseBool=v=>{const s=String(v).trim().toLowerCase();return s==="true"||s==="1"||s==="yes";};
         const parseNum=v=>{const n=parseFloat(String(v).replace(/\s/g,"").replace(",","."));return isNaN(n)?0:n;};
         const allRows=[];
@@ -1560,8 +1569,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     };
     const operatorUids=new Set(managerConfig?.operatorUids||[]);
     const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР'));
-    const gName=uid=>{const a=agentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
-    const gCode=uid=>agentDir[uid]?.internalCode||uid||'';
+    const gName=uid=>{const a=effAgentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
+    const gCode=uid=>effAgentDir[uid]?.internalCode||uid||'';
 
     // ── Sheet: Офис — ОСАГО ──────────────────────────────────────
     const mkOfficeOsagoSheet=()=>{
@@ -1706,12 +1715,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const wb=new JSZip();
     const month=selMonth;
     const rows=officeExpenses[month]||[];
-    const opPols=(cashMonthPols||[]).filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+    const opPols=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
     const totalExp=rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
     const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
     const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
-    const officeDirectOsago=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0)),0);
-    const officeDirectVol=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>{const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
+    const officeDirectOsago=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;return s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0));},0);
+    const officeDirectVol=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
     const osagoGross=osagoAgentIncome+officeDirectOsago;
     const volGross=volAgentIncome+officeDirectVol;
     const totalGross=osagoGross+volGross;
@@ -1951,7 +1960,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const sT=(al)=>({fill:{patternType:"solid",fgColor:{rgb:"111827"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"right"}});
     const mkSummary=(showMgr)=>{
       const ws={};let rw=0;const mg=[];
-      const ncols=showMgr?8:6;
+      const ncols=showMgr?8:7;
       const title=showMgr?"Менеджерский отчёт — "+fmtMonth(month):"Отчёт по операторам — "+fmtMonth(month);
       ac(ws,rw,0,title,sDark("4C1D95","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:ncols}});rw++;
       const hdrs=showMgr
@@ -3794,7 +3803,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
                   :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
                 )}
-                {opResults.length>0&&<button onClick={()=>exportManagerXlsx(agentData,cfg,agentDir,selMonth,exceptions)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
+                {opResults.length>0&&<button onClick={()=>exportManagerXlsx(agentData,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
                 <button onClick={()=>setShowMgrSettings(v=>!v)} style={{...btn(showMgrSettings?"#7c3aed":"#f3f4f6",showMgrSettings?"#fff":"#374151",{border:"1px solid #d1d5db"}),fontSize:12}}>⚙️ Настройки</button>
               </div>
             </div>
@@ -3874,7 +3883,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(r.oi)}</td>
                           <td style={{...td,textAlign:"right",fontWeight:700,color:r.profit>=0?"#16a34a":"#dc2626"}}>{fmt(r.profit)}</td>
                           <td style={{...td,color:"#6b7280",fontSize:11}}>{mgrDetail===r.uid?"▲":"▼"}</td>
-                          <td style={td} onClick={e=>e.stopPropagation()}><button onClick={()=>exportSingleOpXlsx(r,cfg,agentDir,selMonth,exceptions)} style={btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"})} title="Экспорт оператора">⬇</button></td>
+                          <td style={td} onClick={e=>e.stopPropagation()}><button onClick={()=>exportSingleOpXlsx(r,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"})} title="Экспорт оператора">⬇</button></td>
                         </tr>
                       );
                     })}
@@ -4620,7 +4629,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const STATUS_META={new:{l:"Новая",c:"#1d4ed8",bg:"#dbeafe"},inprogress:{l:"В процессе",c:"#d97706",bg:"#fef3c7"},done:{l:"Выполнена",c:"#15803d",bg:"#dcfce7"},revision:{l:"На корректировку",c:"#dc2626",bg:"#fee2e2"},closed:{l:"Закрыта",c:"#6b7280",bg:"#f3f4f6"}};
         const activeTasks=tasks.filter(t=>t.status!=="closed"&&(t.createdBy===currentUserId||t.assignedTo===currentUserId));
         const doneTasks=tasks.filter(t=>t.status==="closed"&&(t.createdBy===currentUserId||t.assignedTo===currentUserId));
-        const fmtDate=s=>{if(!s)return"";try{const d=new Date(s+"T00:00");return d.toLocaleDateString("ru-RU");}catch{return s;}};
+        const fmtDate=s=>{if(!s)return"";try{const d=new Date(s+"T00:00");return String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();}catch{return s;}};
         const fmtTs=ts=>{const d=new Date(ts);return d.toLocaleDateString("ru-RU")+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});};
         const markRead=t=>{const upd=tasks.map(x=>x.id===t.id?{...x,unreadFor:(x.unreadFor||[]).filter(u=>u!==currentUserId)}:x);saveTasks(upd);};
         const openTask=t=>{setSelectedTask(t);markRead(t);setTaskRevComment("");setShowRevInput(false);setTaskComment("");};
@@ -4911,7 +4920,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const olderPols=amexAllPols.filter(p=>(p.date||"")<cutoff);
         const recentSpent=recentPols.reduce((s,p)=>s+(p.amount||0),0);
         const recentTopupsSum=recentTopups.reduce((s,t)=>s+t.amount,0);
-        const sortDesc=(arr,key)=>[...arr].sort((a,b)=>(b[key]||"").localeCompare(a[key]||""));
+        const sortDesc=(arr,key)=>[...arr].sort((a,b)=>{const av=a[key]||"";const bv=b[key]||"";return bv>av?1:bv<av?-1:0;});
         const fmtD=s=>s?new Date(s+"T00:00:00").toLocaleDateString("ru-RU"):"—";
         const tblHead=<thead><tr style={{background:"#f1f5f9"}}>
           <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Дата</th>
