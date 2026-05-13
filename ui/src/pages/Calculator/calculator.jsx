@@ -20,10 +20,10 @@ const EXPIRY_OPTIONS=[];
 for(let y=2025;y<=2031;y++)for(let m=1;m<=12;m++)EXPIRY_OPTIONS.push(`${y}-${String(m).padStart(2,"0")}`);
 
 const DEFAULT_RATES={
-  officeRates:{Nairi:25,Ingo:7,Liga:5,Sil:10,Rego:5},
-  armeniaOffice:{"1-9":11,"10-14":10,"15-25":7},
-  agentRates:{Nairi:8,Ingo:3,Liga:2,Sil:5,Rego:2},
-  armeniaAgent:{"1-9":6,"10-14":5,"15-25":3},
+  officeRates:{Nairi:25,Ingo:12,Liga:10,Sil:15,Rego:12},
+  armeniaOffice:{"1-9":18,"10-14":15,"15-25":12},
+  agentRates:{Nairi:14,Ingo:7,Liga:5,Sil:10,Rego:5},
+  armeniaAgent:{"1-9":10,"10-14":10,"15-25":7},
   armeniaShort:{officeRate:37,agentRate:20},
   nairiRegion:{bm1_7:10,bm8_25:5},
   agentOverrides:{},
@@ -33,8 +33,8 @@ const DEFAULT_MGR_RATES={
   managerRates:{Nairi:16,Ingo:7,Liga:5,Sil:10,Rego:5},
   armeniaManager:{"1-9":11,"10-14":10,"15-25":7},
   armeniaShortManager:20,
-  operatorRates:{Nairi:[6,8,10,12,14,16],Ingo:[2,3,4,5,6,7],Liga:[2,2,3,3,4,5],Sil:[5,6,7,8,9,10],Rego:[2,2,3,3,4,5]},
-  armeniaOperator:{"1-9":[6,7,8,9,10,11],"10-14":[5,6,7,8,9,10],"15-25":[2,3,4,5,6,7]},
+  operatorRates:{Nairi:[8,8,9,9,10,11],Ingo:[3,3,4,4,5,5],Liga:[2,2,2,3,3,3],Sil:[5,5,6,6,7,8],Rego:[2,2,2,2,2,2]},
+  armeniaOperator:{"1-9":[6,6,7,7,8,9],"10-14":[5,5,6,6,7,8],"15-25":[3,3,4,4,5,5]},
   armeniaShortOperator:[10,10,12,12,15,15],
   tierThresholds:[0,500000,1000000,1500000,2000000,2500000],
   tierFixes:[0,20000,30000,40000,50000,70000],
@@ -1717,6 +1717,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const rows=officeExpenses[month]||[];
     const opPols=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
     const totalExp=rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
+    const mgrActiveEx=!managerConfig.managerStartDate||selMonth>=managerConfig.managerStartDate;
+    const opREx=mgrActiveEx?_computeOpR(agentData,managerConfig):[];
+    const opUidsEx=mgrActiveEx?new Set(managerConfig.operatorUids||[]):new Set();
+    const totMgrEx=opREx.reduce((s,r)=>s+r.mi,0);
     const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
     const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
     const officeDirectOsago=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;return s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0));},0);
@@ -1724,7 +1728,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const osagoGross=osagoAgentIncome+officeDirectOsago;
     const volGross=volAgentIncome+officeDirectVol;
     const totalGross=osagoGross+volGross;
-    const agentCommissions=agentData.reduce((s,a)=>s+a.totalAgent,0)+effVol.reduce((s,v)=>s+v.agentComm,0);
+    const agentCommissions=agentData.filter(a=>!opUidsEx.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0)+effVol.reduce((s,v)=>s+v.agentComm,0)+totMgrEx;
     const netIncome=totalGross-agentCommissions-totalExp;
 
     const sTitle={font:{bold:true,sz:14,color:{rgb:"1E293B"}},fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}},alignment:{horizontal:"center"}};
@@ -1741,14 +1745,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       [mkCell("Сводка — "+fmtMonth(month),sTitle,"s")],
       [],
       [mkCell("Показатель",sColHdr),mkCell("Сумма (AMD)",sColHdr)],
-      [mkCell("Валовые продажи АПРА",sTxt()),mkCell(osagoGross,sNum(),"n")],
-      [mkCell("Валовые продажи Добровольные",sTxt()),mkCell(volGross,sNum(),"n")],
-      [mkCell("Итого валовые",sTxt("DBEAFE")),mkCell(totalGross,sNum("DBEAFE"),"n")],
+      [mkCell("Валовый доход ОСАГО",sTxt()),mkCell(osagoGross,sNum(),"n")],
+      [mkCell("Валовый доход Добровольные",sTxt()),mkCell(volGross,sNum(),"n")],
+      [mkCell("Итого валовый доход",sTxt("DBEAFE")),mkCell(totalGross,sNum("DBEAFE"),"n")],
       [],
-      [mkCell("Комиссии агентов",sTxt("FEE2E2")),mkCell(agentCommissions,sNum("FEE2E2"),"n")],
+      [mkCell("Выплачено агентам и менеджеру",sTxt("FEE2E2")),mkCell(agentCommissions,sNum("FEE2E2"),"n")],
       [mkCell("Расходы офиса",sTxt("FEE2E2")),mkCell(totalExp,sNum("FEE2E2"),"n")],
       [],
-      [mkCell("Чистый доход",sTxt("DCFCE7")),mkCell(netIncome,sNum("DCFCE7"),"n")],
+      [mkCell("Чистая прибыль",sTxt("DCFCE7")),mkCell(netIncome,sNum("DCFCE7"),"n")],
     ];
     const ws1=XLSXStyle.utils.aoa_to_sheet(s1Data.map(r=>r.map(c=>c&&c.v!==undefined?c:({v:"",t:"s",s:sTxt()}))));
     s1Data.forEach((row,ri)=>row.forEach((cell,ci)=>{if(cell&&cell.s){const addr=XLSXStyle.utils.encode_cell({r:ri,c:ci});if(ws1[addr])ws1[addr].s=cell.s;}}));
@@ -3986,8 +3990,16 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
       {tab==="income"&&(()=>{
         const rows=officeExpenses[selMonth]||[];
+        const mgrActive=!managerConfig.managerStartDate||selMonth>=managerConfig.managerStartDate;
+        const opR=mgrActive?_computeOpR(agentData,managerConfig):[];
+        const opUids=mgrActive?new Set(managerConfig.operatorUids||[]):new Set();
+        const mgrTeamSales=opR.reduce((s,r)=>s+r.validSales,0);
+        const totMgr=opR.reduce((s,r)=>s+r.mi,0);
+        const totOp=opR.reduce((s,r)=>s+r.oi,0);
+        const totFix=opR.reduce((s,r)=>s+r.fix,0);
+        const totMgrPersonal=totMgr-totOp-totFix;
         const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
-        const osagoAgentPay=agentData.reduce((s,a)=>s+a.totalAgent,0);
+        const osagoAgentPay=agentData.filter(a=>!opUids.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0);
         const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
         const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
         const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
@@ -3996,14 +4008,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const osagoGross=osagoAgentIncome+officeDirectOsago;
         const volGross=volAgentIncome+officeDirectVol;
         const salesGross=osagoGross+volGross;
-        const agentPayTotal=osagoAgentPay+volAgentPay;
+        const osagoPayTotal=osagoAgentPay+totMgr;
+        const agentPayTotal=osagoPayTotal+volAgentPay;
         const salesNet=salesGross-agentPayTotal;
-        const opR=(!managerConfig.managerStartDate||selMonth>=managerConfig.managerStartDate)?_computeOpR(agentData,managerConfig):[];
-        const mgrTeamSales=opR.reduce((s,r)=>s+r.validSales,0);
-        const totMgr=opR.reduce((s,r)=>s+r.mi,0);
-        const totOp=opR.reduce((s,r)=>s+r.oi,0);
-        const totFix=opR.reduce((s,r)=>s+r.fix,0);
-        const totMgrPersonal=totMgr-totOp-totFix;
         const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
         const netProfit=salesNet-totalExpenses;
         const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);saveOfficeExpenses({...officeExpenses,[selMonth]:nr});};
@@ -4241,8 +4248,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <tr>
                     <td style={{...td,paddingLeft:14}}>ОСАГО</td>
                     <td style={{...td,textAlign:"right"}}>{fmt(osagoGross)}</td>
-                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(osagoAgentPay)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoGross-osagoAgentPay)}</td>
+                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(osagoPayTotal)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoGross-osagoPayTotal)}</td>
                   </tr>
                   <tr>
                     <td style={{...td,paddingLeft:14}}>Добровольные</td>
