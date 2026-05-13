@@ -3971,7 +3971,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             <td style={{...td,textAlign:"center",color:p.power?"#dc2626":"#6b7280",fontWeight:p.power?600:400}}>{p.power||"—"}</td>
                             <td style={{...td,textAlign:"center"}}>{p.term||"—"}</td>
                             <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
-                            <td style={{...td,fontSize:11,color:"#dc2626"}}>{excReason(p,exceptions,detailOp.uid)}</td>
+                            <td style={{...td,fontSize:11,color:"#dc2626"}}>{excReason(p,effExceptions,detailOp.uid)}</td>
                           </tr>
                         ))}</tbody>
                       </table>
@@ -5222,7 +5222,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{color:"#94a3b8",fontSize:12,marginTop:2}}>{notifs.length>0?`${notifs.length} активных уведомлений`:"Нет уведомлений"}</div>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={buildNotifications} title="Показать другие" style={{background:"#334155",border:"1px solid #475569",color:"#cbd5e1",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>↻</button>
+                <button onClick={()=>buildNotifications(true)} title="Показать другие" style={{background:"#334155",border:"1px solid #475569",color:"#cbd5e1",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>↻</button>
                 <button onClick={()=>setShowNotifs(false)} style={{background:"#334155",border:"1px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1,fontWeight:300}}>×</button>
               </div>
             </div>
@@ -5326,7 +5326,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </div>
             <div style={{padding:"12px 16px",borderTop:"2px solid #e2e8f0",background:"#f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <span style={{fontSize:12,color:"#64748b"}}>Обновляется при смене вкладки</span>
-              <button onClick={buildNotifications} style={btn("#1d4ed8",undefined,{fontSize:12})}>↻ Показать другие</button>
+              <button onClick={()=>buildNotifications(true)} style={btn("#1d4ed8",undefined,{fontSize:12})}>↻ Показать другие</button>
             </div>
           </div>
         </>
