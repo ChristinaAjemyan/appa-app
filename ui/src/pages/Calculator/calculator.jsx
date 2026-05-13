@@ -962,7 +962,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           if(!r?.value)continue;
           JSON.parse(r.value).filter(p=>{
             if(p.insuredName?.includes("ПРИМЕР"))return false;
-            if(p.term!=="L")return false;
+            if(p.term==="SH")return false;
             if(!p.carPlate)return false;
             const d=parseAnyDate(p.dateEnd);
             return d&&d>=pStart&&d<=pEnd;
@@ -975,7 +975,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           const data=JSON.parse(r.value);
           (data.policies||[]).filter(p=>{
             if(!p.carPlate)return false;
-            if(p.term!=="L")return false;
+            if(p.term==="SH")return false;
             const d=parseAnyDate(p.endDate);
             return d&&d>=pStart&&d<=pEnd;
           }).forEach(p=>expiring.push({...p,_mk:mk}));
