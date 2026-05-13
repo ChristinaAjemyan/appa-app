@@ -701,6 +701,7 @@ export default function App(){
   const[rnCallModal,setRnCallModal]=useState(null);
   const[rnNewCall,setRnNewCall]=useState({result:"no_answer",comment:""});
   const[renewedOpen,setRenewedOpen]=useState(false);
+  const[rnChecking,setRnChecking]=useState({});
   const[tasks,setTasks]=useState([]);
   const[taskTab,setTaskTab]=useState("active");
   const[selectedTask,setSelectedTask]=useState(null);
@@ -1036,6 +1037,33 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveRenewalWork=async(work,month)=>{try{await calcStorage.set(`renewalWork:${month}`,JSON.stringify(work));}catch{}};
   const updateRnStatus=async(polKey,status)=>{const w={...renewalWork,[polKey]:{...(renewalWork[polKey]||{}),operatorStatus:status}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
   const addRnCall=async(polKey,call)=>{const ex=renewalWork[polKey]||{};const now=new Date();const calls=[...(ex.calls||[]),{...call,date:now.toISOString().slice(0,10),time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}];const w={...renewalWork,[polKey]:{...ex,calls}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
+  const checkSingleRenewal=async(p)=>{
+    const pk=rnPolKey(p);
+    setRnChecking(c=>({...c,[pk]:true}));
+    try{
+      const expEnd=parseAnyDate(rnSubTab==="office"?p.dateEnd:p.endDate);
+      const np=normPlate(p.carPlate);
+      if(!expEnd||!np){setRnChecking(c=>({...c,[pk]:false}));return;}
+      const[ry,rm]=rnMonth.split("-").map(Number);
+      const searchMonths=[-1,0,1].map(delta=>{let sm=rm+delta,sy=ry;if(sm<1){sm=12;sy--;}if(sm>12){sm=1;sy++;}return`${sy}-${String(sm).padStart(2,"0")}`;});
+      const cands=[];
+      for(const mk of searchMonths){
+        const ro=await calcStorage.get(`officePol:${mk}`).catch(()=>null);
+        if(ro?.value)JSON.parse(ro.value).filter(c=>!c.insuredName?.includes("ПРИМЕР")&&c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.dateStart),_src:"office",_mk:mk}));
+        const ra=await calcStorage.get(`month:${mk}`).catch(()=>null);
+        if(ra?.value)(JSON.parse(ra.value).policies||[]).filter(c=>c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.startDate),_src:"agent",_mk:mk}));
+      }
+      const WIN=30*24*60*60*1000;
+      const match=cands.find(c=>c._np===np&&!(c.policyNum&&c.policyNum===p.policyNum)&&c._ds&&expEnd&&Math.abs(c._ds.getTime()-expEnd.getTime())<=WIN);
+      if(match){
+        const agName=match.agentUid?(getName(match.agentUid)||match.agentUid):(match.agentCode||"");
+        setRnResults(prev=>prev.map(r=>rnPolKey(r)===pk?{...p,_status:"renewed",_rnCo:match.company||"",_rnPol:match.policyNum||"",_rnAgent:agName,_rnSrc:match._src}:r));
+      }else{
+        alert("Продление не найдено для "+( p.carPlate||p.insuredName||"данного полиса"));
+      }
+    }catch(e){console.error(e);}
+    setRnChecking(c=>({...c,[pk]:false}));
+  };
 
 
   const addAgent=()=>{
@@ -4829,7 +4857,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       {tab==="renewals"&&(()=>{
         const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
         const getEndDate=p=>rnSubTab==="office"?p.dateEnd:p.endDate;
-        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"}};
+        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"}};
         const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
         const missed=rnResults?[...rnResults.filter(r=>r._status!=="renewed")].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
         const renewed=rnResults?rnResults.filter(r=>r._status==="renewed"):[];
@@ -4896,7 +4924,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5",boxShadow:"0 1px 4px rgba(220,38,38,0.07)"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead><tr style={{background:"#dc2626"}}>
-                      {["Дата оконч.","Страхователь","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки",""].map(h=>(
+                      {["Дата оконч.","Страхователь","Телефон","Комментарий","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки","",""].map(h=>(
                         <th key={h} style={thS}>{h}</th>
                       ))}
                     </tr></thead>
@@ -4908,10 +4936,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         const stInfo=OP_STATUS[opSt]||OP_STATUS[""];
                         const callCount=(work.calls||[]).length;
                         const endDate=rnSubTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+                        const isChecking=!!rnChecking[pk];
                         return(
                           <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
                             <td style={{...tdS,fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
-                            <td style={{...tdS,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                            <td style={{...tdS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                            <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e",fontWeight:600}}>{p.phone||"—"}</td>
+                            <td style={{...tdS,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#6b7280",fontSize:11}}>{p.comment||"—"}</td>
                             <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
                             <td style={tdS}>{p.company||"—"}</td>
                             <td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>
@@ -4926,6 +4957,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                               <button onClick={()=>{setRnCallModal({polKey:pk,pol:p});setRnNewCall({result:"no_answer",comment:""}); }}
                                 style={{background:callCount>0?"#eff6ff":"#f1f5f9",border:"1px solid "+(callCount>0?"#93c5fd":"#cbd5e1"),borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",color:callCount>0?"#1d4ed8":"#374151",fontWeight:700}}>
                                 📞{callCount>0?" "+callCount:""}
+                              </button>
+                            </td>
+                            <td style={{...tdS,textAlign:"center"}}>
+                              <button onClick={()=>checkSingleRenewal(p)} disabled={isChecking}
+                                style={{background:isChecking?"#f1f5f9":"#fffbeb",border:"1px solid "+(isChecking?"#d1d5db":"#fcd34d"),borderRadius:6,padding:"3px 8px",fontSize:11,cursor:isChecking?"not-allowed":"pointer",color:isChecking?"#9ca3af":"#92400e",fontWeight:700}} title="Проверить продление">
+                                {isChecking?"⏳":"🔍"}
                               </button>
                             </td>
                             <td style={{...tdS,textAlign:"center"}}>
@@ -5059,7 +5096,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       ))}
                     </div>
                     {canNav&&(
-                      <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);setOpEditPol(p);setOpFormOpen(true);setRnDetailPol(null);}}
+                      <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);openOpEdit(p);setRnDetailPol(null);}}
                         style={{...btn("#1d4ed8",undefined,{marginBottom:8,width:"100%",fontSize:13})}}>
                         ↗ Открыть в продажах офиса ({fmtMonth(p._mk)})
                       </button>
