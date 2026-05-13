@@ -1841,7 +1841,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
   const exportAllPayrollXlsx=(agentData,effVol,agentDir,month)=>{
-    const rows=buildAllPayrollRows(agentData,effVol,agentDir,officeCodes);
+    const _opUids=new Set(managerConfig?.operatorUids||[]);
+    const rows=buildAllPayrollRows(agentData.filter(a=>!_opUids.has(a.uid)),effVol,agentDir,officeCodes);
     const wb=XLSX.utils.book_new();
     const header=["Имя агента","768-код","Кол-во полисов","Начислено (ОСАГО)","К оплате офису (доброволь.)","К выплате","Примечание","Подпись"];
     const data=[header,...rows.map(r=>[r.name,r.ic,r.polCount,r.accrued,r.volDebt>0?r.volDebt:"",r.net,"",""])];
@@ -3639,7 +3640,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           </div>
 
           {showAllPayroll&&(()=>{
-            const rows=buildAllPayrollRows(agentData,effVol,agentDir,officeCodes);
+            const _opUids=new Set(managerConfig?.operatorUids||[]);
+            const rows=buildAllPayrollRows(agentData.filter(a=>!_opUids.has(a.uid)),effVol,agentDir,officeCodes);
             const totPols=rows.reduce((s,r)=>s+r.polCount,0);
             const totAcc=rows.reduce((s,r)=>s+r.accrued,0);
             const totVol=rows.reduce((s,r)=>s+r.volDebt,0);
