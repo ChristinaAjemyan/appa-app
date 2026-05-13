@@ -702,6 +702,7 @@ export default function App(){
   const[rnNewCall,setRnNewCall]=useState({result:"no_answer",comment:""});
   const[renewedOpen,setRenewedOpen]=useState(false);
   const[rnChecking,setRnChecking]=useState({});
+  const[rnAgentFilter,setRnAgentFilter]=useState("");
   const[tasks,setTasks]=useState([]);
   const[taskTab,setTaskTab]=useState("active");
   const[selectedTask,setSelectedTask]=useState(null);
@@ -4859,8 +4860,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const getEndDate=p=>rnSubTab==="office"?p.dateEnd:p.endDate;
         const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"}};
         const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
-        const missed=rnResults?[...rnResults.filter(r=>r._status!=="renewed")].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
-        const renewed=rnResults?rnResults.filter(r=>r._status==="renewed"):[];
+        const agentOptions=rnResults&&rnSubTab==="agents"?[...new Map(rnResults.map(p=>{const uid=p.agentUid||null;const ag=uid?effAgentDir[uid]:null;const name=ag?(ag.name+" "+ag.surname).trim():(p.agentCode||"Неизвестен");const code=ag?.internalCode||p.agentCode||"";const key=uid||p.agentCode||"?";return[key,{key,label:code?code+" — "+name:name,uid,agentCode:p.agentCode}];})).values()].sort((a,b)=>a.label.localeCompare(b.label)):[];
+        const matchAgent=p=>!rnAgentFilter||(p.agentUid&&p.agentUid===rnAgentFilter)||((!p.agentUid)&&p.agentCode===rnAgentFilter);
+        const missed=rnResults?[...rnResults.filter(r=>r._status!=="renewed"&&matchAgent(r))].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
+        const renewed=rnResults?rnResults.filter(r=>r._status==="renewed"&&matchAgent(r)):[];
         const promisedCnt=missed.filter(p=>(renewalWork[rnPolKey(p)]?.operatorStatus)==="promised").length;
         const totals=rnResults?{renewed:renewed.length,missed:rnResults.filter(r=>r._status==="missed").length,noplate:rnResults.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
         const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
@@ -4870,7 +4873,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {/* Subtabs */}
             <div style={{display:"flex",gap:6,marginBottom:14}}>
               {[["office","🏢 Офис"],["agents","👤 Агенты"]].map(([k,l])=>(
-                <button key={k} onClick={()=>{setRnSubTab(k);setRnResults(null);setRenewalWork({});}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rnSubTab===k?"#0f766e":"#d1d5db"),background:rnSubTab===k?"#ccfbf1":"#f9fafb",color:rnSubTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
+                <button key={k} onClick={()=>{setRnSubTab(k);setRnResults(null);setRenewalWork({});setRnAgentFilter("");}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rnSubTab===k?"#0f766e":"#d1d5db"),background:rnSubTab===k?"#ccfbf1":"#f9fafb",color:rnSubTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
               ))}
             </div>
             {/* Filter bar */}
@@ -4881,6 +4884,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {EXPIRY_OPTIONS.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}
                 </select>
               </div>
+              {rnSubTab==="agents"&&rnResults&&agentOptions.length>0&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Агент</div>
+                  <select value={rnAgentFilter} onChange={e=>setRnAgentFilter(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:13,minWidth:200}}>
+                    <option value="">— Все агенты ({rnResults.length}) —</option>
+                    {agentOptions.map(o=>{
+                      const cnt=rnResults.filter(p=>(p.agentUid&&p.agentUid===o.uid)||((!p.agentUid)&&p.agentCode===o.key)).length;
+                      return <option key={o.key} value={o.key}>{o.label} ({cnt})</option>;
+                    })}
+                  </select>
+                </div>
+              )}
               {rnSubTab==="office"&&(
                 <div>
                   <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Период</div>
