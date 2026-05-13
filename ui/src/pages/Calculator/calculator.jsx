@@ -1869,8 +1869,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
     const ws={};let rw=0;const mg=[];
     const VHDRS=showMgr
-      ?["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер."]
-      :["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Опер.","Выплата опер."];
+      ?["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер.","К выплате"]
+      :["№ полиса","Компания","Страхователь","Марка","Рег. номер","Регион","БМ","Мощность","Срок","Сумма","% Опер.","Выплата опер.","К выплате"];
     const EHDRS=[...VHDRS,"Причина исключения"];
     const nc=EHDRS.length-1;
     // Header row
@@ -1887,12 +1887,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       vp.forEach((p,i)=>{
         const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg);
         const vals=showMgr
-          ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr,Math.round(p.amount*mr/100),or,Math.round(p.amount*or/100)]
-          :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or,Math.round(p.amount*or/100)];
+          ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr,Math.round(p.amount*mr/100),or,Math.round(p.amount*or/100),""]
+          :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or,Math.round(p.amount*or/100),""];
         vals.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;
       });
       const totAmt=vp.reduce((s,p)=>s+p.amount,0);
-      const totRow=showMgr?["ИТОГО","","","","","","","","",totAmt,"",r.mi,"",r.oi]:["ИТОГО","","","","","","","","",totAmt,"",r.oi];
+      const totRow=showMgr?["ИТОГО","","","","","","","","",totAmt,"",r.mi,"",r.oi,r.oi+r.fix]:["ИТОГО","","","","","","","","",totAmt,"",r.oi,r.oi+r.fix];
       totRow.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw+=2;
     }
     if(ep.length>0){
@@ -1908,8 +1908,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:nc}});
     ws["!cols"]=showMgr
-      ?[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:8},{wch:14},{wch:35}]
-      :[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:35}];
+      ?[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:8},{wch:14},{wch:14},{wch:35}]
+      :[{wch:16},{wch:10},{wch:26},{wch:18},{wch:13},{wch:8},{wch:6},{wch:8},{wch:6},{wch:14},{wch:8},{wch:14},{wch:14},{wch:35}];
     ws["!merges"]=mg;
     return ws;
   };
@@ -1996,6 +1996,16 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,false),sn);
     const name=gn(r.uid)||gc(r.uid)||r.uid;
     _dlXlsx(wb,name.slice(0,30)+"_"+month+".xlsx");
+  };
+
+  const exportSingleOpXlsxMgr=(r,cfg,agentDir,month,excepts)=>{
+    const wb=XLSXStyle.utils.book_new();
+    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
+    const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+    const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));
+    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,true),sn);
+    const name=gn(r.uid)||gc(r.uid)||r.uid;
+    _dlXlsx(wb,name.slice(0,30)+"_mgr_"+month+".xlsx");
   };
 
   const exportOfficeSalesExcel=(pols,monthLabel)=>{
@@ -3856,7 +3866,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{background:"#1e293b",color:"#fff"}}>
-                    {["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс","Доход мен.","Выплата опер.","Прибыль","",""].map(h=><th key={h} style={{...th,color:"#fff",background:"#1e293b",whiteSpace:"nowrap"}}>{h}</th>)}
+                    {["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс","Доход мен.","Выплата опер.","К выплате","Прибыль","",""].map(h=><th key={h} style={{...th,color:"#fff",background:"#1e293b",whiteSpace:"nowrap"}}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {opResults.map((r,i)=>{
@@ -3871,9 +3881,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,textAlign:"right",color:"#d97706"}}>{fmt(r.fix)}</td>
                           <td style={{...td,textAlign:"right",color:"#7c3aed",fontWeight:600}}>{fmt(r.mi)}</td>
                           <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(r.oi)}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8",background:"#eff6ff"}}>{fmt(r.oi+r.fix)}</td>
                           <td style={{...td,textAlign:"right",fontWeight:700,color:r.profit>=0?"#16a34a":"#dc2626"}}>{fmt(r.profit)}</td>
                           <td style={{...td,color:"#6b7280",fontSize:11}}>{mgrDetail===r.uid?"▲":"▼"}</td>
-                          <td style={td} onClick={e=>e.stopPropagation()}><button onClick={()=>exportSingleOpXlsx(r,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"})} title="Экспорт оператора">⬇</button></td>
+                          <td style={td} onClick={e=>e.stopPropagation()}>
+                            <button onClick={()=>exportSingleOpXlsx(r,cfg,effAgentDir,selMonth,effExceptions)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"}),marginRight:4}} title="Excel для оператора">⬇ Опер.</button>
+                            <button onClick={()=>exportSingleOpXlsxMgr(r,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#7c3aed",undefined,{fontSize:11,padding:"3px 8px"})} title="Excel для менеджера">⬇ Мен.</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -3883,6 +3897,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <td style={{...td,textAlign:"right",color:"#fbbf24",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totFix)}</td>
                       <td style={{...td,textAlign:"right",color:"#c4b5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totMgr)}</td>
                       <td style={{...td,textAlign:"right",color:"#93c5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totOp)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#93c5fd",background:"#1e3a5f",borderTop:"2px solid #374151"}}>{fmt(totOp+totFix)}</td>
                       <td style={{...td,textAlign:"right",fontWeight:700,color:totProfit>=0?"#4ade80":"#f87171",borderTop:"2px solid #374151"}}>{fmt(totProfit)}</td>
                       <td style={{...td,borderTop:"2px solid #374151"}}></td>
                       <td style={{...td,borderTop:"2px solid #374151"}}></td>
