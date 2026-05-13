@@ -107,7 +107,7 @@ const SEED_AGENTS=(()=>{
     ["768-128","ԳՈՒՐԳԵՆ","ԱՐևԻԿՅԱՆ","1606-128","","310-71-08","797-22","A50-M3-40-G8","13021-06"],
     ["768-130","ՌԻՏԱ","ԳՐԻԳՈՐՅԱՆ","1606-130","","","","",""],
     ["768-131","ՀՌԻՓՍԻՄԵ","ԹՈՐՈՍՅԱՆ","1606-131","","","","",""],
-    ["768-132","Ժաննա","Գասպարյան","1606-132","","","797-27","","13021-12"],
+    ["768-132","Ժաննա","Գասպարյան","1606-189","","","797-27","","13021-12"],
     ["768-133","Ռոմիկ","Նազարեթյան (+145+164)","1606-133","","310-71-07","797-21","","13021-10"],
     ["768-138","Զարզանդ","Բրսոյան","1606-138","","","","",""],
     ["768-139","Աղասի","Սահակյան (Արտակ)","1606-139","","","","",""],
@@ -396,11 +396,11 @@ function downloadOfficeTemplate(){
   };
   const h1=["polType","insuredName","phone","company","policyNum","date","dateStart","dateEnd","car","carPlate","bm","region","power","term","polStatus","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
   const l1=["Тип","Страхователь","Телефон","Компания","№ полиса","Дата продажи","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Статус","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
-  const hint1=["*osago","*Иванов Иван","*+37400000000","*Nairi / Ingo...","№ полиса","*ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","статус","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco","число","ДД.ММ.ГГГГ"];
+  const hint1=["*osago","*Иванов Иван","*+37400000000","*Nairi / Ingo...","№ полиса","*ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","статус","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco/bank","число","ДД.ММ.ГГГГ"];
   const ex1=["osago","⚠ ПРИМЕР — не удалять","+37400000000","Nairi","AB123456","15.01.2024","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","","85000","0","768-101","","FALSE","","",""];
   const h2=["polType","insuredName","phone","company","policyNum","productName","date","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
   const l2=["Тип","Страхователь","Телефон","Компания","№ полиса","Продукт","Дата продажи","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
-  const hint2=["*voluntary","*Иванов Иван","*+37400000000","*компания","№ полиса","*название продукта","*ДД.ММ.ГГГГ","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco","число","ДД.ММ.ГГГГ"];
+  const hint2=["*voluntary","*Иванов Иван","*+37400000000","*компания","№ полиса","*название продукта","*ДД.ММ.ГГГГ","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco/bank","число","ДД.ММ.ГГГГ"];
   const ex2=["voluntary","⚠ ПРИМЕР — не удалять","+37499000000","Nairi","VOL123","КАСКО","20.01.2024","150000","0","768-102","","FALSE","","",""];
   XLSXStyle.utils.book_append_sheet(wb,mkSheet(h1,l1,hint1,ex1),"АПРА (osago)");
   XLSXStyle.utils.book_append_sheet(wb,mkSheet(h2,l2,hint2,ex2),"Добровольные");
@@ -786,7 +786,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setLoginError("Неверный PIN");
   };
   useEffect(()=>{calcStorage.get("auditLog").then(r=>{if(r?.value)setAuditEntries(JSON.parse(r.value));}).catch(()=>{});},[]);
-  const _fmtPayLog=t=>t==="cash"?"💵 Наличные":t==="acba"?"🏦 ACBA":t==="ineco"?"🏦 ИНЭКО":t||"—";
+  const _fmtPayLog=t=>t==="cash"?"💵 Наличные":t==="acba"?"🏦 ACBA":t==="ineco"?"🏦 ИНЭКО":t==="bank"?"💳 Банк. перевод":t||"—";
   const logAction=(action,details,month,userName)=>{
     const user=userName||(role==="admin"?"Администратор":(currentEmployee?.name||"Сотрудник"));
     const _cats={add_policy:"policy",edit_policy:"policy",delete_policy:"policy",import:"policy",pay_policy:"finance",cash_close:"finance",cash_reopen:"finance",expense_change:"finance",amex_topup:"amex",amex_topup_delete:"amex",lock_month:"month",unlock_month:"month",settings:"settings",dir_change:"settings",login:"auth",logout:"auth"};
@@ -1299,10 +1299,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
     const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
     const ineco=pols.filter(p=>p.paymentType==="ineco").reduce((s,p)=>s+(p.paidAmount||0),0);
-    const updated={...cashDays,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(cashDays[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,total:cash+acba+ineco}}};
+    const bank=pols.filter(p=>p.paymentType==="bank").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const updated={...cashDays,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(cashDays[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,bank,total:cash+acba+ineco+bank}}};
     setCashDays(updated);
     calcStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
-    logAction("cash_close","Касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — 💵 "+fmt(cash)+" · ACBA "+fmt(acba)+" · ИНЭКО "+fmt(ineco)+" · Итого: "+fmt(cash+acba+ineco)+" ֏");
+    logAction("cash_close","Касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — 💵 "+fmt(cash)+" · ACBA "+fmt(acba)+" · ИНЭКО "+fmt(ineco)+" · Банк: "+fmt(bank)+" · Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
     setCashCloseModal(null);
   };
   const reopenCashDay=(date)=>{
@@ -1998,7 +1999,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const exportOfficeSalesExcel=(pols,monthLabel)=>{
     if(!pols.length)return;
-    const fmtPay=t=>({cash:"Наличные",acba:"ACBA",ineco:"INECO"})[t]||t||"—";
+    const fmtPay=t=>({cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"})[t]||t||"—";
     const isoToDisplay=d=>{if(!d)return"";const p=d.split("-");return p.length===3?`${p[2]}.${p[1]}.${p[0]}`:d;};
     const br={style:"thin",color:{rgb:"AAAAAA"}};
     const borders={top:br,bottom:br,left:br,right:br};
@@ -2518,7 +2519,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       )}
 
       {tab==="officesales"&&(()=>{
-        const fmtPay=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO"})[t]||t||"—";
+        const fmtPay=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO",bank:"💳 Банк. перевод"})[t]||t||"—";
         const fmtPolDate=d=>{if(!d)return"—";try{return fmtDate(parseDate(d));}catch{return d;}};
         const finp={...inp,border:"1.5px solid #9ca3af",padding:"8px 10px"};
         const flbl={fontSize:13,color:"#111827",marginBottom:4,fontWeight:600};
@@ -3098,7 +3099,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <div style={{padding:"10px 14px"}}>
                         <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>Способ оплаты *</div>
                         <div style={{display:"flex",gap:8}}>
-                          {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"]].map(([k,l])=>(
+                          {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"],["bank","💳 Банк. перевод"]].map(([k,l])=>(
                             <button key={k} onClick={()=>setOpFD(p=>({...p,paymentType:k}))}
                               style={{...btn(opFD.paymentType===k?"#1d4ed8":"#f3f4f6",opFD.paymentType===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opFD.paymentType===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
                               {l}
@@ -3126,6 +3127,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                                 <option value="cash">💵 Наличные</option>
                                 <option value="acba">🏦 ACBA</option>
                                 <option value="ineco">🏦 ИНЭКО</option>
+                                <option value="bank">💳 Банк. перевод</option>
                               </select>
                             :<strong style={{marginLeft:4}}>{fmtPay(opEditPol.paymentType)}</strong>
                           }
@@ -3169,7 +3171,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>Способ оплаты *</div>
                     <div style={{display:"flex",gap:8}}>
-                      {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"]].map(([k,l])=>(
+                      {[["cash","💵 Наличные"],["acba","🏦 ACBA"],["ineco","🏦 INECO"],["bank","💳 Банк. перевод"]].map(([k,l])=>(
                         <button key={k} onClick={()=>setOpPayData(p=>({...p,paymentType:k}))}
                           style={{...btn(opPayData.paymentType===k?"#1d4ed8":"#f3f4f6",opPayData.paymentType===k?"#fff":"#374151",{flex:1,border:"2px solid "+(opPayData.paymentType===k?"#1d4ed8":"#e5e7eb"),fontSize:12})}}>
                           {l}
@@ -3200,7 +3202,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const fmtDay=d=>{try{const[y,m,dd]=d.split("-");return dd+"."+m+"."+y;}catch{return d;}};
         const fmtDatetime=iso=>{try{const d=new Date(iso);return d.toLocaleDateString("ru-RU")+", "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
         const fmtTime=iso=>{try{return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
-        const payLabel=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO"})[t]||t||"—";
+        const payLabel=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO",bank:"💳 Банк. перевод"})[t]||t||"—";
         const polTypeBadge=p=>p.polType==="voluntary"
           ?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>
           :<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>;
@@ -3209,21 +3211,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const byDay={};
         cashMonthPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
           const d=normPaidDate(p.paidDate);
-          if(!byDay[d])byDay[d]={cash:0,acba:0,ineco:0,pols:[]};
+          if(!byDay[d])byDay[d]={cash:0,acba:0,ineco:0,bank:0,pols:[]};
           const amt=p.paidAmount||0;
           if(p.paymentType==="acba")byDay[d].acba+=amt;
           else if(p.paymentType==="ineco")byDay[d].ineco+=amt;
+          else if(p.paymentType==="bank")byDay[d].bank+=amt;
           else byDay[d].cash+=amt;
           byDay[d].pols.push(p);
         });
-        if(today.startsWith(selMonth)&&!byDay[today])byDay[today]={cash:0,acba:0,ineco:0,pols:[]};
+        if(today.startsWith(selMonth)&&!byDay[today])byDay[today]={cash:0,acba:0,ineco:0,bank:0,pols:[]};
 
         // For closed days use snapshot totals; for open use live
         const getTotals=date=>{
           const cd=cashDays[date];
           if(cd&&cd.closed&&cd.totals)return cd.totals;
-          const d=byDay[date]||{cash:0,acba:0,ineco:0};
-          return{cash:d.cash,acba:d.acba,ineco:d.ineco,total:(d.cash+d.acba+d.ineco)};
+          const d=byDay[date]||{cash:0,acba:0,ineco:0,bank:0};
+          return{cash:d.cash,acba:d.acba,ineco:d.ineco,bank:d.bank||0,total:(d.cash+d.acba+d.ineco+(d.bank||0))};
         };
         const getPols=date=>{
           const cd=cashDays[date];
@@ -3236,8 +3239,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const days=[...allDayKeys].filter(d=>d.startsWith(selMonth)).sort().reverse();
 
         // Month totals (sum of all days — closed use snapshot, open use live)
-        const mTotals=days.reduce((acc,d)=>{const t=getTotals(d);acc.cash+=t.cash;acc.acba+=t.acba;acc.ineco+=t.ineco;return acc;},{cash:0,acba:0,ineco:0});
-        const mTotal=mTotals.cash+mTotals.acba+mTotals.ineco;
+        const mTotals=days.reduce((acc,d)=>{const t=getTotals(d);acc.cash+=t.cash;acc.acba+=t.acba;acc.ineco+=t.ineco;acc.bank+=(t.bank||0);return acc;},{cash:0,acba:0,ineco:0,bank:0});
+        const mTotal=mTotals.cash+mTotals.acba+mTotals.ineco+mTotals.bank;
 
         const card=(label,val,color)=>(
           <div style={{flex:1,minWidth:140,background:"white",border:"1px solid #e5e7eb",borderRadius:8,padding:"12px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
@@ -3275,8 +3278,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           const isClosed=cashDays[date]&&cashDays[date].closed;
           const fmtAmd=v=>(v||0).toLocaleString("ru-RU")+" AMD";
           const pTypeLabel=p=>p.polType==="voluntary"?(p.productName||"Добровольный"):"ОСАГО";
-          const rows=pols.map(p=>`<tr><td>${p.insuredName||"—"}</td><td>${pTypeLabel(p)}</td><td>${p.company||"—"}</td><td>${p.policyNum||"—"}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO"}[p.paymentType]||"—"}</td><td>${p.comment||"—"}</td></tr>`).join("");
-          const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#111}h2{margin:0 0 2px;font-size:16px}p.sub{margin:0 0 14px;color:#666;font-size:11px}table{width:100%;border-collapse:collapse;margin-bottom:16px}th,td{border:1px solid #ccc;padding:4px 7px;text-align:left}th{background:#f1f5f9;font-size:10px;font-weight:600}.totals{border:2px solid #374151;border-radius:4px;padding:10px 14px;max-width:320px}.totals .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}.totals .grand{font-size:15px;font-weight:700;border-top:2px solid #374151;margin-top:5px;padding-top:7px}.footer{margin-top:16px;font-size:10px;color:#999}@media print{.no-print{display:none}}</style></head><body><h2>Кассовый отчёт</h2><p class="sub">${fmtDay(date)}${isClosed?" · Касса закрыта "+fmtDatetime(cashDays[date].closedAt):""}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco)}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const rows=pols.map(p=>`<tr><td>${p.insuredName||"—"}</td><td>${pTypeLabel(p)}</td><td>${p.company||"—"}</td><td>${p.policyNum||"—"}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"}[p.paymentType]||"—"}</td><td>${p.comment||"—"}</td></tr>`).join("");
+          const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#111}h2{margin:0 0 2px;font-size:16px}p.sub{margin:0 0 14px;color:#666;font-size:11px}table{width:100%;border-collapse:collapse;margin-bottom:16px}th,td{border:1px solid #ccc;padding:4px 7px;text-align:left}th{background:#f1f5f9;font-size:10px;font-weight:600}.totals{border:2px solid #374151;border-radius:4px;padding:10px 14px;max-width:320px}.totals .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}.totals .grand{font-size:15px;font-weight:700;border-top:2px solid #374151;margin-top:5px;padding-top:7px}.footer{margin-top:16px;font-size:10px;color:#999}@media print{.no-print{display:none}}</style></head><body><h2>Кассовый отчёт</h2><p class="sub">${fmtDay(date)}${isClosed?" · Касса закрыта "+fmtDatetime(cashDays[date].closedAt):""}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row"><span>💳 Банк. перевод</span><span>${fmtAmd(t.bank||0)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco)}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
           const w=window.open("","_blank","width=900,height=650");
           if(w){w.document.write(html);w.document.close();}
         };
@@ -3294,7 +3297,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {card("💵 Наличные",mTotals.cash,"#374151")}
               {card("🏦 ACBA",mTotals.acba,"#1d4ed8")}
               {card("🏦 INECO",mTotals.ineco,"#0f766e")}
-              {card("📊 Итого за месяц",mTotal,"#7c3aed")}
+              {card("💳 Банк. перевод",mTotals.bank,"#7c3aed")}
+              {card("📊 Итого за месяц",mTotal,"#374151")}
             </div>
             {!cashLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
             {cashLoaded&&days.length===0&&(
@@ -3309,14 +3313,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead>
                     <tr style={{background:"#f1f5f9"}}>
-                      {["Дата","💵 Наличные","🏦 ACBA","🏦 INECO","Итого","Записей","Статус",""].map(h=><th key={h} style={{...th,padding:"10px 12px"}}>{h}</th>)}
+                      {["Дата","💵 Наличные","🏦 ACBA","🏦 INECO","💳 Банк.","Итого","Записей","Статус",""].map(h=><th key={h} style={{...th,padding:"10px 12px"}}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {days.map(date=>{
                       const t=getTotals(date);
                       const pols=getPols(date);
-                      const total=t.total||t.cash+t.acba+t.ineco;
+                      const total=t.total||t.cash+t.acba+t.ineco+(t.bank||0);
                       const isClosed=!!(cashDays[date]&&cashDays[date].closed);
                       const wasReopened=!!(cashDays[date]&&cashDays[date].reopenedAt);
                       const isToday=date===today;
@@ -3334,6 +3338,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,textAlign:"right",color:t.cash>0?"#374151":"#d1d5db"}}>{t.cash>0?fmt(t.cash):"—"}</td>
                           <td style={{...td,textAlign:"right",color:t.acba>0?"#1d4ed8":"#d1d5db"}}>{t.acba>0?fmt(t.acba):"—"}</td>
                           <td style={{...td,textAlign:"right",color:t.ineco>0?"#0f766e":"#d1d5db"}}>{t.ineco>0?fmt(t.ineco):"—"}</td>
+                          <td style={{...td,textAlign:"right",color:(t.bank||0)>0?"#7c3aed":"#d1d5db"}}>{(t.bank||0)>0?fmt(t.bank||0):"—"}</td>
                           <td style={{...td,textAlign:"right",fontWeight:700}}>{total>0?fmt(total):"—"}</td>
                           <td style={{...td,textAlign:"center",color:"#6b7280"}}>{pols.length}</td>
                           <td style={{...td,whiteSpace:"nowrap"}}>
@@ -3352,7 +3357,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         </tr>
                         {isExpanded&&(
                           <tr key={date+"-exp"}>
-                            <td colSpan={8} style={{padding:"12px 16px",background:"#fafafa",borderBottom:"1px solid #e5e7eb"}}>
+                            <td colSpan={9} style={{padding:"12px 16px",background:"#fafafa",borderBottom:"1px solid #e5e7eb"}}>
                               {isClosed&&<div style={{fontSize:11,color:"#6b7280",marginBottom:8}}>Снимок на момент закрытия · {fmtDatetime(cashDays[date].closedAt)}</div>}
                               {pols.length>0
                                 ?<div style={{overflowX:"auto"}}>{polsTable(pols,true)}</div>
@@ -3370,8 +3375,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {/* === Close-of-day modal === */}
             {cashCloseModal&&(()=>{
-              const d=byDay[cashCloseModal]||{cash:0,acba:0,ineco:0,pols:[]};
-              const total=d.cash+d.acba+d.ineco;
+              const d=byDay[cashCloseModal]||{cash:0,acba:0,ineco:0,bank:0,pols:[]};
+              const total=d.cash+d.acba+d.ineco+(d.bank||0);
               return(
               <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:"white",borderRadius:12,width:"100%",maxWidth:680,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
@@ -3396,6 +3401,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <div><span style={{color:"#6b7280"}}>💵 Наличные: </span><strong>{fmt(d.cash)}</strong></div>
                       <div><span style={{color:"#6b7280"}}>🏦 ACBA: </span><strong style={{color:"#1d4ed8"}}>{fmt(d.acba)}</strong></div>
                       <div><span style={{color:"#6b7280"}}>🏦 INECO: </span><strong style={{color:"#0f766e"}}>{fmt(d.ineco)}</strong></div>
+                      <div><span style={{color:"#6b7280"}}>💳 Банк. перевод: </span><strong style={{color:"#7c3aed"}}>{fmt(d.bank||0)}</strong></div>
                       <div style={{marginLeft:"auto"}}><span style={{color:"#6b7280"}}>Итого: </span><strong style={{fontSize:16,color:"#7c3aed"}}>{fmt(total)}</strong></div>
                     </div>
                   </div>
@@ -4425,7 +4431,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               const isOsago=p.polType!=="voluntary";
               const agName=p.agentUid?(getName(p.agentUid)||p.agentUid):"—";
               const fmtTerm=t=>t==="L"?"L (от 3 месяцев)":t==="SH"?"SH (краткосрочный)":t||"—";
-              const fmtPay2=t=>t==="cash"?"Наличные":t==="acba"?"ACBA":t==="ineco"?"Ineco":t||"—";
+              const fmtPay2=t=>t==="cash"?"Наличные":t==="acba"?"ACBA":t==="ineco"?"Ineco":t==="bank"?"Банк. перевод":t||"—";
               const v=x=>x!=null&&String(x).trim()?String(x).trim():"—";
 
               const Section=({title,color,children})=>(
