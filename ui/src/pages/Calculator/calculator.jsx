@@ -695,6 +695,12 @@ export default function App(){
   const[rnPeriod,setRnPeriod]=useState("all");
   const[rnResults,setRnResults]=useState(null);
   const[rnLoading,setRnLoading]=useState(false);
+  const[renewalWork,setRenewalWork]=useState({});
+  const[renewalWorkMonth,setRenewalWorkMonth]=useState(null);
+  const[rnDetailPol,setRnDetailPol]=useState(null);
+  const[rnCallModal,setRnCallModal]=useState(null);
+  const[rnNewCall,setRnNewCall]=useState({result:"no_answer",comment:""});
+  const[renewedOpen,setRenewedOpen]=useState(false);
   const[tasks,setTasks]=useState([]);
   const[taskTab,setTaskTab]=useState("active");
   const[selectedTask,setSelectedTask]=useState(null);
@@ -1008,6 +1014,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         return{...p,_status:"missed"};
       });
       setRnResults(results);
+      await loadRenewalWork(rnMonth);
     }catch(e){console.error(e);setRnResults([]);}
     setRnLoading(false);
   };
@@ -1023,6 +1030,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Продления");
     XLSX.writeFile(wb,`Продления_${rnMonth}${rnPeriod!=="all"?"_"+rnPeriod:""}.xlsx`);
   };
+
+  const rnPolKey=p=>`${(p.policyNum||"").trim()}:${(p.carPlate||"").trim()}`;
+  const loadRenewalWork=async(month)=>{try{const r=await calcStorage.get(`renewalWork:${month}`).catch(()=>null);setRenewalWork(r?.value?JSON.parse(r.value):{});setRenewalWorkMonth(month);}catch{}};
+  const saveRenewalWork=async(work,month)=>{try{await calcStorage.set(`renewalWork:${month}`,JSON.stringify(work));}catch{}};
+  const updateRnStatus=async(polKey,status)=>{const w={...renewalWork,[polKey]:{...(renewalWork[polKey]||{}),operatorStatus:status}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
+  const addRnCall=async(polKey,call)=>{const ex=renewalWork[polKey]||{};const now=new Date();const calls=[...(ex.calls||[]),{...call,date:now.toISOString().slice(0,10),time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}];const w={...renewalWork,[polKey]:{...ex,calls}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
 
 
   const addAgent=()=>{
@@ -4815,19 +4828,28 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
       {tab==="renewals"&&(()=>{
         const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
-        const totals=rnResults?{renewed:rnResults.filter(r=>r._status==="renewed").length,missed:rnResults.filter(r=>r._status==="missed").length,noplate:rnResults.filter(r=>r._status==="noplate").length}:null;
+        const getEndDate=p=>rnSubTab==="office"?p.dateEnd:p.endDate;
+        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"}};
+        const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
+        const missed=rnResults?[...rnResults.filter(r=>r._status!=="renewed")].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
+        const renewed=rnResults?rnResults.filter(r=>r._status==="renewed"):[];
+        const promisedCnt=missed.filter(p=>(renewalWork[rnPolKey(p)]?.operatorStatus)==="promised").length;
+        const totals=rnResults?{renewed:renewed.length,missed:rnResults.filter(r=>r._status==="missed").length,noplate:rnResults.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
+        const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
+        const thS={padding:"9px 10px",fontWeight:700,fontSize:11,color:"white",background:"transparent",textAlign:"left"};
         return(
           <div style={{maxWidth:1200}}>
+            {/* Subtabs */}
             <div style={{display:"flex",gap:6,marginBottom:14}}>
               {[["office","🏢 Офис"],["agents","👤 Агенты"]].map(([k,l])=>(
-                <button key={k} onClick={()=>{setRnSubTab(k);setRnResults(null);}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rnSubTab===k?"#0f766e":"#d1d5db"),background:rnSubTab===k?"#ccfbf1":"#f9fafb",color:rnSubTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
+                <button key={k} onClick={()=>{setRnSubTab(k);setRnResults(null);setRenewalWork({});}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rnSubTab===k?"#0f766e":"#d1d5db"),background:rnSubTab===k?"#ccfbf1":"#f9fafb",color:rnSubTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
               ))}
             </div>
-
+            {/* Filter bar */}
             <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
               <div>
                 <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Месяц истечения</div>
-                <select value={rnMonth} onChange={e=>setRnMonth(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:13}}>
+                <select value={rnMonth} onChange={e=>{setRnMonth(e.target.value);setRnResults(null);}} style={{...inp,padding:"6px 8px",fontSize:13}}>
                   {EXPIRY_OPTIONS.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}
                 </select>
               </div>
@@ -4842,70 +4864,126 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               )}
               <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
-                <button onClick={checkRenewals} disabled={rnLoading} style={btn("#0f766e",undefined,{fontSize:13,padding:"8px 20px"})}>
-                  {rnLoading?"⏳ Проверяю...":"🔍 Проверить"}
-                </button>
+                <button onClick={checkRenewals} disabled={rnLoading} style={btn("#0f766e",undefined,{fontSize:13,padding:"8px 20px"})}>{rnLoading?"⏳ Проверяю...":"🔍 Проверить"}</button>
                 {rnResults&&rnResults.length>0&&<button onClick={exportRenewalsResult} style={btn("#16a34a",undefined,{fontSize:13})}>⬇ Excel</button>}
               </div>
             </div>
-
+            {/* Dashboard */}
             {rnResults&&(
-              <>
-                <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-                  <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{totals.renewed}</div>
-                    <div style={{fontSize:11,color:"#166534",fontWeight:600}}>✅ Продлено</div>
-                  </div>
-                  <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>{totals.missed}</div>
-                    <div style={{fontSize:11,color:"#991b1b",fontWeight:600}}>❌ Пропущено</div>
-                  </div>
-                  {totals.noplate>0&&<div style={{background:"#fefce8",border:"1px solid #fde047",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,color:"#ca8a04"}}>{totals.noplate}</div>
-                    <div style={{fontSize:11,color:"#92400e",fontWeight:600}}>⚠️ Нет госномера</div>
-                  </div>}
-                  <div style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
-                    <div style={{fontSize:22,fontWeight:800,color:"#374151"}}>{rnResults.length}</div>
-                    <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>Всего полисов</div>
-                  </div>
+              <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+                <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>{totals.missed+totals.noplate}</div>
+                  <div style={{fontSize:11,color:"#991b1b",fontWeight:600}}>❌ Требуют внимания</div>
                 </div>
-
-                {rnResults.length===0
-                  ?<div style={{textAlign:"center",color:"#94a3b8",padding:"40px 20px"}}>Нет долгосрочных полисов за выбранный период</div>
-                  :<div style={{overflowX:"auto"}}>
+                <div style={{background:"#f5f3ff",border:"1px solid #c4b5fd",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#7c3aed"}}>{totals.promised}</div>
+                  <div style={{fontSize:11,color:"#5b21b6",fontWeight:600}}>🤝 Обещали</div>
+                </div>
+                <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{totals.renewed}</div>
+                  <div style={{fontSize:11,color:"#166534",fontWeight:600}}>✅ Продлено</div>
+                </div>
+                <div style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#374151"}}>{rnResults.length}</div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>Всего</div>
+                </div>
+              </div>
+            )}
+            {/* TOP TABLE: missed + noplate */}
+            {rnResults&&missed.length>0&&(
+              <div style={{marginBottom:22}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#dc2626",marginBottom:8}}>❌ Требуют внимания — {missed.length}</div>
+                <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5",boxShadow:"0 1px 4px rgba(220,38,38,0.07)"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#dc2626"}}>
+                      {["Дата оконч.","Страхователь","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки",""].map(h=>(
+                        <th key={h} style={thS}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {missed.map((p,i)=>{
+                        const pk=rnPolKey(p);
+                        const work=renewalWork[pk]||{};
+                        const opSt=work.operatorStatus||"";
+                        const stInfo=OP_STATUS[opSt]||OP_STATUS[""];
+                        const callCount=(work.calls||[]).length;
+                        const endDate=rnSubTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+                        return(
+                          <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
+                            <td style={{...tdS,fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
+                            <td style={{...tdS,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                            <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
+                            <td style={tdS}>{p.company||"—"}</td>
+                            <td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>
+                            <td style={{...tdS,fontWeight:700,fontSize:11,color:p._status==="noplate"?"#ca8a04":"#dc2626"}}>{p._status==="noplate"?"⚠️ Нет номера":"❌ Пропущен"}</td>
+                            <td style={tdS}>
+                              <select value={opSt} onChange={e=>updateRnStatus(pk,e.target.value)}
+                                style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:stInfo.bg,color:stInfo.color,fontWeight:600,cursor:"pointer",minWidth:148}}>
+                                {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                              </select>
+                            </td>
+                            <td style={{...tdS,textAlign:"center"}}>
+                              <button onClick={()=>{setRnCallModal({polKey:pk,pol:p});setRnNewCall({result:"no_answer",comment:""}); }}
+                                style={{background:callCount>0?"#eff6ff":"#f1f5f9",border:"1px solid "+(callCount>0?"#93c5fd":"#cbd5e1"),borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",color:callCount>0?"#1d4ed8":"#374151",fontWeight:700}}>
+                                📞{callCount>0?" "+callCount:""}
+                              </button>
+                            </td>
+                            <td style={{...tdS,textAlign:"center"}}>
+                              <button onClick={()=>setRnDetailPol({...p,_viewSrc:rnSubTab})}
+                                style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",color:"#475569",fontWeight:600}} title="Просмотр полиса">👁</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {/* BOTTOM TABLE: renewed (collapsible) */}
+            {rnResults&&renewed.length>0&&(
+              <div>
+                <button onClick={()=>setRenewedOpen(o=>!o)}
+                  style={{display:"flex",alignItems:"center",gap:8,background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 16px",cursor:"pointer",marginBottom:renewedOpen?10:0,width:"100%",textAlign:"left"}}>
+                  <span style={{fontSize:14}}>{renewedOpen?"▼":"▶"}</span>
+                  <span style={{fontWeight:700,color:"#15803d",fontSize:14}}>✅ Продлённые — {renewed.length}</span>
+                </button>
+                {renewedOpen&&(
+                  <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #86efac",boxShadow:"0 1px 4px rgba(21,128,61,0.07)"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead><tr style={{background:"#0f766e"}}>
-                        {["№ полиса","Компания","Страхователь","Госномер","Дата окончания","Статус","Компания продл.","№ полиса продл.","Агент/Оператор"].map(h=>(
-                          <th key={h} style={{...th,color:"white",background:"transparent",fontSize:11,padding:"9px 10px"}}>{h}</th>
+                      <thead><tr style={{background:"#16a34a"}}>
+                        {["Дата оконч.","Страхователь","Госномер","Ст. компания","Новая компания","Новый №","Кто оформил","Источник",""].map(h=>(
+                          <th key={h} style={thS}>{h}</th>
                         ))}
                       </tr></thead>
                       <tbody>
-                        {rnResults.map((p,i)=>{
-                          const isRenewed=p._status==="renewed";
-                          const isMissed=p._status==="missed";
-                          const rowBg=isRenewed?(i%2===0?"#f0fdf4":"#dcfce7"):isMissed?(i%2===0?"#fff1f2":"#ffe4e6"):(i%2===0?"#fefce8":"#fef9c3");
+                        {renewed.map((p,i)=>{
                           const endDate=rnSubTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
                           return(
-                            <tr key={i} style={{background:rowBg,borderBottom:"1px solid #e5e7eb"}}>
-                              <td style={{...td,fontWeight:600,color:"#1d4ed8",fontSize:11}}>{p.policyNum||"—"}</td>
-                              <td style={td}>{p.company||"—"}</td>
-                              <td style={{...td,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
-                              <td style={{...td,fontFamily:"monospace",fontWeight:600}}>{p.carPlate||"—"}</td>
-                              <td style={td}>{endDate||"—"}</td>
-                              <td style={{...td,fontWeight:700,color:isRenewed?"#15803d":isMissed?"#dc2626":"#ca8a04"}}>
-                                {isRenewed?"✅ Продлён":isMissed?"❌ Пропущен":"⚠️ Нет номера"}
+                            <tr key={i} style={{background:i%2===0?"#f0fdf4":"#dcfce7",borderBottom:"1px solid #bbf7d0"}}>
+                              <td style={{...tdS,whiteSpace:"nowrap"}}>{endDate||"—"}</td>
+                              <td style={{...tdS,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                              <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
+                              <td style={tdS}>{p.company||"—"}</td>
+                              <td style={{...tdS,fontWeight:600,color:"#15803d"}}>{p._rnCo||"—"}</td>
+                              <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#1d4ed8",fontWeight:600}}>{p._rnPol||"—"}</td>
+                              <td style={tdS}>{p._rnAgent||"—"}</td>
+                              <td style={tdS}>{p._rnSrc==="office"?"🏢 Офис":"👤 Агент"}</td>
+                              <td style={{...tdS,textAlign:"center"}}>
+                                <button onClick={()=>setRnDetailPol({...p,_viewSrc:rnSubTab})}
+                                  style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",color:"#166534",fontWeight:600}} title="Просмотр">👁</button>
                               </td>
-                              <td style={td}>{p._rnCo||"—"}</td>
-                              <td style={{...td,fontFamily:"monospace",fontSize:11}}>{p._rnPol||"—"}</td>
-                              <td style={td}>{p._rnAgent||"—"}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
                   </div>
-                }
-              </>
+                )}
+              </div>
+            )}
+            {rnResults&&rnResults.length===0&&(
+              <div style={{textAlign:"center",color:"#94a3b8",padding:"40px 20px"}}>Нет долгосрочных полисов за выбранный период</div>
             )}
             {!rnResults&&!rnLoading&&(
               <div style={{textAlign:"center",color:"#94a3b8",padding:"60px 20px"}}>
@@ -4913,6 +4991,84 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{fontWeight:600,fontSize:14,color:"#64748b"}}>Выберите месяц и нажмите «Проверить»</div>
               </div>
             )}
+            {/* CALL LOG MODAL */}
+            {rnCallModal&&(()=>{
+              const {polKey,pol}=rnCallModal;
+              const calls=(renewalWork[polKey]?.calls)||[];
+              const endDate=pol._viewSrc==="office"||rnSubTab==="office"?isoToDisp(pol.dateEnd):(pol.endDateFmt||isoToDisp(pol.endDate)||"");
+              return(
+                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                  <div style={{background:"white",borderRadius:14,padding:22,width:"100%",maxWidth:480,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"85vh",overflowY:"auto"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+                      <div>
+                        <div style={{fontWeight:700,fontSize:15}}>{pol.insuredName||"—"}</div>
+                        <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{pol.carPlate||"—"} · {pol.company||"—"} · истекает {endDate}</div>
+                      </div>
+                      <button onClick={()=>setRnCallModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af",marginLeft:8}}>✕</button>
+                    </div>
+                    {calls.length===0&&<div style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:"12px 0",marginBottom:12}}>Звонков пока нет</div>}
+                    {calls.length>0&&(
+                      <div style={{marginBottom:14,borderRadius:8,overflow:"hidden",border:"1px solid #e5e7eb"}}>
+                        {calls.map((c,i)=>{
+                          const crl=CALL_RESULTS.find(r=>r[0]===c.result);
+                          return(
+                            <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"8px 12px",background:i%2===0?"#f8fafc":"white",borderBottom:i<calls.length-1?"1px solid #f1f5f9":"none"}}>
+                              <span style={{fontSize:11,color:"#6b7280",whiteSpace:"nowrap",minWidth:90}}>{c.date} {c.time}</span>
+                              <span style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{crl?crl[1]:c.result}</span>
+                              {c.comment&&<span style={{fontSize:12,color:"#6b7280"}}>— {c.comment}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:8}}>Добавить запись</div>
+                      <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                        <select value={rnNewCall.result} onChange={e=>setRnNewCall(p=>({...p,result:e.target.value}))}
+                          style={{...inp,fontSize:12,padding:"6px 8px",flex:"1 1 160px"}}>
+                          {CALL_RESULTS.map(([k,l])=><option key={k} value={k}>{l}</option>)}
+                        </select>
+                        <input value={rnNewCall.comment} onChange={e=>setRnNewCall(p=>({...p,comment:e.target.value}))}
+                          placeholder="Комментарий (необязательно)" style={{...inp,fontSize:12,padding:"6px 8px",flex:"2 1 160px"}}/>
+                      </div>
+                      <button onClick={async()=>{await addRnCall(polKey,rnNewCall);setRnNewCall({result:"no_answer",comment:""}); }}
+                        style={{...btn("#0f766e",undefined,{fontSize:13,width:"100%"})}}>➕ Добавить запись</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* POLICY DETAIL MODAL */}
+            {rnDetailPol&&(()=>{
+              const p=rnDetailPol;
+              const src=p._viewSrc||rnSubTab;
+              const endDate=src==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+              const startDate=src==="office"?isoToDisp(p.dateStart):(p.startDateFmt||isoToDisp(p.startDate)||"");
+              const isOfficeSrc=(p._src==="office")||(src==="office"&&!p._src);
+              const canNav=isOfficeSrc&&p._mk;
+              return(
+                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                  <div style={{background:"white",borderRadius:14,padding:22,width:"100%",maxWidth:520,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"85vh",overflowY:"auto"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                      <h3 style={{margin:0,fontSize:16}}>Полис — {p.insuredName||"—"}</h3>
+                      <button onClick={()=>setRnDetailPol(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af"}}>✕</button>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px",fontSize:13,marginBottom:16}}>
+                      {[["№ полиса",p.policyNum],["Компания",p.company],["Страхователь",p.insuredName],["Госномер",p.carPlate],["Марка авто",p.car],["Дата начала",startDate],["Дата окончания",endDate],["Срок",p.term],["БМ",p.bm],["Регион",p.region],["Мощность",p.power?""+p.power+" л.с.":""],["Сумма",p.amount?fmt(p.amount)+" ֏":""],...(p._status==="renewed"?[["Продлён в компании",p._rnCo],["Новый полис",p._rnPol],["Оформил",p._rnAgent]]:[])].filter(([k,v])=>k&&(v||v===0)).map(([k,v],i)=>(
+                        <div key={i}><span style={{color:"#6b7280",fontWeight:600,fontSize:12}}>{k}:</span>{" "}<span style={{fontWeight:500}}>{v||"—"}</span></div>
+                      ))}
+                    </div>
+                    {canNav&&(
+                      <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);setOpEditPol(p);setOpFormOpen(true);setRnDetailPol(null);}}
+                        style={{...btn("#1d4ed8",undefined,{marginBottom:8,width:"100%",fontSize:13})}}>
+                        ↗ Открыть в продажах офиса ({fmtMonth(p._mk)})
+                      </button>
+                    )}
+                    <button onClick={()=>setRnDetailPol(null)} style={{...btn("#6b7280",undefined,{width:"100%",fontSize:13})}}>Закрыть</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
