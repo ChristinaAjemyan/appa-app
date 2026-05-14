@@ -596,48 +596,61 @@ const valE=e=>{try{return Array.isArray(e)&&e.every(x=>x.id&&x.company&&typeof x
 const valD=d=>{try{return d&&typeof d==="object"&&!Array.isArray(d);}catch{return false;}};
 const valV=v=>{try{return v&&Array.isArray(v.rates);}catch{return false;}};
 
-function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate}){
+function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
   const rntm=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
-  const disp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
+  const disp=s=>{if(!s)return"—";const d=parseAnyDate(s);if(!d)return String(s);return d.toLocaleDateString("ru-RU");};
   const src=p._viewSrc||(rntm?rntm.subTab:"office");
-  const dateEnd=src==="office"?disp(p.dateEnd):(p.endDateFmt||disp(p.endDate)||"");
-  const dateStart=src==="office"?disp(p.dateStart):(p.startDateFmt||disp(p.startDate)||"");
+  const dateEnd=src==="office"?disp(p.dateEnd):(p.endDateFmt||disp(p.endDate));
+  const dateStart=src==="office"?disp(p.dateStart):(p.startDateFmt||disp(p.startDate));
+  const v=x=>(x==null||x===""||x===false)?"—":String(x);
+  const amtFmt=x=>x?Number(x).toLocaleString("ru-RU")+" ֏":"—";
   const rows=[
-    ["№ полиса",p.policyNum],
-    ["Компания",p.company],
-    ["Страхователь",p.insuredName],
-    ["Телефон",p.phone],
-    ["Госномер",p.carPlate],
-    ["Марка авто",p.car],
+    ["Тип полиса",p.polType==="osago"?"ОСАГО":p.polType==="voluntary"?"Добровольный":v(p.polType)],
+    ["Страхователь",v(p.insuredName)],
+    ["Телефон",v(p.phone)],
+    ["Компания",v(p.company)],
+    ["№ полиса",v(p.policyNum)],
+    ["Дата продажи",disp(p.date)],
     ["Дата начала",dateStart],
     ["Дата окончания",dateEnd],
-    ["Срок",p.term],
-    ["КБМ",p.bm],
-    ["Регион",p.region],
-    ["Мощность",p.power?p.power+" л.с.":""],
-    ["Сумма",p.amount?Number(p.amount).toLocaleString("ru-RU")+" ֏":""],
-    ["Комментарий",p.comment],
-    ...(p._status==="renewed"?[["Продлён в компании",p._rnCo],["Новый полис",p._rnPol],["Оформил",p._rnAgent]]:[]),
-  ].filter(([,v])=>v!=null&&v!=="");
+    ["Марка авто",v(p.car)],
+    ["Гос. номер",v(p.carPlate)],
+    ["КБМ",v(p.bm)],
+    ["Регион",v(p.region)],
+    ["Мощность",p.power?p.power+" л.с.":"—"],
+    ["Срок",v(p.term)],
+    ["Статус полиса",v(p.polStatus)],
+    ["Сумма",amtFmt(p.amount)],
+    ["Скидка",p.discount?amtFmt(p.discount):"—"],
+    ["Оператор",(p.agentUid&&getName?getName(p.agentUid):"")||v(p.agentUid)],
+    ["Комментарий",v(p.comment)],
+    ["Оплачено",p.paid?"✅ Да":"❌ Нет"],
+    ["Способ оплаты",v(p.paymentType)],
+    ["Оплач. сумма",p.paidAmount?amtFmt(p.paidAmount):"—"],
+    ["Дата оплаты",p.paidDate?disp(p.paidDate):"—"],
+    ["Оплата с Amex",p.paid_from_amex?"💳 Да":"Нет"],
+    ...(p._status==="renewed"?[
+      ["Статус продления","✅ Продлён"],
+      ["Продлён в компании",v(p._rnCo)],
+      ["Новый полис №",v(p._rnPol)],
+      ["Оформил",v(p._rnAgent)],
+    ]:[["Статус продления",p._status==="noplate"?"⚠️ Нет госномера":"❌ Пропущен"]]),
+  ];
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:14,padding:22,width:"100%",maxWidth:520,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#fff",borderRadius:14,padding:22,width:"100%",maxWidth:560,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h3 style={{margin:0,fontSize:16}}>📋 Полис — {p.insuredName||p.policyNum||"—"}</h3>
+          <h3 style={{margin:0,fontSize:16}}>📋 {p.insuredName||p.policyNum||"Полис"}</h3>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af",lineHeight:1}}>✕</button>
         </div>
-        {rows.length>0?(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px",fontSize:13,marginBottom:18}}>
-            {rows.map(([k,v],i)=>(
-              <div key={i}>
-                <div style={{color:"#6b7280",fontWeight:600,fontSize:11,marginBottom:1}}>{k}</div>
-                <div style={{fontWeight:500,color:"#111827"}}>{v}</div>
-              </div>
-            ))}
-          </div>
-        ):(
-          <div style={{color:"#9ca3af",fontSize:13,marginBottom:18,textAlign:"center"}}>Нет данных о полисе</div>
-        )}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",fontSize:13,marginBottom:18}}>
+          {rows.map(([k,val],i)=>(
+            <div key={i} style={{borderBottom:"1px solid #f1f5f9",paddingBottom:6}}>
+              <div style={{color:"#6b7280",fontWeight:600,fontSize:11,marginBottom:2}}>{k}</div>
+              <div style={{fontWeight:500,color:val==="—"?"#d1d5db":"#111827"}}>{val}</div>
+            </div>
+          ))}
+        </div>
         <button onClick={onClose} style={{...btn("#6b7280",undefined,{width:"100%",fontSize:13})}}>Закрыть</button>
       </div>
     </div>
@@ -5514,7 +5527,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           </>
         );
       })()}
-      {rnDetailPol&&<RnPolModal p={rnDetailPol} onClose={()=>setRnDetailPol(null)} rnTabs={rnTabs} rnActiveId={rnActiveId} parseAnyDate={parseAnyDate}/>}
+      {rnDetailPol&&<RnPolModal p={rnDetailPol} onClose={()=>setRnDetailPol(null)} rnTabs={rnTabs} rnActiveId={rnActiveId} parseAnyDate={parseAnyDate} getName={getName}/>}
       {showNotifs&&(
         <>
           <div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:1000,backdropFilter:"blur(3px)"}}/>
