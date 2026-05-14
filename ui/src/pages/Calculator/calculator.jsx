@@ -604,54 +604,91 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
   const dateStart=src==="office"?disp(p.dateStart):(p.startDateFmt||disp(p.startDate));
   const v=x=>(x==null||x===""||x===false)?"—":String(x);
   const amtFmt=x=>x?Number(x).toLocaleString("ru-RU")+" ֏":"—";
-  const rows=[
-    ["Тип полиса",p.polType==="osago"?"ОСАГО":p.polType==="voluntary"?"Добровольный":v(p.polType)],
-    ["Страхователь",v(p.insuredName)],
-    ["Телефон",v(p.phone)],
-    ["Компания",v(p.company)],
-    ["№ полиса",v(p.policyNum)],
-    ["Дата продажи",disp(p.date)],
-    ["Дата начала",dateStart],
-    ["Дата окончания",dateEnd],
-    ["Марка авто",v(p.car)],
-    ["Гос. номер",v(p.carPlate)],
-    ["КБМ",v(p.bm)],
-    ["Регион",v(p.region)],
-    ["Мощность",p.power?p.power+" л.с.":"—"],
-    ["Срок",v(p.term)],
-    ["Статус полиса",v(p.polStatus)],
-    ["Сумма",amtFmt(p.amount)],
-    ["Скидка",p.discount?amtFmt(p.discount):"—"],
-    ["Оператор",(p.agentUid&&getName?getName(p.agentUid):"")||v(p.agentUid)],
-    ["Комментарий",v(p.comment)],
-    ["Оплачено",p.paid?"✅ Да":"❌ Нет"],
-    ["Способ оплаты",v(p.paymentType)],
-    ["Оплач. сумма",p.paidAmount?amtFmt(p.paidAmount):"—"],
-    ["Дата оплаты",p.paidDate?disp(p.paidDate):"—"],
-    ["Оплата с Amex",p.paid_from_amex?"💳 Да":"Нет"],
-    ...(p._status==="renewed"?[
-      ["Статус продления","✅ Продлён"],
-      ["Продлён в компании",v(p._rnCo)],
-      ["Новый полис №",v(p._rnPol)],
-      ["Оформил",v(p._rnAgent)],
-    ]:[["Статус продления",p._status==="noplate"?"⚠️ Нет госномера":"❌ Пропущен"]]),
-  ];
+  const opName=(p.agentUid&&getName?getName(p.agentUid):"")||v(p.agentUid);
+  const polTypeLabel=p.polType==="osago"?"🚗 ОСАГО":p.polType==="voluntary"?"🛡 Добровольный":v(p.polType);
+  const renewedStatus=p._status==="renewed"?"✅ Продлён":p._status==="noplate"?"⚠️ Нет госномера":"❌ Пропущен";
+  const renewedColor=p._status==="renewed"?"#15803d":p._status==="noplate"?"#92400e":"#dc2626";
+  const renewedBg=p._status==="renewed"?"#f0fdf4":p._status==="noplate"?"#fffbeb":"#fef2f2";
+
+  const secHdr=(icon,label,color,bg)=>(
+    <div style={{gridColumn:"1/-1",background:bg,borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:7,marginTop:4}}>
+      <span style={{fontSize:14}}>{icon}</span>
+      <span style={{fontWeight:700,fontSize:12,color,textTransform:"uppercase",letterSpacing:.6}}>{label}</span>
+    </div>
+  );
+  const field=(label,val,span)=>(
+    <div style={{gridColumn:span?"1/-1":undefined,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,padding:"8px 12px"}}>
+      <div style={{color:"#64748b",fontWeight:600,fontSize:10,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{label}</div>
+      <div style={{fontWeight:700,fontSize:13,color:val==="—"?"#cbd5e1":"#0f172a"}}>{val}</div>
+    </div>
+  );
+
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:14,padding:22,width:"100%",maxWidth:560,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h3 style={{margin:0,fontSize:16}}>📋 {p.insuredName||p.policyNum||"Полис"}</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af",lineHeight:1}}>✕</button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",fontSize:13,marginBottom:18}}>
-          {rows.map(([k,val],i)=>(
-            <div key={i} style={{borderBottom:"1px solid #f1f5f9",paddingBottom:6}}>
-              <div style={{color:"#6b7280",fontWeight:600,fontSize:11,marginBottom:2}}>{k}</div>
-              <div style={{fontWeight:500,color:val==="—"?"#d1d5db":"#111827"}}>{val}</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{background:"#f1f5f9",borderRadius:16,width:"100%",maxWidth:580,boxShadow:"0 24px 64px rgba(15,23,42,0.35)",maxHeight:"92vh",overflowY:"auto",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{background:"#1e293b",borderRadius:"16px 16px 0 0",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{color:"#fff",fontWeight:700,fontSize:16}}>{p.insuredName||p.policyNum||"Полис"}</div>
+            <div style={{color:"#94a3b8",fontSize:12,marginTop:3,display:"flex",gap:10}}>
+              <span>{polTypeLabel}</span>
+              {p.company&&<span>· {p.company}</span>}
+              {p.policyNum&&<span>· № {p.policyNum}</span>}
             </div>
-          ))}
+          </div>
+          <button onClick={onClose} style={{background:"#334155",border:"1px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1,fontWeight:300}}>×</button>
         </div>
-        <button onClick={onClose} style={{...btn("#6b7280",undefined,{width:"100%",fontSize:13})}}>Закрыть</button>
+
+        {/* Renewal status badge */}
+        <div style={{background:renewedBg,borderBottom:"2px solid "+renewedColor,padding:"8px 20px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <span style={{fontWeight:700,fontSize:13,color:renewedColor}}>{renewedStatus}</span>
+          {p._status==="renewed"&&p._rnCo&&<span style={{fontSize:12,color:"#374151"}}>→ {p._rnCo}{p._rnPol?" · № "+p._rnPol:""}{p._rnAgent?" · "+p._rnAgent:""}</span>}
+        </div>
+
+        {/* Body */}
+        <div style={{padding:"16px 20px 20px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+
+          {secHdr("👤","Страхователь","#1e40af","#dbeafe")}
+          {field("Страхователь",v(p.insuredName))}
+          {field("Телефон",v(p.phone))}
+          {field("Оператор",opName)}
+          {field("Дата продажи",disp(p.date))}
+
+          {secHdr("📋","Полис","#065f46","#d1fae5")}
+          {field("Компания",v(p.company))}
+          {field("№ полиса",v(p.policyNum))}
+          {field("Тип",polTypeLabel)}
+          {field("Статус полиса",v(p.polStatus))}
+
+          {secHdr("🚗","Автомобиль","#92400e","#fef3c7")}
+          {field("Госномер",v(p.carPlate))}
+          {field("Марка / модель",v(p.car))}
+          {field("Мощность",p.power?p.power+" л.с.":"—")}
+          {field("КБМ",v(p.bm))}
+          {field("Регион",v(p.region))}
+          {field("Срок",v(p.term))}
+
+          {secHdr("📅","Период действия","#5b21b6","#ede9fe")}
+          {field("Дата начала",dateStart)}
+          {field("Дата окончания",dateEnd)}
+
+          {secHdr("💰","Финансы","#9a3412","#fff7ed")}
+          {field("Сумма",amtFmt(p.amount))}
+          {field("Скидка",p.discount?amtFmt(p.discount):"—")}
+          {field("Комментарий",v(p.comment),true)}
+
+          {secHdr("💳","Оплата","#374151","#f1f5f9")}
+          {field("Оплачено",p.paid?"✅ Да":"❌ Нет")}
+          {field("Способ оплаты",({cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"})[p.paymentType]||v(p.paymentType))}
+          {field("Оплач. сумма",p.paidAmount?amtFmt(p.paidAmount):"—")}
+          {field("Дата оплаты",p.paidDate?disp(p.paidDate):"—")}
+          {field("Карта Amex",p.paid_from_amex?"💳 Да":"Нет")}
+        </div>
+
+        <div style={{padding:"0 20px 20px",flexShrink:0}}>
+          <button onClick={onClose} style={{width:"100%",padding:"10px",background:"#334155",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>Закрыть</button>
+        </div>
       </div>
     </div>
   );
