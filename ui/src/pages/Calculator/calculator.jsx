@@ -5179,15 +5179,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <div key={i}><span style={{color:"#6b7280",fontWeight:600,fontSize:12}}>{k}:</span>{" "}<span style={{fontWeight:500}}>{v||"—"}</span></div>
                       ))}
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-                      <button onClick={()=>setRnDetailPol(null)} style={{...btn("#6b7280",undefined,{fontSize:13,flex:1})}}>Закрыть</button>
-                      {canNav&&(
-                        <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);openOpEdit(p);setRnDetailPol(null);}}
-                          style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#6b7280",textDecoration:"underline",padding:"4px 0",whiteSpace:"nowrap"}}>
-                          ↗ Открыть в продажах ({fmtMonth(p._mk)})
-                        </button>
-                      )}
-                    </div>
+                    <button onClick={()=>setRnDetailPol(null)} style={{...btn("#6b7280",undefined,{width:"100%",fontSize:13})}}>Закрыть</button>
                   </div>
                 </div>
               );
