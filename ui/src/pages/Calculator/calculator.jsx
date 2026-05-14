@@ -628,7 +628,7 @@ export default function App(){
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
     {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false,notifType:"unpaid"},
-    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales"],viewOnly:true,notifType:"expiring7"},
+    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales","renewals"],viewOnly:true,notifType:"expiring7"},
   ];
   const[role,setRole]=useState(null);
   const[currentEmployee,setCurrentEmployee]=useState(null);
@@ -690,19 +690,14 @@ export default function App(){
   const[bkmFormOpen,setBkmFormOpen]=useState(false);
   const[bkmFormData,setBkmFormData]=useState({text:"",reminderAt:"",policyRef:null});
   const[bkmArchiveOpen,setBkmArchiveOpen]=useState(false);
-  const[rnSubTab,setRnSubTab]=useState("office");
-  const[rnMonth,setRnMonth]=useState(getThisMonth);
-  const[rnPeriod,setRnPeriod]=useState("all");
-  const[rnResults,setRnResults]=useState(null);
-  const[rnLoading,setRnLoading]=useState(false);
-  const[renewalWork,setRenewalWork]=useState({});
-  const[renewalWorkMonth,setRenewalWorkMonth]=useState(null);
+  const[rnTabs,setRnTabs]=useState(()=>[{id:"t1",month:getThisMonth(),subTab:"office",period:"all",agentFilter:"",results:null,work:{},cands:[],checking:{},checkedAt:null,renewedOpen:false,loading:false}]);
+  const[rnActiveId,setRnActiveId]=useState("t1");
   const[rnDetailPol,setRnDetailPol]=useState(null);
   const[rnCallModal,setRnCallModal]=useState(null);
   const[rnNewCall,setRnNewCall]=useState({result:"no_answer",comment:""});
-  const[renewedOpen,setRenewedOpen]=useState(false);
-  const[rnChecking,setRnChecking]=useState({});
-  const[rnAgentFilter,setRnAgentFilter]=useState("");
+  const[rnTaskForm,setRnTaskForm]=useState({note:"",deadline:"",time:""});
+  const[rnColVis,setRnColVis]=useState(()=>{try{return JSON.parse(localStorage.getItem("rnColVis")||"{}");}catch{return{};}});
+  const[rnColMenu,setRnColMenu]=useState(false);
   const[tasks,setTasks]=useState([]);
   const[taskTab,setTaskTab]=useState("active");
   const[selectedTask,setSelectedTask]=useState(null);
@@ -775,7 +770,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
-  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks","renewals"];
+  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
 
   const saveAppSettings=(updates={})=>{
     const s={adminPin,employees,officeStaff,...updates};
@@ -954,42 +949,38 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const getName=id=>{const a=agentDir[id];return a?(a.name+" "+a.surname).trim():"";};
   const normPlate=s=>{if(!s)return"";const m={"А":"A","В":"B","Е":"E","К":"K","М":"M","Н":"H","О":"O","Р":"P","С":"C","Т":"T","У":"Y","Х":"X"};return s.toUpperCase().replace(/\s+/g,"").split("").map(c=>m[c]||c).join("");};
   const parseAnyDate=s=>{if(!s)return null;try{if(typeof s==="string"){if(s.includes("T"))return new Date(s);if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[y,mo,d]=s.split("-");return new Date(+y,+mo-1,+d);}if(/^\d{2}\.\d{2}\.\d{4}$/.test(s)){const[d,mo,y]=s.split(".");return new Date(+y,+mo-1,+d);}}const d=new Date(s);return isNaN(d)?null:d;}catch{return null;}};
-  const checkRenewals=async()=>{
-    setRnLoading(true);setRnResults(null);
+  const rnUpdateTab=(id,upd)=>setRnTabs(ts=>ts.map(t=>t.id===id?{...t,...upd}:t));
+  const rnAddTab=()=>{const nid="t"+Date.now();setRnTabs(ts=>[...ts,{id:nid,month:getThisMonth(),subTab:"office",period:"all",agentFilter:"",results:null,work:{},cands:[],checking:{},checkedAt:null,renewedOpen:false,loading:false}]);setRnActiveId(nid);};
+  const rnCloseTab=(id)=>{if(rnTabs.length===1)return;const rest=rnTabs.filter(t=>t.id!==id);setRnTabs(rest);if(rnActiveId===id)setRnActiveId(rest[0].id);};
+  const rnPolKey=p=>`${(p.policyNum||"").trim()}:${(p.carPlate||"").trim()}`;
+  const saveRenewalWork=async(work,month)=>{try{await calcStorage.set(`renewalWork:${month}`,JSON.stringify(work));}catch{}};
+  const saveRnCache=async(subTab,month,results,checkedAt)=>{try{await calcStorage.set(`renewalResult:${subTab}:${month}`,JSON.stringify({results,checkedAt}));}catch{}};
+  const loadRnTabCache=async(tid)=>{
+    const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;
     try{
-      const[ry,rm]=rnMonth.split("-").map(Number);
-      const pStart=new Date(ry,rm-1,rnPeriod==="d2"?11:rnPeriod==="d3"?21:1);
-      const pEnd=new Date(ry,rm-1,rnPeriod==="d1"?10:rnPeriod==="d2"?20:31,23,59,59);
-      // Генерируем 12 месяцев назад от выбранного (макс. срок полиса — 1 год)
+      const[rc,rw]=await Promise.all([calcStorage.get(`renewalResult:${tab.subTab}:${tab.month}`).catch(()=>null),calcStorage.get(`renewalWork:${tab.month}`).catch(()=>null)]);
+      const parsed=rc?.value?JSON.parse(rc.value):null;
+      const work=rw?.value?JSON.parse(rw.value):{};
+      if(parsed?.results)rnUpdateTab(tid,{results:parsed.results,checkedAt:parsed.checkedAt,work});
+    }catch{}
+  };
+  const toggleRnCol=(key)=>{const nv={...rnColVis,[key]:rnColVis[key]===false};setRnColVis(nv);try{localStorage.setItem("rnColVis",JSON.stringify(nv));}catch{}};
+  const checkRenewals=async(tid)=>{
+    const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;
+    rnUpdateTab(tid,{loading:true,results:null});
+    try{
+      const{month,subTab,period}=tab;
+      const[ry,rm]=month.split("-").map(Number);
+      const pStart=new Date(ry,rm-1,period==="d2"?11:period==="d3"?21:1);
+      const pEnd=new Date(ry,rm-1,period==="d1"?10:period==="d2"?20:31,23,59,59);
       const scanMonths=[];
       for(let i=0;i<=12;i++){let sm=rm-i,sy=ry;while(sm<1){sm+=12;sy--;}scanMonths.push(`${sy}-${String(sm).padStart(2,"0")}`);}
       let expiring=[];
-      if(rnSubTab==="office"){
-        for(const mk of scanMonths){
-          const r=await calcStorage.get(`officePol:${mk}`).catch(()=>null);
-          if(!r?.value)continue;
-          JSON.parse(r.value).filter(p=>{
-            if(p.insuredName?.includes("ПРИМЕР"))return false;
-            if(p.term==="SH")return false;
-            if(!p.carPlate)return false;
-            const d=parseAnyDate(p.dateEnd);
-            return d&&d>=pStart&&d<=pEnd;
-          }).forEach(p=>expiring.push({...p,_mk:mk}));
-        }
+      if(subTab==="office"){
+        for(const mk of scanMonths){const r=await calcStorage.get(`officePol:${mk}`).catch(()=>null);if(!r?.value)continue;JSON.parse(r.value).filter(p=>{if(p.insuredName?.includes("ПРИМЕР"))return false;if(p.term==="SH")return false;if(!p.carPlate)return false;const d=parseAnyDate(p.dateEnd);return d&&d>=pStart&&d<=pEnd;}).forEach(p=>expiring.push({...p,_mk:mk}));}
       }else{
-        for(const mk of scanMonths){
-          const r=await calcStorage.get(`month:${mk}`).catch(()=>null);
-          if(!r?.value)continue;
-          const data=JSON.parse(r.value);
-          (data.policies||[]).filter(p=>{
-            if(!p.carPlate)return false;
-            if(p.term==="SH")return false;
-            const d=parseAnyDate(p.endDate);
-            return d&&d>=pStart&&d<=pEnd;
-          }).forEach(p=>expiring.push({...p,_mk:mk}));
-        }
+        for(const mk of scanMonths){const r=await calcStorage.get(`month:${mk}`).catch(()=>null);if(!r?.value)continue;const data=JSON.parse(r.value);(data.policies||[]).filter(p=>{if(!p.carPlate)return false;if(p.term==="SH")return false;const d=parseAnyDate(p.endDate);return d&&d>=pStart&&d<=pEnd;}).forEach(p=>expiring.push({...p,_mk:mk}));}
       }
-      // Кандидаты на продление: ищем в офисе и агентах в диапазоне ±1 месяц от выбранного
       const searchMonths=[-1,0,1].map(delta=>{let sm=rm+delta,sy=ry;if(sm<1){sm=12;sy--;}if(sm>12){sm=1;sy++;}return`${sy}-${String(sm).padStart(2,"0")}`;});
       const cands=[];
       for(const mk of searchMonths){
@@ -1000,70 +991,71 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
       const WIN=30*24*60*60*1000;
       const results=expiring.map(p=>{
-        const expEnd=parseAnyDate(rnSubTab==="office"?p.dateEnd:p.endDate);
+        const expEnd=parseAnyDate(subTab==="office"?p.dateEnd:p.endDate);
         const np=normPlate(p.carPlate);
         if(!np)return{...p,_status:"noplate"};
-        const match=cands.find(c=>{
-          if(c._np!==np)return false;
-          if(c.policyNum&&c.policyNum===p.policyNum)return false;
-          if(!c._ds||!expEnd)return false;
-          return Math.abs(c._ds.getTime()-expEnd.getTime())<=WIN;
-        });
-        if(match){
-          const agName=match.agentUid?(getName(match.agentUid)||match.agentUid):(match.agentCode||"");
-          return{...p,_status:"renewed",_rnCo:match.company||"",_rnPol:match.policyNum||"",_rnAgent:agName,_rnSrc:match._src};
-        }
+        const match=cands.find(c=>{if(c._np!==np)return false;if(c.policyNum&&c.policyNum===p.policyNum)return false;if(!c._ds||!expEnd)return false;return Math.abs(c._ds.getTime()-expEnd.getTime())<=WIN;});
+        if(match){const agName=match.agentUid?(getName(match.agentUid)||match.agentUid):(match.agentCode||"");return{...p,_status:"renewed",_rnCo:match.company||"",_rnPol:match.policyNum||"",_rnAgent:agName,_rnSrc:match._src};}
         return{...p,_status:"missed"};
       });
-      setRnResults(results);
-      await loadRenewalWork(rnMonth);
-    }catch(e){console.error(e);setRnResults([]);}
-    setRnLoading(false);
+      const checkedAt=new Date().toISOString();
+      const rw=await calcStorage.get(`renewalWork:${month}`).catch(()=>null);
+      const work=rw?.value?JSON.parse(rw.value):{};
+      rnUpdateTab(tid,{results,cands,checkedAt,work,loading:false});
+      await saveRnCache(subTab,month,results,checkedAt);
+    }catch(e){console.error(e);rnUpdateTab(tid,{results:[],loading:false});}
   };
-  const exportRenewalsResult=()=>{
-    if(!rnResults||!rnResults.length)return;
+  const exportRenewalsResult=(tab)=>{
+    if(!tab?.results?.length)return;
     const wb=XLSX.utils.book_new();
     const rows=[["№ полиса","Компания","Страхователь","Госномер","Дата окончания","Статус","Компания продления","№ полиса продления","Агент/Оператор"]];
-    rnResults.forEach(p=>{
-      const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";
-      const endDate=rnSubTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");
-      rows.push([p.policyNum||"",p.company||"",p.insuredName||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||""]);
-    });
+    tab.results.forEach(p=>{const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";const endDate=tab.subTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");rows.push([p.policyNum||"",p.company||"",p.insuredName||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||""]);});
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Продления");
-    XLSX.writeFile(wb,`Продления_${rnMonth}${rnPeriod!=="all"?"_"+rnPeriod:""}.xlsx`);
+    XLSX.writeFile(wb,`Продления_${tab.month}${tab.period!=="all"?"_"+tab.period:""}.xlsx`);
   };
-
-  const rnPolKey=p=>`${(p.policyNum||"").trim()}:${(p.carPlate||"").trim()}`;
-  const loadRenewalWork=async(month)=>{try{const r=await calcStorage.get(`renewalWork:${month}`).catch(()=>null);setRenewalWork(r?.value?JSON.parse(r.value):{});setRenewalWorkMonth(month);}catch{}};
-  const saveRenewalWork=async(work,month)=>{try{await calcStorage.set(`renewalWork:${month}`,JSON.stringify(work));}catch{}};
-  const updateRnStatus=async(polKey,status)=>{const w={...renewalWork,[polKey]:{...(renewalWork[polKey]||{}),operatorStatus:status}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
-  const addRnCall=async(polKey,call)=>{const ex=renewalWork[polKey]||{};const now=new Date();const calls=[...(ex.calls||[]),{...call,date:now.toISOString().slice(0,10),time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}];const w={...renewalWork,[polKey]:{...ex,calls}};setRenewalWork(w);await saveRenewalWork(w,rnMonth);};
-  const checkSingleRenewal=async(p)=>{
+  const updateRnStatus=async(tid,polKey,status)=>{const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;const w={...tab.work,[polKey]:{...(tab.work[polKey]||{}),operatorStatus:status}};rnUpdateTab(tid,{work:w});await saveRenewalWork(w,tab.month);};
+  const addRnCall=async(tid,polKey,call)=>{const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;const ex=tab.work[polKey]||{};const now=new Date();const calls=[...(ex.calls||[]),{...call,date:now.toISOString().slice(0,10),time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}];const w={...tab.work,[polKey]:{...ex,calls}};rnUpdateTab(tid,{work:w});await saveRenewalWork(w,tab.month);};
+  const checkSingleRenewal=async(tid,p)=>{
     const pk=rnPolKey(p);
-    setRnChecking(c=>({...c,[pk]:true}));
+    const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;
+    rnUpdateTab(tid,{checking:{...tab.checking,[pk]:true}});
     try{
-      const expEnd=parseAnyDate(rnSubTab==="office"?p.dateEnd:p.endDate);
+      const{month,subTab}=tab;
+      const expEnd=parseAnyDate(subTab==="office"?p.dateEnd:p.endDate);
       const np=normPlate(p.carPlate);
-      if(!expEnd||!np){setRnChecking(c=>({...c,[pk]:false}));return;}
-      const[ry,rm]=rnMonth.split("-").map(Number);
-      const searchMonths=[-1,0,1].map(delta=>{let sm=rm+delta,sy=ry;if(sm<1){sm=12;sy--;}if(sm>12){sm=1;sy++;}return`${sy}-${String(sm).padStart(2,"0")}`;});
-      const cands=[];
-      for(const mk of searchMonths){
-        const ro=await calcStorage.get(`officePol:${mk}`).catch(()=>null);
-        if(ro?.value)JSON.parse(ro.value).filter(c=>!c.insuredName?.includes("ПРИМЕР")&&c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.dateStart),_src:"office",_mk:mk}));
-        const ra=await calcStorage.get(`month:${mk}`).catch(()=>null);
-        if(ra?.value)(JSON.parse(ra.value).policies||[]).filter(c=>c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.startDate),_src:"agent",_mk:mk}));
+      if(!expEnd||!np){rnUpdateTab(tid,{checking:{...tab.checking,[pk]:false}});return;}
+      let cands=[...(tab.cands||[])];
+      if(!cands.length){
+        const[ry,rm]=month.split("-").map(Number);
+        const searchMonths=[-1,0,1].map(delta=>{let sm=rm+delta,sy=ry;if(sm<1){sm=12;sy--;}if(sm>12){sm=1;sy++;}return`${sy}-${String(sm).padStart(2,"0")}`;});
+        for(const mk of searchMonths){
+          const ro=await calcStorage.get(`officePol:${mk}`).catch(()=>null);
+          if(ro?.value)JSON.parse(ro.value).filter(c=>!c.insuredName?.includes("ПРИМЕР")&&c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.dateStart),_src:"office",_mk:mk}));
+          const ra=await calcStorage.get(`month:${mk}`).catch(()=>null);
+          if(ra?.value)(JSON.parse(ra.value).policies||[]).filter(c=>c.carPlate).forEach(c=>cands.push({...c,_np:normPlate(c.carPlate),_ds:parseAnyDate(c.startDate),_src:"agent",_mk:mk}));
+        }
+        rnUpdateTab(tid,{cands});
       }
       const WIN=30*24*60*60*1000;
       const match=cands.find(c=>c._np===np&&!(c.policyNum&&c.policyNum===p.policyNum)&&c._ds&&expEnd&&Math.abs(c._ds.getTime()-expEnd.getTime())<=WIN);
+      const tabNow=rnTabs.find(t=>t.id===tid)||tab;
       if(match){
         const agName=match.agentUid?(getName(match.agentUid)||match.agentUid):(match.agentCode||"");
-        setRnResults(prev=>prev.map(r=>rnPolKey(r)===pk?{...p,_status:"renewed",_rnCo:match.company||"",_rnPol:match.policyNum||"",_rnAgent:agName,_rnSrc:match._src}:r));
+        const newResults=(tabNow.results||[]).map(r=>rnPolKey(r)===pk?{...p,_status:"renewed",_rnCo:match.company||"",_rnPol:match.policyNum||"",_rnAgent:agName,_rnSrc:match._src}:r);
+        rnUpdateTab(tid,{results:newResults,checking:{...tabNow.checking,[pk]:false}});
+        await saveRnCache(subTab,month,newResults,tabNow.checkedAt||new Date().toISOString());
       }else{
-        alert("Продление не найдено для "+( p.carPlate||p.insuredName||"данного полиса"));
+        alert("Продление не найдено для "+(p.carPlate||p.insuredName||"данного полиса"));
+        rnUpdateTab(tid,{checking:{...tabNow.checking,[pk]:false}});
       }
-    }catch(e){console.error(e);}
-    setRnChecking(c=>({...c,[pk]:false}));
+    }catch(e){console.error(e);const t2=rnTabs.find(t=>t.id===tid)||{checking:{}};rnUpdateTab(tid,{checking:{...t2.checking,[pk]:false}});}
+  };
+  const addRnTask=(pol,note,deadline,time)=>{
+    const title=(note.trim()||`Перезвонить: ${pol.insuredName||""} ${pol.carPlate||""}`).trim();
+    const timeStr=time?` Время: ${time}`:"";
+    const desc=`\u{1F4DE} Полис: ${pol.policyNum||"—"} | ${pol.company||"—"} | ${pol.carPlate||"—"} | ${pol.insuredName||"—"} | ${pol.phone||"—"}${timeStr}`;
+    const nt={id:genUid(),createdAt:Date.now(),createdBy:currentUserId,createdByName:currentUserName,assignedTo:currentUserId,assignedToName:currentUserName,title,description:desc,deadline:deadline||"",priority:"normal",status:"new",comments:[],unreadFor:[currentUserId],doneAt:null,closedAt:null};
+    saveTasks([nt,...tasks]);
   };
 
 
@@ -4857,62 +4849,84 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
       {tab==="renewals"&&(()=>{
         const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
-        const getEndDate=p=>rnSubTab==="office"?p.dateEnd:p.endDate;
-        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"}};
+        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"},"sold":{label:"💸 Продано",color:"#9a3412",bg:"#fff7ed"}};
         const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
-        const agentOptions=rnResults&&rnSubTab==="agents"?[...new Map(rnResults.map(p=>{const uid=p.agentUid||null;const ag=uid?effAgentDir[uid]:null;const name=ag?(ag.name+" "+ag.surname).trim():(p.agentCode||"Неизвестен");const code=ag?.internalCode||p.agentCode||"";const key=uid||p.agentCode||"?";return[key,{key,label:code?code+" — "+name:name,uid,agentCode:p.agentCode}];})).values()].sort((a,b)=>a.label.localeCompare(b.label)):[];
-        const matchAgent=p=>!rnAgentFilter||(p.agentUid&&p.agentUid===rnAgentFilter)||((!p.agentUid)&&p.agentCode===rnAgentFilter);
-        const missed=rnResults?[...rnResults.filter(r=>r._status!=="renewed"&&matchAgent(r))].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
-        const renewed=rnResults?rnResults.filter(r=>r._status==="renewed"&&matchAgent(r)):[];
-        const promisedCnt=missed.filter(p=>(renewalWork[rnPolKey(p)]?.operatorStatus)==="promised").length;
-        const totals=rnResults?{renewed:renewed.length,missed:rnResults.filter(r=>r._status==="missed").length,noplate:rnResults.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
+        const rnCanEdit=!isAdmin;
+        const rnCanCheck=!isAdmin;
+        const rntab=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
+        const tid=rntab.id;
+        const agentOptions=rntab.subTab==="agents"?(
+          rntab.results
+            ?[...new Map(rntab.results.map(p=>{const uid=p.agentUid||null;const ag=uid?effAgentDir[uid]:null;const name=ag?(ag.name+" "+ag.surname).trim():(p.agentCode||"Неизвестен");const code=ag?.internalCode||p.agentCode||"";const key=uid||p.agentCode||"?";return[key,{key,label:code?code+" — "+name:name,uid,agentCode:p.agentCode}];})).values()].sort((a,b)=>a.label.localeCompare(b.label))
+            :Object.entries(effAgentDir).map(([uid,a])=>({key:uid,label:((a.internalCode||"")?(a.internalCode+" — "):"")+(a.name+" "+a.surname).trim(),uid})).sort((a,b)=>a.label.localeCompare(b.label))
+        ):[];
+        const matchAgent=p=>!rntab.agentFilter||(p.agentUid&&p.agentUid===rntab.agentFilter)||((!p.agentUid)&&p.agentCode===rntab.agentFilter);
+        const getEndDate=p=>rntab.subTab==="office"?p.dateEnd:p.endDate;
+        const missed=rntab.results?[...rntab.results.filter(r=>r._status!=="renewed"&&matchAgent(r))].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
+        const renewed=rntab.results?rntab.results.filter(r=>r._status==="renewed"&&matchAgent(r)):[];
+        const promisedCnt=missed.filter(p=>(rntab.work[rnPolKey(p)]?.operatorStatus)==="promised").length;
+        const totals=rntab.results?{renewed:renewed.length,missed:rntab.results.filter(r=>r._status==="missed").length,noplate:rntab.results.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
         const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
         const thS={padding:"9px 10px",fontWeight:700,fontSize:11,color:"white",background:"transparent",textAlign:"left"};
         return(
-          <div style={{maxWidth:1200}}>
-            {/* Subtabs */}
-            <div style={{display:"flex",gap:6,marginBottom:14}}>
-              {[["office","🏢 Офис"],["agents","👤 Агенты"]].map(([k,l])=>(
-                <button key={k} onClick={()=>{setRnSubTab(k);setRnResults(null);setRenewalWork({});setRnAgentFilter("");}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rnSubTab===k?"#0f766e":"#d1d5db"),background:rnSubTab===k?"#ccfbf1":"#f9fafb",color:rnSubTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
+          <div style={{maxWidth:1300}}>
+            {/* Month tabs */}
+            <div style={{display:"flex",alignItems:"flex-end",gap:0,marginBottom:16,borderBottom:"2px solid #e5e7eb",flexWrap:"wrap"}}>
+              {rnTabs.map(t=>(
+                <div key={t.id} onClick={()=>setRnActiveId(t.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",marginBottom:-2,borderRadius:"8px 8px 0 0",border:"1px solid "+(t.id===rnActiveId?"#0f766e":"#e5e7eb"),borderBottomColor:t.id===rnActiveId?"white":"#e5e7eb",background:t.id===rnActiveId?"white":"#f9fafb",cursor:"pointer",userSelect:"none"}}>
+                  <span style={{fontSize:13,fontWeight:t.id===rnActiveId?700:400,color:t.id===rnActiveId?"#0f766e":"#6b7280"}}>{t.subTab==="office"?"🏢":"👤"} {fmtMonth(t.month)}</span>
+                  {t.loading&&<span style={{fontSize:11}}>⏳</span>}
+                  {rnTabs.length>1&&<button onClick={e=>{e.stopPropagation();rnCloseTab(t.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",fontSize:13,padding:"0 0 0 4px",lineHeight:1}} title="Закрыть вкладку">✕</button>}
+                </div>
               ))}
+              <button onClick={rnAddTab} style={{marginLeft:6,marginBottom:2,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:15,color:"#64748b",fontWeight:700}} title="Добавить вкладку">+</button>
             </div>
-            {/* Filter bar */}
-            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
-              <div>
-                <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Месяц истечения</div>
-                <select value={rnMonth} onChange={e=>{setRnMonth(e.target.value);setRnResults(null);}} style={{...inp,padding:"6px 8px",fontSize:13}}>
-                  {EXPIRY_OPTIONS.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}
-                </select>
+            {/* Subtabs + filter bar */}
+            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
+              <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+                {[["office","🏢 Офис"],["agents","👤 Агенты"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>{rnUpdateTab(tid,{subTab:k,agentFilter:""});setTimeout(()=>loadRnTabCache(tid),0);}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rntab.subTab===k?"#0f766e":"#d1d5db"),background:rntab.subTab===k?"#ccfbf1":"#f9fafb",color:rntab.subTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
+                ))}
               </div>
-              {rnSubTab==="agents"&&rnResults&&agentOptions.length>0&&(
+              <div style={{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
                 <div>
-                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Агент</div>
-                  <select value={rnAgentFilter} onChange={e=>setRnAgentFilter(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:13,minWidth:200}}>
-                    <option value="">— Все агенты ({rnResults.length}) —</option>
-                    {agentOptions.map(o=>{
-                      const cnt=rnResults.filter(p=>(p.agentUid&&p.agentUid===o.uid)||((!p.agentUid)&&p.agentCode===o.key)).length;
-                      return <option key={o.key} value={o.key}>{o.label} ({cnt})</option>;
-                    })}
+                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Месяц истечения</div>
+                  <select value={rntab.month} onChange={e=>rnUpdateTab(tid,{month:e.target.value,results:null})} style={{...inp,padding:"6px 8px",fontSize:13}}>
+                    {EXPIRY_OPTIONS.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}
                   </select>
                 </div>
-              )}
-              {rnSubTab==="office"&&(
-                <div>
-                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Период</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {[["all","Весь месяц"],["d1","Декада 1 (1–10)"],["d2","Декада 2 (11–20)"],["d3","Декада 3 (21–31)"]].map(([k,l])=>(
-                      <button key={k} onClick={()=>setRnPeriod(k)} style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+(rnPeriod===k?"#0f766e":"#d1d5db"),background:rnPeriod===k?"#ccfbf1":"white",color:rnPeriod===k?"#0f766e":"#374151",fontWeight:rnPeriod===k?700:400,fontSize:12,cursor:"pointer"}}>{l}</button>
-                    ))}
+                {rntab.subTab==="agents"&&agentOptions.length>0&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Агент</div>
+                    <select value={rntab.agentFilter} onChange={e=>rnUpdateTab(tid,{agentFilter:e.target.value})} style={{...inp,padding:"6px 8px",fontSize:13,minWidth:200}}>
+                      <option value="">— Все агенты{rntab.results?" ("+rntab.results.length+")":""} —</option>
+                      {agentOptions.map(o=>{
+                        const cnt=rntab.results?rntab.results.filter(p=>(p.agentUid&&p.agentUid===o.uid)||((!p.agentUid)&&p.agentCode===o.key)).length:null;
+                        return <option key={o.key} value={o.key}>{o.label}{cnt!=null?" ("+cnt+")":""}</option>;
+                      })}
+                    </select>
                   </div>
+                )}
+                {rntab.subTab==="office"&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Период</div>
+                    <div style={{display:"flex",gap:4}}>
+                      {[["all","Весь месяц"],["d1","Декада 1 (1–10)"],["d2","Декада 2 (11–20)"],["d3","Декада 3 (21–31)"]].map(([k,l])=>(
+                        <button key={k} onClick={()=>rnUpdateTab(tid,{period:k})} style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+(rntab.period===k?"#0f766e":"#d1d5db"),background:rntab.period===k?"#ccfbf1":"white",color:rntab.period===k?"#0f766e":"#374151",fontWeight:rntab.period===k?700:400,fontSize:12,cursor:"pointer"}}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"flex-end",flexWrap:"wrap"}}>
+                  {rntab.checkedAt&&<span style={{fontSize:11,color:"#9ca3af",whiteSpace:"nowrap",alignSelf:"center"}}>Проверено: {new Date(rntab.checkedAt).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>}
+                  {rnCanCheck&&<button onClick={()=>checkRenewals(tid)} disabled={rntab.loading} style={btn("#0f766e",undefined,{fontSize:13,padding:"8px 20px"})}>{rntab.loading?"⏳ Проверяю...":"🔍 Проверить"}</button>}
+                  {!rnCanCheck&&!rntab.results&&!rntab.loading&&<button onClick={()=>loadRnTabCache(tid)} style={btn("#6b7280",undefined,{fontSize:13,padding:"8px 16px"})}>📂 Загрузить</button>}
+                  {rntab.results&&rntab.results.length>0&&<button onClick={()=>exportRenewalsResult(rntab)} style={btn("#16a34a",undefined,{fontSize:13})}>⬇ Excel</button>}
                 </div>
-              )}
-              <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
-                <button onClick={checkRenewals} disabled={rnLoading} style={btn("#0f766e",undefined,{fontSize:13,padding:"8px 20px"})}>{rnLoading?"⏳ Проверяю...":"🔍 Проверить"}</button>
-                {rnResults&&rnResults.length>0&&<button onClick={exportRenewalsResult} style={btn("#16a34a",undefined,{fontSize:13})}>⬇ Excel</button>}
               </div>
             </div>
             {/* Dashboard */}
-            {rnResults&&(
+            {rntab.results&&(
               <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
                 <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
                   <div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>{totals.missed+totals.noplate}</div>
@@ -4927,31 +4941,31 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{fontSize:11,color:"#166534",fontWeight:600}}>✅ Продлено</div>
                 </div>
                 <div style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
-                  <div style={{fontSize:22,fontWeight:800,color:"#374151"}}>{rnResults.length}</div>
+                  <div style={{fontSize:22,fontWeight:800,color:"#374151"}}>{rntab.results.length}</div>
                   <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>Всего</div>
                 </div>
               </div>
             )}
             {/* TOP TABLE: missed + noplate */}
-            {rnResults&&missed.length>0&&(
+            {rntab.results&&missed.length>0&&(
               <div style={{marginBottom:22}}>
                 <div style={{fontWeight:700,fontSize:14,color:"#dc2626",marginBottom:8}}>❌ Требуют внимания — {missed.length}</div>
                 <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5",boxShadow:"0 1px 4px rgba(220,38,38,0.07)"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead><tr style={{background:"#dc2626"}}>
-                      {["Дата оконч.","Страхователь","Телефон","Комментарий","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки","",""].map(h=>(
-                        <th key={h} style={thS}>{h}</th>
+                      {["Дата оконч.","Страхователь","Телефон","Комментарий","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки","",""].map((h,i)=>(
+                        <th key={i} style={thS}>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody>
                       {missed.map((p,i)=>{
                         const pk=rnPolKey(p);
-                        const work=renewalWork[pk]||{};
+                        const work=rntab.work[pk]||{};
                         const opSt=work.operatorStatus||"";
                         const stInfo=OP_STATUS[opSt]||OP_STATUS[""];
                         const callCount=(work.calls||[]).length;
-                        const endDate=rnSubTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
-                        const isChecking=!!rnChecking[pk];
+                        const endDate=rntab.subTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+                        const isChecking=!!(rntab.checking||{})[pk];
                         return(
                           <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
                             <td style={{...tdS,fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
@@ -4963,25 +4977,35 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             <td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>
                             <td style={{...tdS,fontWeight:700,fontSize:11,color:p._status==="noplate"?"#ca8a04":"#dc2626"}}>{p._status==="noplate"?"⚠️ Нет номера":"❌ Пропущен"}</td>
                             <td style={tdS}>
-                              <select value={opSt} onChange={e=>updateRnStatus(pk,e.target.value)}
-                                style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:stInfo.bg,color:stInfo.color,fontWeight:600,cursor:"pointer",minWidth:148}}>
-                                {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-                              </select>
+                              {rnCanEdit?(
+                                <select value={opSt} onChange={e=>updateRnStatus(tid,pk,e.target.value)}
+                                  style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:stInfo.bg,color:stInfo.color,fontWeight:600,cursor:"pointer",minWidth:148}}>
+                                  {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                                </select>
+                              ):(
+                                <span style={{fontSize:11,fontWeight:600,color:stInfo.color}}>{stInfo.label}</span>
+                              )}
                             </td>
                             <td style={{...tdS,textAlign:"center"}}>
-                              <button onClick={()=>{setRnCallModal({polKey:pk,pol:p});setRnNewCall({result:"no_answer",comment:""}); }}
-                                style={{background:callCount>0?"#eff6ff":"#f1f5f9",border:"1px solid "+(callCount>0?"#93c5fd":"#cbd5e1"),borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",color:callCount>0?"#1d4ed8":"#374151",fontWeight:700}}>
-                                📞{callCount>0?" "+callCount:""}
-                              </button>
+                              {rnCanEdit?(
+                                <button onClick={()=>{setRnCallModal({tid,polKey:pk,pol:{...p,_viewSrc:rntab.subTab}});setRnNewCall({result:"no_answer",comment:""}); }}
+                                  style={{background:callCount>0?"#eff6ff":"#f1f5f9",border:"1px solid "+(callCount>0?"#93c5fd":"#cbd5e1"),borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",color:callCount>0?"#1d4ed8":"#374151",fontWeight:700}}>
+                                  📞{callCount>0?" "+callCount:""}
+                                </button>
+                              ):(
+                                <span style={{fontSize:11,color:"#9ca3af"}}>{callCount>0?"📞 "+callCount:"—"}</span>
+                              )}
                             </td>
                             <td style={{...tdS,textAlign:"center"}}>
-                              <button onClick={()=>checkSingleRenewal(p)} disabled={isChecking}
-                                style={{background:isChecking?"#f1f5f9":"#fffbeb",border:"1px solid "+(isChecking?"#d1d5db":"#fcd34d"),borderRadius:6,padding:"3px 8px",fontSize:11,cursor:isChecking?"not-allowed":"pointer",color:isChecking?"#9ca3af":"#92400e",fontWeight:700}} title="Проверить продление">
-                                {isChecking?"⏳":"🔍"}
-                              </button>
+                              {rnCanCheck&&(
+                                <button onClick={()=>checkSingleRenewal(tid,p)} disabled={isChecking}
+                                  style={{background:isChecking?"#f1f5f9":"#fffbeb",border:"1px solid "+(isChecking?"#d1d5db":"#fcd34d"),borderRadius:6,padding:"3px 8px",fontSize:11,cursor:isChecking?"not-allowed":"pointer",color:isChecking?"#9ca3af":"#92400e",fontWeight:700}} title="Проверить продление">
+                                  {isChecking?"⏳":"🔍"}
+                                </button>
+                              )}
                             </td>
                             <td style={{...tdS,textAlign:"center"}}>
-                              <button onClick={()=>setRnDetailPol({...p,_viewSrc:rnSubTab})}
+                              <button onClick={()=>setRnDetailPol({...p,_viewSrc:rntab.subTab})}
                                 style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",color:"#475569",fontWeight:600}} title="Просмотр полиса">👁</button>
                             </td>
                           </tr>
@@ -4993,24 +5017,24 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               </div>
             )}
             {/* BOTTOM TABLE: renewed (collapsible) */}
-            {rnResults&&renewed.length>0&&(
+            {rntab.results&&renewed.length>0&&(
               <div>
-                <button onClick={()=>setRenewedOpen(o=>!o)}
-                  style={{display:"flex",alignItems:"center",gap:8,background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 16px",cursor:"pointer",marginBottom:renewedOpen?10:0,width:"100%",textAlign:"left"}}>
-                  <span style={{fontSize:14}}>{renewedOpen?"▼":"▶"}</span>
+                <button onClick={()=>rnUpdateTab(tid,{renewedOpen:!rntab.renewedOpen})}
+                  style={{display:"flex",alignItems:"center",gap:8,background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 16px",cursor:"pointer",marginBottom:rntab.renewedOpen?10:0,width:"100%",textAlign:"left"}}>
+                  <span style={{fontSize:14}}>{rntab.renewedOpen?"▼":"▶"}</span>
                   <span style={{fontWeight:700,color:"#15803d",fontSize:14}}>✅ Продлённые — {renewed.length}</span>
                 </button>
-                {renewedOpen&&(
+                {rntab.renewedOpen&&(
                   <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #86efac",boxShadow:"0 1px 4px rgba(21,128,61,0.07)"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead><tr style={{background:"#16a34a"}}>
-                        {["Дата оконч.","Страхователь","Госномер","Ст. компания","Новая компания","Новый №","Кто оформил","Источник",""].map(h=>(
-                          <th key={h} style={thS}>{h}</th>
+                        {["Дата оконч.","Страхователь","Госномер","Ст. компания","Новая компания","Новый №","Кто оформил","Источник",""].map((h,i)=>(
+                          <th key={i} style={thS}>{h}</th>
                         ))}
                       </tr></thead>
                       <tbody>
                         {renewed.map((p,i)=>{
-                          const endDate=rnSubTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+                          const endDate=rntab.subTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
                           return(
                             <tr key={i} style={{background:i%2===0?"#f0fdf4":"#dcfce7",borderBottom:"1px solid #bbf7d0"}}>
                               <td style={{...tdS,whiteSpace:"nowrap"}}>{endDate||"—"}</td>
@@ -5022,7 +5046,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                               <td style={tdS}>{p._rnAgent||"—"}</td>
                               <td style={tdS}>{p._rnSrc==="office"?"🏢 Офис":"👤 Агент"}</td>
                               <td style={{...tdS,textAlign:"center"}}>
-                                <button onClick={()=>setRnDetailPol({...p,_viewSrc:rnSubTab})}
+                                <button onClick={()=>setRnDetailPol({...p,_viewSrc:rntab.subTab})}
                                   style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",color:"#166534",fontWeight:600}} title="Просмотр">👁</button>
                               </td>
                             </tr>
@@ -5034,20 +5058,21 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 )}
               </div>
             )}
-            {rnResults&&rnResults.length===0&&(
+            {rntab.results&&rntab.results.length===0&&(
               <div style={{textAlign:"center",color:"#94a3b8",padding:"40px 20px"}}>Нет долгосрочных полисов за выбранный период</div>
             )}
-            {!rnResults&&!rnLoading&&(
+            {!rntab.results&&!rntab.loading&&(
               <div style={{textAlign:"center",color:"#94a3b8",padding:"60px 20px"}}>
                 <div style={{fontSize:40,marginBottom:12}}>🔄</div>
-                <div style={{fontWeight:600,fontSize:14,color:"#64748b"}}>Выберите месяц и нажмите «Проверить»</div>
+                <div style={{fontWeight:600,fontSize:14,color:"#64748b"}}>{rnCanCheck?"Выберите месяц и нажмите «Проверить»":"Нажмите «Загрузить» для просмотра сохранённых результатов"}</div>
               </div>
             )}
             {/* CALL LOG MODAL */}
             {rnCallModal&&(()=>{
-              const {polKey,pol}=rnCallModal;
-              const calls=(renewalWork[polKey]?.calls)||[];
-              const endDate=pol._viewSrc==="office"||rnSubTab==="office"?isoToDisp(pol.dateEnd):(pol.endDateFmt||isoToDisp(pol.endDate)||"");
+              const {tid:ctid,polKey,pol}=rnCallModal;
+              const ctab=rnTabs.find(t=>t.id===ctid)||rntab;
+              const calls=(ctab.work[polKey]?.calls)||[];
+              const endDate=pol._viewSrc==="office"?isoToDisp(pol.dateEnd):(pol.endDateFmt||isoToDisp(pol.endDate)||"");
               return(
                 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                   <div style={{background:"white",borderRadius:14,padding:22,width:"100%",maxWidth:480,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",maxHeight:"85vh",overflowY:"auto"}}>
@@ -5055,6 +5080,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <div>
                         <div style={{fontWeight:700,fontSize:15}}>{pol.insuredName||"—"}</div>
                         <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{pol.carPlate||"—"} · {pol.company||"—"} · истекает {endDate}</div>
+                        {pol.phone&&<div style={{fontSize:13,fontWeight:600,color:"#0f766e",marginTop:4}}>📞 {pol.phone}</div>}
                       </div>
                       <button onClick={()=>setRnCallModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af",marginLeft:8}}>✕</button>
                     </div>
@@ -5073,7 +5099,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         })}
                       </div>
                     )}
-                    <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14}}>
+                    <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14,marginBottom:14}}>
                       <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:8}}>Добавить запись</div>
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                         <select value={rnNewCall.result} onChange={e=>setRnNewCall(p=>({...p,result:e.target.value}))}
@@ -5083,8 +5109,27 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <input value={rnNewCall.comment} onChange={e=>setRnNewCall(p=>({...p,comment:e.target.value}))}
                           placeholder="Комментарий (необязательно)" style={{...inp,fontSize:12,padding:"6px 8px",flex:"2 1 160px"}}/>
                       </div>
-                      <button onClick={async()=>{await addRnCall(polKey,rnNewCall);setRnNewCall({result:"no_answer",comment:""}); }}
+                      <button onClick={async()=>{await addRnCall(ctid,polKey,rnNewCall);setRnNewCall({result:"no_answer",comment:""}); }}
                         style={{...btn("#0f766e",undefined,{fontSize:13,width:"100%"})}}>➕ Добавить запись</button>
+                    </div>
+                    <div style={{borderTop:"1px solid #e5e7eb",paddingTop:12,background:"#fffbeb",borderRadius:8,padding:"12px"}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:8}}>🔔 Напоминание</div>
+                      <input value={rnTaskForm.note} onChange={e=>setRnTaskForm(p=>({...p,note:e.target.value}))}
+                        placeholder={("Перезвонить: "+(pol.insuredName||"")+" "+(pol.carPlate||"")).trim()} style={{...inp,fontSize:12,padding:"6px 8px",width:"100%",marginBottom:8,boxSizing:"border-box"}}/>
+                      <div style={{display:"flex",gap:8,marginBottom:8}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11,color:"#6b7280",marginBottom:3}}>Дата</div>
+                          <input type="date" value={rnTaskForm.deadline} onChange={e=>setRnTaskForm(p=>({...p,deadline:e.target.value}))}
+                            style={{...inp,fontSize:12,padding:"6px 8px",width:"100%"}}/>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11,color:"#6b7280",marginBottom:3}}>Время</div>
+                          <input type="time" value={rnTaskForm.time} onChange={e=>setRnTaskForm(p=>({...p,time:e.target.value}))}
+                            style={{...inp,fontSize:12,padding:"6px 8px",width:"100%"}}/>
+                        </div>
+                      </div>
+                      <button onClick={()=>{addRnTask(pol,rnTaskForm.note,rnTaskForm.deadline,rnTaskForm.time);setRnTaskForm({note:"",deadline:"",time:""});alert("Напоминание добавлено в задачи");}}
+                        style={{...btn("#d97706",undefined,{fontSize:12,width:"100%"})}}>🔔 Добавить напоминание</button>
                     </div>
                   </div>
                 </div>
@@ -5093,7 +5138,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {/* POLICY DETAIL MODAL */}
             {rnDetailPol&&(()=>{
               const p=rnDetailPol;
-              const src=p._viewSrc||rnSubTab;
+              const src=p._viewSrc||rntab.subTab;
               const endDate=src==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
               const startDate=src==="office"?isoToDisp(p.dateStart):(p.startDateFmt||isoToDisp(p.startDate)||"");
               const isOfficeSrc=(p._src==="office")||(src==="office"&&!p._src);
@@ -5106,7 +5151,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <button onClick={()=>setRnDetailPol(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af"}}>✕</button>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px",fontSize:13,marginBottom:16}}>
-                      {[["№ полиса",p.policyNum],["Компания",p.company],["Страхователь",p.insuredName],["Госномер",p.carPlate],["Марка авто",p.car],["Дата начала",startDate],["Дата окончания",endDate],["Срок",p.term],["БМ",p.bm],["Регион",p.region],["Мощность",p.power?""+p.power+" л.с.":""],["Сумма",p.amount?fmt(p.amount)+" ֏":""],...(p._status==="renewed"?[["Продлён в компании",p._rnCo],["Новый полис",p._rnPol],["Оформил",p._rnAgent]]:[])].filter(([k,v])=>k&&(v||v===0)).map(([k,v],i)=>(
+                      {[["№ полиса",p.policyNum],["Компания",p.company],["Страхователь",p.insuredName],["Телефон",p.phone],["Госномер",p.carPlate],["Марка авто",p.car],["Дата начала",startDate],["Дата окончания",endDate],["Срок",p.term],["БМ",p.bm],["Регион",p.region],["Мощность",p.power?""+p.power+" л.с.":""],["Сумма",p.amount?fmt(p.amount)+" ֏":""],["Комментарий",p.comment],...(p._status==="renewed"?[["Продлён в компании",p._rnCo],["Новый полис",p._rnPol],["Оформил",p._rnAgent]]:[])].filter(([k,v])=>k&&(v||v===0)).map(([k,v],i)=>(
                         <div key={i}><span style={{color:"#6b7280",fontWeight:600,fontSize:12}}>{k}:</span>{" "}<span style={{fontWeight:500}}>{v||"—"}</span></div>
                       ))}
                     </div>
