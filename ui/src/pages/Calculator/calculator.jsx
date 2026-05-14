@@ -4174,6 +4174,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const osagoGross=osagoAgentIncome+officeDirectOsago;
         const volGross=volAgentIncome+officeDirectVol;
         const salesGross=osagoGross+volGross;
+        const agentSalesGross=osagoAgentIncome+volAgentIncome;
+        const officeSalesGross=officeDirectOsago+officeDirectVol;
+        const agentSalesNet=agentSalesGross-agentPayTotal;
         const osagoPayTotal=osagoAgentPay+totMgr;
         const agentPayTotal=osagoPayTotal+volAgentPay;
         const salesNet=salesGross-agentPayTotal;
@@ -4400,9 +4403,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </table>
               </div>
             )}
-            {/* Доходы от продаж */}
-            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
-              <div style={{background:"#1d4ed8",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>💰 Доходы от продаж — {fmtMonth(selMonth)}</div>
+            {/* Доходы агентов */}
+            <div style={{background:"white",border:"1px solid #bfdbfe",borderRadius:8,marginBottom:10,overflow:"hidden"}}>
+              <div style={{background:"#1d4ed8",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>💰 Доходы от продаж агентов — {fmtMonth(selMonth)}</div>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead><tr>
                   <th style={{...th,textAlign:"left",paddingLeft:14}}>Источник</th>
@@ -4413,21 +4416,49 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <tbody>
                   <tr>
                     <td style={{...td,paddingLeft:14}}>ОСАГО</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(osagoGross)}</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(osagoAgentIncome)}</td>
                     <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(osagoPayTotal)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoGross-osagoPayTotal)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoAgentIncome-osagoPayTotal)}</td>
                   </tr>
                   <tr>
                     <td style={{...td,paddingLeft:14}}>Добровольные</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(volGross)}</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(volAgentIncome)}</td>
                     <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(volAgentPay)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(volGross-volAgentPay)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(volAgentIncome-volAgentPay)}</td>
                   </tr>
-                  <tr style={{background:"#f8fafc"}}>
-                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(salesGross)}</td>
+                  <tr style={{background:"#eff6ff"}}>
+                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого агенты</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(agentSalesGross)}</td>
                     <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626"}}>−{fmt(agentPayTotal)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#15803d"}}>{fmt(salesNet)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>{fmt(agentSalesNet)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {/* Доходы офиса */}
+            <div style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
+              <div style={{background:"#16a34a",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>🏢 Доходы от продаж офиса — {fmtMonth(selMonth)}</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr>
+                  <th style={{...th,textAlign:"left",paddingLeft:14}}>Источник</th>
+                  <th style={th}>Брутто</th>
+                  <th style={th}>Нетто</th>
+                </tr></thead>
+                <tbody>
+                  <tr>
+                    <td style={{...td,paddingLeft:14}}>ОСАГО</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(officeDirectOsago)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(officeDirectOsago)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{...td,paddingLeft:14}}>Добровольные</td>
+                    <td style={{...td,textAlign:"right"}}>{fmt(officeDirectVol)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(officeDirectVol)}</td>
+                  </tr>
+                  <tr style={{background:"#f0fdf4"}}>
+                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого офис</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(officeSalesGross)}</td>
+                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#15803d"}}>{fmt(officeSalesGross)}</td>
                   </tr>
                 </tbody>
               </table>
