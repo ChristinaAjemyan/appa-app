@@ -4174,12 +4174,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const osagoGross=osagoAgentIncome+officeDirectOsago;
         const volGross=volAgentIncome+officeDirectVol;
         const salesGross=osagoGross+volGross;
-        const agentSalesGross=osagoAgentIncome+volAgentIncome;
-        const officeSalesGross=officeDirectOsago+officeDirectVol;
-        const agentSalesNet=agentSalesGross-agentPayTotal;
         const osagoPayTotal=osagoAgentPay+totMgr;
         const agentPayTotal=osagoPayTotal+volAgentPay;
         const salesNet=salesGross-agentPayTotal;
+        const agentSalesGross=osagoAgentIncome+volAgentIncome;
+        const officeSalesGross=officeDirectOsago+officeDirectVol;
+        const agentSalesNet=agentSalesGross-agentPayTotal;
         const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
         const netProfit=salesNet-totalExpenses;
         const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);saveOfficeExpenses({...officeExpenses,[selMonth]:nr});};
