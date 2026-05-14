@@ -705,6 +705,7 @@ export default function App(){
   const[dbLoaded,setDbLoaded]=useState(false);
   const[expiryF,setExpiryF]=useState(getThisMonth);
   const[activeAgent,setActiveAgent]=useState(null);
+  const[volOpen,setVolOpen]=useState(false);
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
   const[volRates,setVolRates]=useState(DEFAULT_VOL_RATES);
@@ -1227,7 +1228,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const effPols=useMemo(()=>{
     if(uploadedFiles.length>0)return sessionPols;
-    return storedPols.map(p=>{const aUid=p.agentUid||codeLookup[p.company+":"+p.agentCode]||null;return{...p,agentUid:aUid,exception:checkExc(p,effExceptions,aUid)};});
+    return storedPols.map(p=>{const aUid=codeLookup[p.company+":"+p.agentCode]||p.agentUid||null;return{...p,agentUid:aUid,exception:checkExc(p,effExceptions,aUid)};});
   },[uploadedFiles,sessionPols,storedPols,effExceptions,codeLookup]);
 
   const effVol=useMemo(()=>{
@@ -2567,7 +2568,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
                   <table style={{width:"100%",borderCollapse:"collapse"}}>
                     <thead><tr>{["Агент","768-код","Полисов всего","Не зачтено","Зачётные полисы","Всего продаж","Зачётные продажи","Выплачено агенту","Доход офиса","Прибыль офиса",""].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>{agentData.map(a=>{
+                    <tbody>{[...agentData].sort((a,b)=>{const na=parseInt(((agentDir[a.uid]&&agentDir[a.uid].internalCode)||"").replace(/\D/g,""))||9999;const nb=parseInt(((agentDir[b.uid]&&agentDir[b.uid].internalCode)||"").replace(/\D/g,""))||9999;return na-nb;}).map(a=>{
                       const hasOv=!!(rates.agentOverrides&&rates.agentOverrides[a.uid]);
                       const excCnt=a.policies.filter(p=>p.exception).length;
                       const validCnt=a.policies.length-excCnt;
@@ -2594,11 +2595,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
               {effVol.length>0&&(
                 <div style={{border:"1px solid #ddd6fe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
-                  <div style={{background:"#f5f3ff",padding:"10px 16px",fontWeight:600,fontSize:14,color:"#6d28d9"}}>{"📦 Добровольные — "+effVol.length}</div>
-                  <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <div onClick={()=>setVolOpen(o=>!o)} style={{background:"#f5f3ff",padding:"10px 16px",fontWeight:600,fontSize:14,color:"#6d28d9",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none"}}>
+                    <span>{"📦 Добровольные — "+effVol.length}</span>
+                    <span style={{fontSize:12,color:"#7c3aed"}}>{volOpen?"▲ Свернуть":"▼ Раскрыть"}</span>
+                  </div>
+                  {volOpen&&<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
                     <thead><tr>{["Продукт","Компания","Агент","Страхователь","Сумма","% О","Ком.О","% А","Ком.А","К выплате"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
                     <tbody>{effVol.map(v=><tr key={v._id}><td style={{...td,fontWeight:600}}>{v.productName}</td><td style={td}>{v.company}</td><td style={td}>{getName(v.agentUid)||v.agentCode}</td><td style={td}>{v.insuredName}</td><td style={td}>{fmt(v.amount)}</td><td style={{...td,color:"#6b7280"}}>{v.officeRate+"%"}</td><td style={td}>{fmt(v.officeComm)}</td><td style={{...td,color:"#6b7280"}}>{v.agentRate+"%"}</td><td style={td}>{fmt(v.agentComm)}</td><td style={{...td,fontWeight:700,color:"#1d4ed8"}}>{fmt(v.amount-v.agentComm)}</td></tr>)}</tbody>
-                  </table></div>
+                  </table></div>}
                 </div>
               )}
 
