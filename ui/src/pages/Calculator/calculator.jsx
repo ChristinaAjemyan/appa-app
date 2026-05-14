@@ -955,10 +955,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const rnPolKey=p=>`${(p.policyNum||"").trim()}:${(p.carPlate||"").trim()}`;
   const saveRenewalWork=async(work,month)=>{try{await calcStorage.set(`renewalWork:${month}`,JSON.stringify(work));}catch{}};
   const saveRnCache=async(subTab,month,results,checkedAt)=>{try{await calcStorage.set(`renewalResult:${subTab}:${month}`,JSON.stringify({results,checkedAt}));}catch{}};
-  const loadRnTabCache=async(tid)=>{
+  const loadRnTabCache=async(tid,subTabOverride)=>{
     const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;
+    const subTab=subTabOverride||tab.subTab;
     try{
-      const[rc,rw]=await Promise.all([calcStorage.get(`renewalResult:${tab.subTab}:${tab.month}`).catch(()=>null),calcStorage.get(`renewalWork:${tab.month}`).catch(()=>null)]);
+      const[rc,rw]=await Promise.all([calcStorage.get(`renewalResult:${subTab}:${tab.month}`).catch(()=>null),calcStorage.get(`renewalWork:${tab.month}`).catch(()=>null)]);
       const parsed=rc?.value?JSON.parse(rc.value):null;
       const work=rw?.value?JSON.parse(rw.value):{};
       if(parsed?.results)rnUpdateTab(tid,{results:parsed.results,checkedAt:parsed.checkedAt,work});
@@ -2198,7 +2199,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
       <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
         {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"],["bookmarks","🔖 Закладки","#b45309","#fef3c7"],["tasks","📋 Задачи","#be185d","#fce7f3"],["renewals","🔄 Продления","#0f766e","#ccfbf1"],["amex","💳 Amex","#1d4ed8","#dbeafe"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
-          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();}}
+          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();if(id==="renewals"){const aid=rnActiveId;setTimeout(()=>loadRnTabCache(aid),0);}}}
             style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",position:"relative"}}>
             {label}
             {id==="tasks"&&taskUnread.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",minWidth:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1}}>{taskUnread.length}</span>}
@@ -4887,7 +4888,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
               <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
                 {[["office","🏢 Офис"],["agents","👤 Агенты"]].map(([k,l])=>(
-                  <button key={k} onClick={()=>{rnUpdateTab(tid,{subTab:k,agentFilter:""});setTimeout(()=>loadRnTabCache(tid),0);}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rntab.subTab===k?"#0f766e":"#d1d5db"),background:rntab.subTab===k?"#ccfbf1":"#f9fafb",color:rntab.subTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
+                  <button key={k} onClick={()=>{rnUpdateTab(tid,{subTab:k,agentFilter:""});setTimeout(()=>loadRnTabCache(tid,k),0);}} style={{padding:"7px 20px",borderRadius:8,border:"2px solid "+(rntab.subTab===k?"#0f766e":"#d1d5db"),background:rntab.subTab===k?"#ccfbf1":"#f9fafb",color:rntab.subTab===k?"#0f766e":"#374151",fontWeight:700,fontSize:13,cursor:"pointer"}}>{l}</button>
                 ))}
               </div>
               <div style={{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
