@@ -1321,6 +1321,28 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
     setSavedOk(true);setTimeout(()=>setSavedOk(false),2500);
   };
+  const clearCompanyData=async(co)=>{
+    const label=co==="voluntary"?"добровольных полисов":"данных компании "+co;
+    if(!window.confirm("Удалить все сохранённые "+label+" за "+fmtMonth(selMonth)+"?\nЭто действие необратимо."))return;
+    if(co==="voluntary"){
+      const newData={policies:storedPols,voluntary:[]};
+      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(()=>{});
+      setStoredVol([]);setVolSession([]);
+    }else{
+      const newPols=storedPols.filter(p=>p.company!==co);
+      const newData={policies:newPols,voluntary:storedVol};
+      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(()=>{});
+      setStoredPols(newPols);
+      setUploadedFiles(prev=>prev.filter(f=>f.company!==co));
+    }
+    logAction("import","Удалены данные "+label+" за "+fmtMonth(selMonth),"—");
+  };
+  const clearAllMonthData=async()=>{
+    if(!window.confirm("Полностью очистить все данные за "+fmtMonth(selMonth)+"?\n\nБудут удалены все агентские полисы и добровольные.\nЭто действие необратимо."))return;
+    await calcStorage.set("month:"+selMonth,JSON.stringify({policies:[],voluntary:[]})).catch(()=>{});
+    setStoredPols([]);setStoredVol([]);setUploadedFiles([]);setVolSession([]);
+    logAction("import","Полная очистка данных за "+fmtMonth(selMonth),"—");
+  };
 
   const lockMonth=async()=>{
     if(!window.confirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам."))return;
@@ -2461,6 +2483,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
               {(storedPols.length>0||storedVol.length>0)&&uploadedFiles.length===0&&volSession.length===0&&<span style={{fontSize:11,color:"#6b7280"}}>{"📥 "+storedPols.length+" полисов из хранилища"}</span>}
               <button onClick={saveMonth} style={btn("#16a34a",undefined,{fontSize:11})}>💾 Сохранить месяц</button>
+              {isAdmin&&!isLocked&&(storedPols.length>0||storedVol.length>0)&&(
+                <button onClick={clearAllMonthData} style={btn("#dc2626",undefined,{fontSize:11})} title="Полностью очистить все данные месяца">🗑 Очистить всё</button>
+              )}
               {isAdmin&&(isLocked
                 ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
                 :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
@@ -2510,9 +2535,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     )}
                     {state==="saved"&&(
                       <div>
-                        <div style={{fontSize:11,color:"#1d4ed8",fontWeight:600}}>{savedCount+" полисов"}</div>
+                        <div style={{fontSize:11,color:"#1d4ed8",fontWeight:600}}>{savedCount+(isVol?" записей":" полисов")}</div>
                         <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Сохранено в базе</div>
                         <div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>Нажмите для обновления</div>
+                        {isAdmin&&!isLocked&&(
+                          <button onClick={ev=>{ev.stopPropagation();clearCompanyData(co);}} style={{...btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"}),fontSize:10,padding:"2px 6px",marginTop:4,width:"fit-content"}}>🗑 Удалить</button>
+                        )}
                       </div>
                     )}
                     {state==="empty"&&(
