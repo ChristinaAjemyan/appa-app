@@ -2748,7 +2748,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <option value="unpaid">Неоплаченные</option>
                 <option value="paid">Оплаченные</option>
               </select>
-              {opLoaded&&allFiltered.length>0&&<button onClick={()=>exportOfficeSalesExcel(allFiltered,selMonth)} style={btn("#16a34a",undefined,{fontSize:12,padding:"6px 12px"})}>⬇ Экспорт Excel</button>}
+              {opLoaded&&opCurrentMonth.length>0&&<button onClick={()=>exportOfficeSalesExcel(opCurrentMonth.filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date)),selMonth)} style={btn("#16a34a",undefined,{fontSize:12,padding:"6px 12px"})}>⬇ Экспорт Excel</button>}
               {isLocked&&<span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700,color:"#92400e"}}>🔒 Закрыт</span>}
               {isAdmin&&(isLocked
                 ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
