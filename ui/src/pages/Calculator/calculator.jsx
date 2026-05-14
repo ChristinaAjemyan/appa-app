@@ -10,7 +10,7 @@ const ARM_GROUPS=["1-9","10-14","15-25"];
 const MONTHS_RU=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const EXCEPTION_BRANDS=["opel","mercedes","mercedes-benz","bmw","nissan"];
 const _ascii=(v,n)=>Array.from(v||"").filter(c=>{const cc=c.charCodeAt(0);return cc>=32&&cc<=126;}).join("").slice(0,n);
-const _ld=(v,n)=>Array.from(v||"").filter(c=>/[A-Za-z0-9 ]/.test(c)).join("").slice(0,n);
+const _ld=(v,n)=>Array.from(v||"").filter(c=>/[A-Za-z0-9 \-]/.test(c)).join("").slice(0,n);
 const _dig=(v,n)=>Array.from(v||"").filter(c=>/[0-9]/.test(c)).join("").slice(0,n);
 const _now=new Date();
 const CURRENT_MONTH=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}`;
