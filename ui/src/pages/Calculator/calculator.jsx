@@ -4868,6 +4868,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const totals=rntab.results?{renewed:renewed.length,missed:rntab.results.filter(r=>r._status==="missed").length,noplate:rntab.results.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
         const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
         const thS={padding:"9px 10px",fontWeight:700,fontSize:11,color:"white",background:"transparent",textAlign:"left"};
+        const RN_COLS=[{key:"insuredName",label:"Страхователь"},{key:"phone",label:"Телефон"},{key:"comment",label:"Комментарий"},{key:"company",label:"Компания"},{key:"policyNum",label:"№ полиса"},{key:"progStatus",label:"Статус полиса"}];
+        const cv=k=>rnColVis[k]!==false;
         return(
           <div style={{maxWidth:1300}}>
             {/* Month tabs */}
@@ -4922,6 +4924,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {rnCanCheck&&<button onClick={()=>checkRenewals(tid)} disabled={rntab.loading} style={btn("#0f766e",undefined,{fontSize:13,padding:"8px 20px"})}>{rntab.loading?"⏳ Проверяю...":"🔍 Проверить"}</button>}
                   {!rnCanCheck&&!rntab.results&&!rntab.loading&&<button onClick={()=>loadRnTabCache(tid)} style={btn("#6b7280",undefined,{fontSize:13,padding:"8px 16px"})}>📂 Загрузить</button>}
                   {rntab.results&&rntab.results.length>0&&<button onClick={()=>exportRenewalsResult(rntab)} style={btn("#16a34a",undefined,{fontSize:13})}>⬇ Excel</button>}
+                  <div style={{position:"relative"}}>
+                    <button onClick={()=>setRnColMenu(v=>!v)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",background:"white",cursor:"pointer",fontSize:14,color:"#6b7280"}} title="Настройка колонок">⚙</button>
+                    {rnColMenu&&<div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:"white",border:"1px solid #e5e7eb",borderRadius:8,padding:"10px 14px",zIndex:200,minWidth:190,boxShadow:"0 4px 16px rgba(0,0,0,0.12)"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8}}>Колонки таблицы</div>
+                      {RN_COLS.map(({key,label})=>(
+                        <label key={key} style={{display:"flex",gap:8,alignItems:"center",padding:"4px 0",cursor:"pointer",fontSize:12,color:"#374151"}}>
+                          <input type="checkbox" checked={cv(key)} onChange={()=>toggleRnCol(key)} style={{cursor:"pointer"}}/>
+                          {label}
+                        </label>
+                      ))}
+                    </div>}
+                  </div>
                 </div>
               </div>
             </div>
@@ -4953,9 +4967,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5",boxShadow:"0 1px 4px rgba(220,38,38,0.07)"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead><tr style={{background:"#dc2626"}}>
-                      {["Дата оконч.","Страхователь","Телефон","Комментарий","Госномер","Компания","№ полиса","Статус","Работа оператора","Звонки","",""].map((h,i)=>(
-                        <th key={i} style={thS}>{h}</th>
-                      ))}
+                      <th style={thS}>Дата оконч.</th>
+                      {cv("insuredName")&&<th style={thS}>Страхователь</th>}
+                      {cv("phone")&&<th style={thS}>Телефон</th>}
+                      {cv("comment")&&<th style={thS}>Комментарий</th>}
+                      <th style={thS}>Госномер</th>
+                      {cv("company")&&<th style={thS}>Компания</th>}
+                      {cv("policyNum")&&<th style={thS}>№ полиса</th>}
+                      {cv("progStatus")&&<th style={thS}>Статус</th>}
+                      <th style={thS}>Работа оператора</th>
+                      <th style={thS}>Звонки</th>
+                      <th style={thS}></th>
+                      <th style={thS}></th>
                     </tr></thead>
                     <tbody>
                       {missed.map((p,i)=>{
@@ -4969,13 +4992,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         return(
                           <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
                             <td style={{...tdS,fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
-                            <td style={{...tdS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
-                            <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e",fontWeight:600}}>{p.phone||"—"}</td>
-                            <td style={{...tdS,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#6b7280",fontSize:11}}>{p.comment||"—"}</td>
+                            {cv("insuredName")&&<td style={{...tdS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>}
+                            {cv("phone")&&<td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e",fontWeight:600}}>{p.phone||"—"}</td>}
+                            {cv("comment")&&<td style={{...tdS,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#6b7280",fontSize:11}}>{p.comment||"—"}</td>}
                             <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
-                            <td style={tdS}>{p.company||"—"}</td>
-                            <td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>
-                            <td style={{...tdS,fontWeight:700,fontSize:11,color:p._status==="noplate"?"#ca8a04":"#dc2626"}}>{p._status==="noplate"?"⚠️ Нет номера":"❌ Пропущен"}</td>
+                            {cv("company")&&<td style={tdS}>{p.company||"—"}</td>}
+                            {cv("policyNum")&&<td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>}
+                            {cv("progStatus")&&<td style={{...tdS,fontWeight:700,fontSize:11,color:p._status==="noplate"?"#ca8a04":"#dc2626"}}>{p._status==="noplate"?"⚠️ Нет номера":"❌ Пропущен"}</td>}
                             <td style={tdS}>
                               {rnCanEdit?(
                                 <select value={opSt} onChange={e=>updateRnStatus(tid,pk,e.target.value)}
@@ -5155,13 +5178,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <div key={i}><span style={{color:"#6b7280",fontWeight:600,fontSize:12}}>{k}:</span>{" "}<span style={{fontWeight:500}}>{v||"—"}</span></div>
                       ))}
                     </div>
-                    {canNav&&(
-                      <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);openOpEdit(p);setRnDetailPol(null);}}
-                        style={{...btn("#1d4ed8",undefined,{marginBottom:8,width:"100%",fontSize:13})}}>
-                        ↗ Открыть в продажах офиса ({fmtMonth(p._mk)})
-                      </button>
-                    )}
-                    <button onClick={()=>setRnDetailPol(null)} style={{...btn("#6b7280",undefined,{width:"100%",fontSize:13})}}>Закрыть</button>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                      <button onClick={()=>setRnDetailPol(null)} style={{...btn("#6b7280",undefined,{fontSize:13,flex:1})}}>Закрыть</button>
+                      {canNav&&(
+                        <button onClick={()=>{setTab("officesales");setSelMonth(p._mk);openOpEdit(p);setRnDetailPol(null);}}
+                          style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#6b7280",textDecoration:"underline",padding:"4px 0",whiteSpace:"nowrap"}}>
+                          ↗ Открыть в продажах ({fmtMonth(p._mk)})
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
