@@ -1511,6 +1511,25 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     logAction("pay_policy",(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(payData.paidAmount||0)+" ֏ / "+_fmtPayLog(payData.paymentType),pol._monthKey);
     setOpPayPol(null);
   };
+  const cancelOpPayment=async(pol)=>{
+    const pd=pol.paidDate?pol.paidDate.slice(0,10):null;
+    if(pd&&cashDays[pd]?.closed){
+      window.alert("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.");
+      return;
+    }
+    if(!window.confirm("Отменить оплату для «"+(pol.insuredName||"—")+"» / "+(pol.policyNum||"б/н")+"?\n\nПолис вернётся в статус «Не оплачен»."))return;
+    const updated={...pol,paid:false,paidAt:null,paidAmount:null,paymentType:null,paidDate:null};
+    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
+    else{
+      const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const pols=r&&r.value?JSON.parse(r.value):[];
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      setOpPrevUnpaid(prev=>[...prev.filter(p=>p._id!==pol._id),updated].sort((a,b)=>new Date(a.date)-new Date(b.date)));
+      setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
+    }
+    logAction("cancel_payment","Отменена оплата: "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(pol.paidAmount||0)+" ֏",pol._monthKey);
+    setOpFormOpen(false);
+  };
   const deleteOfficePol=async(pol)=>{
     if(!window.confirm("Удалить полис "+pol.insuredName+"?"))return;
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
@@ -3318,6 +3337,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <ul style={{margin:0,paddingLeft:18}}>
                         {opFormErrors.map(e=><li key={e} style={{fontSize:13,color:"#b91c1c",fontWeight:600}}>{e}</li>)}
                       </ul>
+                    </div>
+                  )}
+                  {paidLock&&isAdmin&&(
+                    <div style={{marginBottom:8}}>
+                      <button onClick={()=>cancelOpPayment(opEditPol)} style={{...btn("#dc2626"),width:"100%",padding:"9px",fontSize:13}}>🚫 Отменить оплату</button>
                     </div>
                   )}
                   <div style={{display:"flex",gap:8}}>
