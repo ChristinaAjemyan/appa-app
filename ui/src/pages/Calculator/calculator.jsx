@@ -249,7 +249,8 @@ function parseCoRows(rows,company){
       power:parseInt(get("power"))||0,term:termAuto,days,car:get("car"),
       insuredName:get("insuredName"),carPlate:getCode("carPlate"),phone:get("phone"),
       startDate:sd?sd.toISOString():null,endDate:ed?ed.toISOString():null,
-      startDateFmt:fmtDate(sd),endDateFmt:fmtDate(ed)};
+      startDateFmt:fmtDate(sd),endDateFmt:fmtDate(ed),
+      passportNum:get("passportNum")||null,bankAccount:get("bankAccount")||null,email:get("email")||null};
   }).filter(p=>p.policyNum||p.amount>0);
 }
 
@@ -394,10 +395,10 @@ function downloadOfficeTemplate(){
     ws["!cols"]=headers.map(()=>({wch:18}));
     return ws;
   };
-  const h1=["polType","insuredName","phone","company","policyNum","date","dateStart","dateEnd","car","carPlate","bm","region","power","term","polStatus","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
-  const l1=["Тип","Страхователь","Телефон","Компания","№ полиса","Дата продажи","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Статус","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
-  const hint1=["*osago","*Иванов Иван","*+37400000000","*Nairi / Ingo...","№ полиса","*ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","статус","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco/bank","число","ДД.ММ.ГГГГ"];
-  const ex1=["osago","⚠ ПРИМЕР — не удалять","+37400000000","Nairi","AB123456","15.01.2024","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","","85000","0","768-101","","FALSE","","",""];
+  const h1=["polType","insuredName","phone","company","policyNum","date","dateStart","dateEnd","car","carPlate","bm","region","power","term","polStatus","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate","passportNum","bankAccount","email"];
+  const l1=["Тип","Страхователь","Телефон","Компания","№ полиса","Дата продажи","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Статус","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты","Паспорт","Банк. счёт","Email"];
+  const hint1=["*osago","*Иванов Иван","*+37400000000","*Nairi / Ingo...","№ полиса","*ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","статус","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco/bank","число","ДД.ММ.ГГГГ","серия и номер","до 20 цифр","email@example.com"];
+  const ex1=["osago","⚠ ПРИМЕР — не удалять","+37400000000","Nairi","AB123456","15.01.2024","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","","85000","0","768-101","","FALSE","","","","","",""];
   const h2=["polType","insuredName","phone","company","policyNum","productName","date","amount","discount","agentUid","comment","paid","paymentType","paidAmount","paidDate"];
   const l2=["Тип","Страхователь","Телефон","Компания","№ полиса","Продукт","Дата продажи","Сумма","Скидка","Код агента","Комментарий","Оплачено","Способ оплаты","Оплач. сумма","Дата оплаты"];
   const hint2=["*voluntary","*Иванов Иван","*+37400000000","*компания","№ полиса","*название продукта","*ДД.ММ.ГГГГ","*число","число","код агента","текст","*TRUE/FALSE","cash/acba/ineco/bank","число","ДД.ММ.ГГГГ"];
@@ -405,6 +406,33 @@ function downloadOfficeTemplate(){
   XLSXStyle.utils.book_append_sheet(wb,mkSheet(h1,l1,hint1,ex1),"АПРА (osago)");
   XLSXStyle.utils.book_append_sheet(wb,mkSheet(h2,l2,hint2,ex2),"Добровольные");
   XLSXStyle.writeFile(wb,"Шаблон_импорта_офис.xlsx");
+}
+
+// ─── Agent template download ─────────────────────────────────────────────────
+function downloadAgentTemplate(){
+  const wb=XLSXStyle.utils.book_new();
+  const sHdr={font:{bold:true,color:{rgb:"FFFFFF"},sz:11},fill:{patternType:"solid",fgColor:{rgb:"16A34A"}},alignment:{horizontal:"center",wrapText:true},border:{bottom:{style:"thin",color:{rgb:"86EFAC"}}}};
+  const sHint={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}},alignment:{wrapText:true}};
+  const sHintOpt={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"F3F4F6"}},alignment:{wrapText:true}};
+  const sEx={font:{italic:true,sz:10,color:{rgb:"92400E"}},fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},alignment:{wrapText:true}};
+  const sData={font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:"FFFFFF"}}};
+  const headers=["agentUid","company","policyNum","insuredName","phone","dateStart","dateEnd","car","carPlate","bm","region","power","term","amount","passportNum","bankAccount","email"];
+  const labels=["Код агента","Компания","№ полиса","Страхователь","Телефон","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Сумма","Паспорт","Банк. счёт","Email"];
+  const hints=["*768-XX","*Nairi / Ingo...","№ полиса","*Иванов Иван","*+37400000000","*ДД.ММ.ГГГГ","*ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","*число","серия и номер","до 20 цифр","email@example.com"];
+  const ex=["768-101","Nairi","AB123456","⚠ ПРИМЕР — не удалять","+37400000000","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","85000","","",""];
+  const ws={};
+  const range={s:{c:0,r:0},e:{c:headers.length-1,r:13}};
+  headers.forEach((h,c)=>{
+    ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr};
+    ws[XLSXStyle.utils.encode_cell({r:1,c})]={v:labels[c]||h,t:"s",s:sHdr};
+    ws[XLSXStyle.utils.encode_cell({r:2,c})]={v:hints[c]||"",t:"s",s:hints[c]&&hints[c].startsWith("*")?sHint:sHintOpt};
+    ws[XLSXStyle.utils.encode_cell({r:3,c})]={v:ex[c]||"",t:"s",s:sEx};
+    for(let r=4;r<14;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
+  });
+  ws["!ref"]=XLSXStyle.utils.encode_range(range);
+  ws["!cols"]=headers.map(()=>({wch:18}));
+  XLSXStyle.utils.book_append_sheet(wb,ws,"ОСАГО (агент)");
+  XLSXStyle.writeFile(wb,"Шаблон_агент_осаго.xlsx");
 }
 
 // ─── OOXML chart helpers ──────────────────────────────────────────────────────
@@ -654,6 +682,9 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
           {field("Телефон",v(p.phone))}
           {field("Оператор",opName)}
           {field("Дата продажи",disp(p.date))}
+          {field("Паспорт",v(p.passportNum))}
+          {field("Банк. счёт",v(p.bankAccount))}
+          {field("Email",v(p.email))}
 
           {secHdr("📋","Полис","#065f46","#d1fae5")}
           {field("Компания",v(p.company))}
@@ -1108,8 +1139,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const exportRenewalsResult=(tab)=>{
     if(!tab?.results?.length)return;
     const wb=XLSX.utils.book_new();
-    const rows=[["№ полиса","Компания","Страхователь","Госномер","Дата окончания","Статус","Компания продления","№ полиса продления","Агент/Оператор"]];
-    tab.results.forEach(p=>{const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";const endDate=tab.subTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");rows.push([p.policyNum||"",p.company||"",p.insuredName||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||""]);});
+    const rows=[["№ полиса","Компания","Страхователь","Телефон","Госномер","Дата окончания","Статус","Компания продления","№ полиса продления","Агент/Оператор","Паспорт","Банк. счёт","Email"]];
+    tab.results.forEach(p=>{const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";const endDate=tab.subTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");rows.push([p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||"",p.passportNum||"",p.bankAccount||"",p.email||""]);});
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Продления");
     XLSX.writeFile(wb,`Продления_${tab.month}${tab.period!=="all"?"_"+tab.period:""}.xlsx`);
   };
@@ -1227,8 +1258,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   },[uploadedFiles,effExceptions,codeLookup]);
 
   const effPols=useMemo(()=>{
-    if(uploadedFiles.length>0)return sessionPols;
-    return storedPols.map(p=>{const aUid=codeLookup[p.company+":"+p.agentCode]||p.agentUid||null;return{...p,agentUid:aUid,exception:checkExc(p,effExceptions,aUid)};});
+    const uploadedCos=new Set(uploadedFiles.map(f=>f.company));
+    const mapStored=p=>{const aUid=codeLookup[p.company+":"+p.agentCode]||p.agentUid||null;return{...p,agentUid:aUid,exception:checkExc(p,effExceptions,aUid)};};
+    const fromStored=storedPols.filter(p=>!uploadedCos.has(p.company)).map(mapStored);
+    if(uploadedFiles.length>0)return[...sessionPols,...fromStored];
+    return storedPols.map(mapStored);
   },[uploadedFiles,sessionPols,storedPols,effExceptions,codeLookup]);
 
   const effVol=useMemo(()=>{
@@ -1317,9 +1351,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const saveMonth=()=>{
     const pols=agentData.flatMap(a=>a.policies);
+    const vols=[...effVol];
     const snap={rates,volRates,exceptions,agentDir,managerConfig};
-    calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:effVol})).catch(()=>{});
+    calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:vols})).catch(()=>{});
     calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
+    setStoredPols(pols);
+    setStoredVol(vols);
+    setUploadedFiles([]);
+    setVolSession([]);
     setSavedOk(true);setTimeout(()=>setSavedOk(false),2500);
   };
   const clearCompanyData=async(co)=>{
@@ -1472,7 +1511,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
-  const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true});
+  const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true,passportNum:"",bankAccount:"",email:""});
   const addOfficePol=(fd)=>{
     const policyMonth=(fd.date||selMonth).slice(0,7);
     const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};
@@ -1573,7 +1612,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
   const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormErrors([]);setOpFormOpen(true);};
-  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false});setOpFormErrors([]);setOpFormOpen(true);};
+  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false,passportNum:pol.passportNum||"",bankAccount:pol.bankAccount||"",email:pol.email||""});setOpFormErrors([]);setOpFormOpen(true);};
   const openOpPay=(pol)=>{setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:new Date().toISOString().slice(0,10)});};
   const submitOpForm=()=>{
     const editingPaid=!!(opEditPol?.paid)&&isAdmin;
@@ -1600,7 +1639,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(_amt>80000&&!window.confirm("Страховая премия "+_amt.toLocaleString()+" AMD выше обычного значения (>80 000). Сохранить полис?"))return;
     if(_disc>0&&_amt>0&&_disc>_amt*0.1&&!window.confirm("Скидка "+_disc.toLocaleString()+" AMD превышает 10% от страховой премии. Сохранить полис?"))return;
     const today=new Date().toISOString().slice(0,10);
-    const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim(),paid_from_amex:opFD.polType==="osago"?(opFD.paid_from_amex||false):false};
+    const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim(),paid_from_amex:opFD.polType==="osago"?(opFD.paid_from_amex||false):false,passportNum:(opFD.passportNum||"").trim()||null,bankAccount:(opFD.bankAccount||"").trim()||null,email:(opFD.email||"").trim()||null};
     const typeData=opFD.polType==="voluntary"
       ?{productName:(opFD.productName||"").trim()}
       :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:(opFD.carPlate||"").trim(),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
@@ -2196,7 +2235,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const sPhonePaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}}};
     const sPhoneUnpaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"FFE4E6"}}};
     const sTot={font:{bold:true,sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}}};
-    const HEADERS=["Страхователь","Телефон","Компания","Рег.номер","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Комментарий"];
+    const HEADERS=["Страхователь","Телефон","Компания","Рег.номер","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Комментарий","Паспорт","Банк. счёт","Email"];
     const PHONE_COL=1;
     const ws={};
     HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr});
@@ -2209,15 +2248,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         p.polType==="voluntary"?"Добровольный":"ОСАГО",
         p.amount||0,p.discount||0,(p.amount||0)-(p.discount||0),
         isoToDisplay(p.date),
-        p.comment||""
+        p.comment||"",p.passportNum||"",p.bankAccount||"",p.email||""
       ];
       vals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:sc});
     });
     const totRow=pols.length+1;
-    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,""];
+    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,"","","",""];
     totVals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:typeof v==="number"?"n":"s",s:sTot});
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:totRow,c:HEADERS.length-1}});
-    ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:12},{wch:17},{wch:14},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30}];
+    ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:12},{wch:17},{wch:14},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30},{wch:18},{wch:22},{wch:30}];
     const wb=XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb,ws,"Продажи офиса");
     _dlXlsx(wb,`Продажи_офиса_${monthLabel||selMonth}.xlsx`);
@@ -2514,7 +2553,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           </div>
 
           <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:14,marginBottom:12,background:"#fafafa"}}>
-            <div style={{fontWeight:600,fontSize:14,marginBottom:10}}>{"📂 Файлы — "+fmtMonth(selMonth)}</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
+              <div style={{fontWeight:600,fontSize:14}}>{"📂 Файлы — "+fmtMonth(selMonth)}</div>
+              <button onClick={downloadAgentTemplate} style={btn("#16a34a",undefined,{fontSize:11,padding:"4px 12px"})}>📋 Шаблон ОСАГО (агент)</button>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
               {[...ALL_COMPANIES,"voluntary"].map(co=>{
                 const isVol=co==="voluntary";
@@ -3218,6 +3260,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         {l}
                       </button>
                     ))}
+                  </div>
+                  {/* === Доп. данные страхователя (только ОСАГО) === */}
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Доп. данные страхователя</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                    <div style={{gridColumn:"1/-1"}}>
+                      <div style={flbl}>Паспорт</div>
+                      <input value={opFD.passportNum||""} onChange={e=>setOpFD(p=>({...p,passportNum:e.target.value.replace(/[^A-Za-z0-9]/g,"").slice(0,60)}))} placeholder="AA1234567" maxLength={60} disabled={isViewOnly} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Банк. счёт</div>
+                      <input value={opFD.bankAccount||""} onChange={e=>setOpFD(p=>({...p,bankAccount:e.target.value.replace(/\D/g,"").slice(0,20)}))} placeholder="только цифры" maxLength={20} disabled={isViewOnly} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={flbl}>Email</div>
+                      <input value={opFD.email||""} onChange={e=>setOpFD(p=>({...p,email:e.target.value.replace(/[^A-Za-z0-9@._\-+]/g,"").slice(0,60)}))} placeholder="mail@example.com" maxLength={60} disabled={isViewOnly} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                    </div>
                   </div>
                   </>)}
                   {/* === Добровольный: Продукт + Компания + Оператор + Дата === */}
@@ -5054,8 +5112,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const totals=rntab.results?{renewed:renewed.length,missed:rntab.results.filter(r=>r._status==="missed").length,noplate:rntab.results.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
         const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
         const thS={padding:"9px 10px",fontWeight:700,fontSize:11,color:"white",background:"transparent",textAlign:"left"};
-        const RN_COLS=[{key:"insuredName",label:"Страхователь"},{key:"phone",label:"Телефон"},{key:"comment",label:"Комментарий"},{key:"company",label:"Компания"},{key:"policyNum",label:"№ полиса"},{key:"progStatus",label:"Статус полиса"}];
-        const cv=k=>rnColVis[k]!==false;
+        const RN_COLS=[{key:"insuredName",label:"Страхователь"},{key:"phone",label:"Телефон"},{key:"comment",label:"Комментарий"},{key:"company",label:"Компания"},{key:"policyNum",label:"№ полиса"},{key:"progStatus",label:"Статус полиса"},{key:"passportNum",label:"Паспорт",extra:true},{key:"bankAccount",label:"Банк. счёт",extra:true},{key:"email",label:"Email",extra:true}];
+        const cv=k=>RN_COLS.find(c=>c.key===k)?.extra ? rnColVis[k]===true : rnColVis[k]!==false;
         return(
           <div style={{maxWidth:1300}}>
             {/* Month tabs */}
@@ -5161,6 +5219,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       {cv("company")&&<th style={thS}>Компания</th>}
                       {cv("policyNum")&&<th style={thS}>№ полиса</th>}
                       {cv("progStatus")&&<th style={thS}>Статус</th>}
+                      {cv("passportNum")&&<th style={thS}>Паспорт</th>}
+                      {cv("bankAccount")&&<th style={thS}>Банк. счёт</th>}
+                      {cv("email")&&<th style={thS}>Email</th>}
                       <th style={thS}>Работа оператора</th>
                       <th style={thS}>Звонки</th>
                       <th style={thS}></th>
@@ -5185,6 +5246,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             {cv("company")&&<td style={tdS}>{p.company||"—"}</td>}
                             {cv("policyNum")&&<td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>}
                             {cv("progStatus")&&<td style={{...tdS,fontWeight:700,fontSize:11,color:p._status==="noplate"?"#ca8a04":"#dc2626"}}>{p._status==="noplate"?"⚠️ Нет номера":"❌ Пропущен"}</td>}
+                            {cv("passportNum")&&<td style={{...tdS,fontSize:11}}>{p.passportNum||"—"}</td>}
+                            {cv("bankAccount")&&<td style={{...tdS,fontFamily:"monospace",fontSize:11}}>{p.bankAccount||"—"}</td>}
+                            {cv("email")&&<td style={{...tdS,fontSize:11}}>{p.email||"—"}</td>}
                             <td style={tdS}>
                               {rnCanEdit?(
                                 <select value={opSt} onChange={e=>updateRnStatus(tid,pk,e.target.value)}
