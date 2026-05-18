@@ -1613,7 +1613,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormErrors([]);setOpFormOpen(true);};
   const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false,passportNum:pol.passportNum||"",bankAccount:pol.bankAccount||"",email:pol.email||""});setOpFormErrors([]);setOpFormOpen(true);};
-  const openOpPay=(pol)=>{setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:new Date().toISOString().slice(0,10)});};
+  const openOpPay=async(pol)=>{
+    const today=new Date().toISOString().slice(0,10);
+    try{
+      const r=await calcStorage.get("cashBook:"+today.slice(0,7)).catch(()=>null);
+      const days=r&&r.value?JSON.parse(r.value):{};
+      if(days[today]?.closed){
+        window.alert("⛔ Касса за "+new Date(today+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nДля принятия оплаты сначала откройте кассу за этот день.");
+        return;
+      }
+    }catch{}
+    setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:today});
+  };;
   const submitOpForm=()=>{
     const editingPaid=!!(opEditPol?.paid)&&isAdmin;
     const errs=[];
