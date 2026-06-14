@@ -753,7 +753,7 @@ export default function App(){
   const[showAllPayroll,setShowAllPayroll]=useState(false);
   const[officeCodes,setOfficeCodes]=useState([]);
   const[newOfficeCode,setNewOfficeCode]=useState("");
-  const fileRef=useRef();const backRef=useRef();const importOfficeRef=useRef();
+  const fileRef=useRef();const backRef=useRef();const importOfficeRef=useRef();const dirSaveQueue=useRef(Promise.resolve());
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
@@ -891,7 +891,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       return next;
     });
   },[tab,selMonth,officeExpLoaded]);
-  const saveDir=d=>{setAgentDir(d);calcStorage.set("agentDirectory",JSON.stringify(d)).catch(err=>{alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
+  const saveDir=d=>{setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
   const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));

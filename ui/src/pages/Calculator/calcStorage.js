@@ -3,7 +3,8 @@ const BASE = '/api/calc-result-storage';
 export const calcStorage = {
   async get(key) {
     const res = await fetch(`${BASE}/${encodeURIComponent(key)}`);
-    if (!res.ok) return null;
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Storage error: ${res.status}`);
     const data = await res.json();
     return { value: JSON.stringify(data.value) };
   },
