@@ -4045,6 +4045,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const totOp=opResults.reduce((s,r)=>s+r.oi,0);
         const totFix=opResults.reduce((s,r)=>s+r.fix,0);
         const totProfit=opResults.reduce((s,r)=>s+r.profit,0);
+        const totTotalSales=opResults.reduce((s,r)=>s+r.totalSales,0);
+        const totValidSales=opResults.reduce((s,r)=>s+r.validSales,0);
         const detailResult=mgrDetail?opResults.find(r=>r.uid===mgrDetail):null;
         const detailOp=mgrDetail?agentData.find(a=>a.uid===mgrDetail):null;
         const agentsNotOp=Object.entries(agentDir).filter(([id])=>!(cfg.operatorUids||[]).includes(id));
@@ -4150,7 +4152,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       );
                     })}
                     <tr style={{background:"#111827",color:"#fff"}}>
-                      <td colSpan={4} style={{...td,fontWeight:700,color:"#fff",borderTop:"2px solid #374151"}}>ИТОГО</td>
+                      <td style={{...td,fontWeight:700,color:"#fff",borderTop:"2px solid #374151"}}>ИТОГО</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#fff",borderTop:"2px solid #374151"}}>{fmt(totTotalSales)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#4ade80",borderTop:"2px solid #374151"}}>{fmt(totValidSales)}</td>
                       <td style={{...td,borderTop:"2px solid #374151"}}></td>
                       <td style={{...td,textAlign:"right",color:"#fbbf24",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totFix)}</td>
                       <td style={{...td,textAlign:"right",color:"#c4b5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totMgr)}</td>
