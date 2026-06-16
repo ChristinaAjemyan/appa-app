@@ -3995,9 +3995,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"left",minWidth:160}}>Имя агента</th>
                         <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"center",minWidth:90}}>768-код</th>
                         <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"center",minWidth:70}}>Кол-во полисов</th>
-                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillGreen,minWidth:110}}>Начислено (ОСАГО)</th>
-                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillRed,minWidth:130}}>К оплате офису (доброволь.)</th>
-                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",...fillBlue,minWidth:110}}>К выплате</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",minWidth:110}}>Начислено (ОСАГО)</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",minWidth:130}}>К оплате офису (доброволь.)</th>
+                        <th style={{...th,color:"#fff",background:"#1e293b",textAlign:"right",minWidth:110}}>К выплате</th>
                         <th style={{...th,color:"#fff",background:"#1e293b",minWidth:100}}>Примечание</th>
                         <th style={{...th,color:"#fff",background:"#1e293b",minWidth:130}}>Подпись</th>
                       </tr>
