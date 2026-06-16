@@ -4287,8 +4287,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const dynRows=rows.filter(r=>r.type==="dynamic");
         const catColors={"Зарплаты":"#eff6ff","Коммунальные":"#f0fdf4","Связь":"#fdf4ff","Налоги":"#fff7ed","Прочее":"#f8fafc"};
         const catBorders={"Зарплаты":"#bfdbfe","Коммунальные":"#bbf7d0","Связь":"#e9d5ff","Налоги":"#fed7aa","Прочее":"#e2e8f0"};
-        const RowEl=({r})=>(
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 14px",borderBottom:"1px solid #f9fafb"}}>
+        const rowEl=r=>(
+          <div key={r.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 14px",borderBottom:"1px solid #f9fafb"}}>
             <input value={r.name} onChange={e=>updRow(r.id,"name",e.target.value.slice(0,50))} maxLength={50} style={{...inp,flex:1,padding:"3px 8px",fontSize:13,minWidth:0}}/>
             <input type="text" value={r.amount||""} onChange={e=>updRow(r.id,"amount",Number(_dig(e.target.value,7))||0)} placeholder="0" maxLength={7} style={{...inp,width:120,padding:"3px 8px",fontSize:13,textAlign:"right"}}/>
             <button onClick={()=>delRow(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
@@ -4602,7 +4602,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <span style={{fontWeight:600,fontSize:12,color:"#374151"}}>{cat}</span>
                       <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>{fmt(catTotal)}</span>
                     </div>
-                    {catRows.map(r=><RowEl key={r.id} r={r}/>)}
+                    {catRows.map(r=>{rowEl(r)})}
                   </div>
                 );
               })}
@@ -4612,7 +4612,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <span style={{fontWeight:600,fontSize:12,color:"#374151"}}>Дополнительно</span>
                     <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>{fmt(dynRows.reduce((s,r)=>s+(Number(r.amount)||0),0))}</span>
                   </div>
-                  {dynRows.map(r=><RowEl key={r.id} r={r}/>)}
+                  {dynRows.map(r=>{rowEl(r)})}
                 </div>
               )}
               <div style={{padding:"10px 14px",display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #f3f4f6"}}>
