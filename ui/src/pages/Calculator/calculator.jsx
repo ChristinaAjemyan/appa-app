@@ -2031,6 +2031,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     XLSX.writeFile(wb,"Незачётные_"+ic+"_"+month+".xlsx");
   };
 
+  const exportAgentVol=(uid,volPols,month)=>{
+    const wb=XLSX.utils.book_new();
+    const volCols=["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком. агента","К оплате офису"];
+    const volRow=v=>[v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0,(v.agentRate||0)+"%",v.agentComm||0,v.amount-(v.agentComm||0)];
+    const rows=[volCols,...volPols.map(volRow)];
+    rows.push(["ИТОГО","","","",volPols.reduce((s,v)=>s+v.amount,0),"",volPols.reduce((s,v)=>s+v.agentComm,0),volPols.reduce((s,v)=>s+(v.amount-v.agentComm),0)]);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Добровольные");
+    const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
+    XLSX.writeFile(wb,"Добровольные_"+ic+"_"+month+".xlsx");
+  };
+
   const exportAgentAll=(uid,validPols,excPols,volPols,month)=>{
     const wb=XLSX.utils.book_new();
     const vRows=[polCols,...validPols.map(polRow)];
@@ -3997,6 +4008,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{marginBottom:24}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
                     <div style={{fontWeight:700,fontSize:14,color:"#1d4ed8"}}>🛡 Добровольные полисы ({volPols.length})</div>
+                    <button onClick={()=>exportAgentVol(foundAgent.uid,volPols,selMonth)} style={btn("#1d4ed8",undefined,{fontSize:12})}>⬇ Экспорт добровольных</button>
                   </div>
                   <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #bfdbfe"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
