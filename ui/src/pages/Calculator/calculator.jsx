@@ -2146,6 +2146,41 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   };
 
+  const exportAgentXlsx=(detail,month)=>{
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sDark=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:11,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}});
+    const sHdr=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"CBD5E1"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center",wrapText:true}});
+    const sC=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
+    const sN=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}});
+    const ac=(ws,row,c,v,s,f)=>{const cell={s};if(f){cell.f=f;cell.t="n";}else{cell.v=v;cell.t=typeof v==="number"?"n":"s";}ws[XLSXStyle.utils.encode_cell({r:row,c})]=cell;};
+    const ws={};let rw=0;const mg=[];
+    const HDRS=["№ полиса","Компания","Марка","Рег. номер","Страхователь","Телефон","Начало","Окончание","Дней","Срок","Сумма","% А","Ком. А"];
+    const nc=HDRS.length-1;
+    ac(ws,rw,0,agName(detail)+" — "+fmtMonth(month),sDark("1E293B"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+    HDRS.forEach((h,c)=>ac(ws,rw,c,h,sHdr("CBD5E1")));rw++;
+    const dataStart=rw+1;
+    detail.policies.forEach(p=>{
+      const isExc=!!p.exception;const bg=isExc?"FECDD3":"FFFFFF";const excelRow=rw+1;
+      [p.policyNum||"",p.company||"",p.car||"",p.carPlate||"",p.insuredName||"",p.phone||"",p.startDateFmt||"",p.endDateFmt||"",p.days!=null?p.days:"",p.term||""].forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));
+      ac(ws,rw,10,p.amount||0,sN(bg));
+      ac(ws,rw,11,p.agentRate||0,sN(bg));
+      ac(ws,rw,12,0,sN(bg),`=K${excelRow}*L${excelRow}/100`);
+      rw++;
+    });
+    const dataEnd=rw;
+    ["ИТОГО","","","","","","","","",""].forEach((v,c)=>ac(ws,rw,c,v,sC("E5E7EB",true)));
+    ac(ws,rw,10,0,sN("E5E7EB",true),`=SUM(K${dataStart}:K${dataEnd})`);
+    ac(ws,rw,11,0,sN("E5E7EB"));
+    ac(ws,rw,12,0,sN("E5E7EB",true),`=SUM(M${dataStart}:M${dataEnd})`);
+    rw++;
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:nc}});
+    ws["!cols"]=[{wch:16},{wch:12},{wch:18},{wch:13},{wch:26},{wch:14},{wch:11},{wch:11},{wch:6},{wch:6},{wch:14},{wch:7},{wch:14}];
+    ws["!merges"]=mg;
+    const wb=XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb,ws,(agName(detail)+" "+fmtMonth(month)).slice(0,31));
+    _dlXlsx(wb,agName(detail)+"_"+month+".xlsx");
+  };
+
   const _computeOpR=(agentData,cfg)=>agentData.filter(a=>(cfg.operatorUids||[]).includes(a.uid)).map(op=>{
     const thrs=cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
     const fixes=cfg.tierFixes||DEFAULT_MGR_RATES.tierFixes;
@@ -2680,7 +2715,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
               {detail&&(
                 <div style={{border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",marginBottom:16}}>
-                  <div style={{background:"#f1f5f9",padding:"10px 16px",fontWeight:600,fontSize:14}}>{"Агент: "+agName(detail)}</div>
+                  <div style={{background:"#f1f5f9",padding:"10px 16px",fontWeight:600,fontSize:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>{"Агент: "+agName(detail)}</span>
+                    <button onClick={()=>exportAgentXlsx(detail,selMonth)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
+                  </div>
                   <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
                     <thead><tr>{["№ полиса","Компания","Марка","Рег.номер","Страхователь","Телефон","Начало","Окончание","Дней","Срок","Сумма","Регион","БМ","Мощн","Статус","% А","Ком.А"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
                     <tbody>{detail.policies.map(p=>{
