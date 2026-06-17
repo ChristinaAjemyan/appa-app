@@ -2031,7 +2031,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     XLSX.writeFile(wb,"Незачётные_"+ic+"_"+month+".xlsx");
   };
 
-  const exportAgentAll=(uid,validPols,excPols,month)=>{
+  const exportAgentAll=(uid,validPols,excPols,volPols,month)=>{
     const wb=XLSX.utils.book_new();
     const vRows=[polCols,...validPols.map(polRow)];
     vRows.push(["ИТОГО","","","","","","","","","",validPols.reduce((s,p)=>s+p.amount,0),"",validPols.reduce((s,p)=>s+p.agentComm,0)]);
@@ -2039,6 +2039,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(excPols.length>0){
       const eRows=[polCols,...excPols.map(polRow)];
       XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(eRows),"Незачётные");
+    }
+    if(volPols&&volPols.length>0){
+      const volCols=["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком. агента","К оплате офису"];
+      const volRow=v=>[v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0,(v.agentRate||0)+"%",v.agentComm||0,v.amount-(v.agentComm||0)];
+      const volRows=[volCols,...volPols.map(volRow)];
+      volRows.push(["ИТОГО","","","",volPols.reduce((s,v)=>s+v.amount,0),"",volPols.reduce((s,v)=>s+v.agentComm,0),volPols.reduce((s,v)=>s+(v.amount-v.agentComm),0)]);
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(volRows),"Добровольные");
     }
     const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
     XLSX.writeFile(wb,"Полисы_"+ic+"_"+month+".xlsx");
@@ -3793,6 +3800,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const foundAgent=foundUID?agentData.find(a=>a.uid===foundUID):null;
         const validPols=foundAgent?foundAgent.policies.filter(p=>!p.exception):[];
         const excPols=foundAgent?foundAgent.policies.filter(p=>p.exception):[];
+        const volPols=foundAgent?effVol.filter(v=>v.agentUid===foundAgent.uid):[];
+        const volDebt=Math.round(volPols.reduce((s,v)=>s+(v.amount-v.agentComm),0));
+        const netPayable=Math.round((foundAgent?foundAgent.totalAgent:0)-volDebt);
         return(
         <div>
           {/* Навигация по месяцу */}
@@ -3866,11 +3876,19 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <div style={{fontWeight:700,fontSize:18,color:"#f87171"}}>{excPols.length}</div>
                   </div>
                   <div style={{textAlign:"center"}}>
-                    <div style={{fontSize:11,opacity:.6}}>Итого начислено</div>
+                    <div style={{fontSize:11,opacity:.6}}>Начислено (ОСАГО)</div>
                     <div style={{fontWeight:700,fontSize:18,color:"#fbbf24"}}>{fmt(foundAgent.totalAgent)}</div>
                   </div>
+                  {volPols.length>0&&<div style={{textAlign:"center"}}>
+                    <div style={{fontSize:11,opacity:.6}}>К оплате офису (доброволь.)</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#f87171"}}>{fmt(volDebt)}</div>
+                  </div>}
+                  {volPols.length>0&&<div style={{textAlign:"center"}}>
+                    <div style={{fontSize:11,opacity:.6}}>К выплате</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#34d399"}}>{fmt(netPayable)}</div>
+                  </div>}
                 </div>
-                <button onClick={()=>exportAgentAll(foundAgent.uid,validPols,excPols,selMonth)} style={btn("#16a34a")}>⬇ Экспорт (все)</button>
+                <button onClick={()=>exportAgentAll(foundAgent.uid,validPols,excPols,volPols,selMonth)} style={btn("#16a34a")}>⬇ Экспорт (все)</button>
               </div>
 
               {/* Таблица по компаниям */}
@@ -3968,6 +3986,40 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,textAlign:"right",fontWeight:700,borderTop:"2px solid #86efac"}}>{fmt(validPols.reduce((s,p)=>s+p.amount,0))}</td>
                           <td style={{...td,borderTop:"2px solid #86efac"}}></td>
                           <td style={{...td,textAlign:"right",fontWeight:700,color:"#16a34a",borderTop:"2px solid #86efac"}}>{fmt(foundAgent.totalAgent)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {/* Добровольные полисы */}
+              {volPols.length>0&&(
+                <div style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                    <div style={{fontWeight:700,fontSize:14,color:"#1d4ed8"}}>🛡 Добровольные полисы ({volPols.length})</div>
+                  </div>
+                  <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #bfdbfe"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#dbeafe"}}>{["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком. агента","К оплате офису"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{volPols.map((v,i)=>(
+                        <tr key={v._id||i} style={{background:i%2===0?"white":"#eff6ff",borderBottom:"1px solid #dbeafe"}}>
+                          <td style={td}>{v.policyNum||"—"}</td>
+                          <td style={td}>{v.productName||"—"}</td>
+                          <td style={td}>{v.company||"—"}</td>
+                          <td style={{...td,fontSize:11}}>{v.insuredName||"—"}</td>
+                          <td style={{...td,textAlign:"right"}}>{fmt(v.amount)}</td>
+                          <td style={{...td,textAlign:"center",color:"#6366f1"}}>{(v.agentRate||0)+"%"}</td>
+                          <td style={{...td,textAlign:"right",color:"#16a34a",fontWeight:600}}>{fmt(v.agentComm)}</td>
+                          <td style={{...td,textAlign:"right",color:"#dc2626",fontWeight:600}}>{fmt(v.amount-v.agentComm)}</td>
+                        </tr>
+                      ))}</tbody>
+                      <tfoot>
+                        <tr style={{background:"#dbeafe"}}>
+                          <td colSpan={4} style={{...td,fontWeight:700,borderTop:"2px solid #93c5fd"}}>ИТОГО</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,borderTop:"2px solid #93c5fd"}}>{fmt(volPols.reduce((s,v)=>s+v.amount,0))}</td>
+                          <td style={{...td,borderTop:"2px solid #93c5fd"}}></td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:"#16a34a",borderTop:"2px solid #93c5fd"}}>{fmt(volPols.reduce((s,v)=>s+v.agentComm,0))}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626",borderTop:"2px solid #93c5fd"}}>{fmt(volDebt)}</td>
                         </tr>
                       </tfoot>
                     </table>
