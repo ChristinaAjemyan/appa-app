@@ -2146,7 +2146,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   };
 
-  const exportAgentXlsx=(detail,month)=>{
+  const exportAgentXlsx=(detail,month,volPolicies)=>{
     const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
     const sDark=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:11,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}});
     const sHdr=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"CBD5E1"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center",wrapText:true}});
@@ -2173,6 +2173,27 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     ac(ws,rw,11,0,sN("E5E7EB"));
     ac(ws,rw,12,0,sN("E5E7EB",true),`=SUM(M${dataStart}:M${dataEnd})`);
     rw++;
+    if(volPolicies&&volPolicies.length>0){
+      rw++;
+      const VHDRS=["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком. А"];
+      ac(ws,rw,0,"ДОБРОВОЛЬНЫЕ ("+volPolicies.length+")",sDark("1D4ED8"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+      VHDRS.forEach((h,c)=>ac(ws,rw,c,h,sHdr("DBEAFE")));rw++;
+      const vStart=rw+1;
+      volPolicies.forEach((v,i)=>{
+        const bg=i%2===0?"FFFFFF":"EFF6FF";const excelRow=rw+1;
+        [v.policyNum||"",v.productName||"",v.company||"",v.insuredName||""].forEach((val,c)=>ac(ws,rw,c,val,sC(bg)));
+        ac(ws,rw,4,v.amount||0,sN(bg));
+        ac(ws,rw,5,v.agentRate||0,sN(bg));
+        ac(ws,rw,6,0,sN(bg),`=E${excelRow}*F${excelRow}/100`);
+        rw++;
+      });
+      const vEnd=rw;
+      ["ИТОГО","","",""].forEach((val,c)=>ac(ws,rw,c,val,sC("E5E7EB",true)));
+      ac(ws,rw,4,0,sN("E5E7EB",true),`=SUM(E${vStart}:E${vEnd})`);
+      ac(ws,rw,5,0,sN("E5E7EB"));
+      ac(ws,rw,6,0,sN("E5E7EB",true),`=SUM(G${vStart}:G${vEnd})`);
+      rw++;
+    }
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:nc}});
     ws["!cols"]=[{wch:16},{wch:12},{wch:18},{wch:13},{wch:26},{wch:14},{wch:11},{wch:11},{wch:6},{wch:6},{wch:14},{wch:7},{wch:14}];
     ws["!merges"]=mg;
@@ -2717,7 +2738,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden",marginBottom:16}}>
                   <div style={{background:"#f1f5f9",padding:"10px 16px",fontWeight:600,fontSize:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span>{"Агент: "+agName(detail)}</span>
-                    <button onClick={()=>exportAgentXlsx(detail,selMonth)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
+                    <button onClick={()=>exportAgentXlsx(detail,selMonth,effVol.filter(v=>v.agentUid===detail.uid))} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
                   </div>
                   <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
                     <thead><tr>{["№ полиса","Компания","Марка","Рег.номер","Страхователь","Телефон","Начало","Окончание","Дней","Срок","Сумма","Регион","БМ","Мощн","Статус","% А","Ком.А"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
@@ -2742,6 +2763,25 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       );
                     })}</tbody>
                   </table></div>
+                  {(()=>{const vols=effVol.filter(v=>v.agentUid===detail.uid);if(!vols.length)return null;return(
+                    <>
+                      <div style={{background:"#1d4ed8",color:"#fff",padding:"6px 14px",fontSize:12,fontWeight:600}}>{"🛡 Добровольные ("+vols.length+")"}</div>
+                      <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead><tr>{["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком.А"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>{vols.map((v,i)=>(
+                          <tr key={v._id||i} style={{background:i%2===0?"white":"#eff6ff"}}>
+                            <td style={td}>{v.policyNum||"—"}</td>
+                            <td style={td}>{v.productName||"—"}</td>
+                            <td style={td}>{v.company||"—"}</td>
+                            <td style={{...td,fontSize:11}}>{v.insuredName||"—"}</td>
+                            <td style={td}>{fmt(v.amount)}</td>
+                            <td style={{...td,color:"#6b7280",fontSize:11}}>{v.agentRate+"%"}</td>
+                            <td style={td}>{fmt(v.agentComm)}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table></div>
+                    </>
+                  );})()}
                 </div>
               )}
 
