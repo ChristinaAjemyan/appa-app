@@ -3448,7 +3448,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </>)}
                   {/* === Добровольный: Продукт + Компания + Оператор + Дата === */}
                   {opFD.polType==="voluntary"&&(<>
-                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Продукт</div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Продукт <span style={{color:"#dc2626"}}>*</span></div>
                   <div style={{marginBottom:14}}>
                     {(volRates.rates||[]).length>0
                       ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
