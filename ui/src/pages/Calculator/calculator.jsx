@@ -4480,6 +4480,48 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const agentSalesNet=agentSalesGross-agentPayTotal;
         const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
         const netProfit=salesNet-totalExpenses;
+        // ── per-company breakdowns ──
+        const _accCo=(map,co,f)=>{if(!map[co])map[co]={};Object.entries(f).forEach(([k,v])=>{map[co][k]=(map[co][k]||0)+(v||0);});};
+        const _sumCo=(map,key)=>Object.values(map).reduce((s,v)=>s+(v[key]||0),0);
+        const offCoMap={};
+        opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(checkExc(p,effExceptions,p.agentUid))return;const comm=Math.round(p.amount*getOfficeRate(p,effRates)/100);_accCo(offCoMap,p.company||"Прочие",{sales:p.amount,comm,disc:p.discount||0});});
+        const agCoMap={};
+        agentData.filter(a=>!opUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{_accCo(agCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:p.agentComm});});});
+        const mgrCoMap={};
+        agentData.filter(a=>opUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{const mr=getMgrPolicyRate(p,managerConfig);_accCo(mgrCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:Math.round(p.amount*mr/100)});});});
+        const volCoMap={};
+        effVol.forEach(v=>{_accCo(volCoMap,v.company||"Прочие",{sales:v.amount,comm:v.officeComm,paid:v.agentComm});});
+        const offOsagoNet=_sumCo(offCoMap,"comm")-_sumCo(offCoMap,"disc");
+        const agOsagoNet=_sumCo(agCoMap,"comm")-_sumCo(agCoMap,"paid");
+        const mgrOsagoNet=_sumCo(mgrCoMap,"comm")-_sumCo(mgrCoMap,"paid");
+        const osagoNetTotal=offOsagoNet+agOsagoNet+mgrOsagoNet;
+        const volNet=_sumCo(volCoMap,"comm")-_sumCo(volCoMap,"paid");
+        const totalIncomeNet=osagoNetTotal+volNet;
+        // ── income table style shortcuts ──
+        const iS={
+          card:{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:10,overflow:"hidden"},
+          head:(bg)=>({background:bg,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}),
+          tit:{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:"0.07em",color:"white",flex:1},
+          chp:{fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:99,background:"rgba(255,255,255,0.2)",color:"white"},
+          tbl:{width:"100%",borderCollapse:"collapse"},
+          thL:{padding:"7px 12px",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",color:"rgba(255,255,255,0.82)",textAlign:"left",whiteSpace:"nowrap",borderBottom:"1px solid rgba(255,255,255,0.15)"},
+          thR:{padding:"7px 12px",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",color:"rgba(255,255,255,0.82)",textAlign:"right",whiteSpace:"nowrap",borderBottom:"1px solid rgba(255,255,255,0.15)"},
+          tdL:{padding:"7px 12px",fontSize:13,textAlign:"left",fontFamily:"inherit",color:"#56607a",whiteSpace:"nowrap",borderBottom:"1px solid #f1f5f9"},
+          tdN:{padding:"7px 12px",fontSize:13,textAlign:"right",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",borderBottom:"1px solid #f1f5f9"},
+          tdR:{padding:"7px 12px",fontSize:13,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"#b91c1c",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #f1f5f9"},
+          tdG:{padding:"7px 12px",fontSize:13,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"#087b52",fontWeight:700,whiteSpace:"nowrap",borderBottom:"1px solid #f1f5f9"},
+          ttL:{padding:"7px 12px",fontSize:13,textAlign:"left",fontFamily:"inherit",color:"#18202f",fontWeight:700,background:"#f5f7fb",borderTop:"1px solid #e5e7eb",borderBottom:"none"},
+          ttN:{padding:"7px 12px",fontSize:13,textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:700,background:"#f5f7fb",borderTop:"1px solid #e5e7eb",borderBottom:"none"},
+          ttR:{padding:"7px 12px",fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"#b91c1c",fontWeight:700,background:"#f5f7fb",borderTop:"1px solid #e5e7eb",borderBottom:"none"},
+          ttG:{padding:"7px 12px",fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"#087b52",fontWeight:700,background:"#f5f7fb",borderTop:"1px solid #e5e7eb",borderBottom:"none"},
+          tsL:{padding:"10px 12px",fontSize:14,textAlign:"left",fontFamily:"inherit",color:"#2563eb",fontWeight:800,background:"#eff6ff",borderTop:"2px solid #2563eb",borderBottom:"none"},
+          tsR:{padding:"10px 12px",fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"#2563eb",fontWeight:800,background:"#eff6ff",borderTop:"2px solid #2563eb",borderBottom:"none"},
+          tpL:{padding:"12px",fontSize:16,textAlign:"left",fontFamily:"inherit",fontWeight:800,background:"#ecfdf5",borderTop:"2px solid #087b52",borderBottom:"none"},
+          tpR:{padding:"12px",fontSize:16,textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:800,background:"#ecfdf5",borderTop:"2px solid #087b52",borderBottom:"none"},
+          divRow:{display:"flex",alignItems:"center",gap:10,margin:"8px 0 10px"},
+          divLine:{flex:1,height:1,background:"#e5e7eb"},
+          divLbl:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",color:"#9ca3af"},
+        };
         const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);saveOfficeExpenses({...officeExpenses,[selMonth]:nr});};
         const delRow=id=>saveOfficeExpenses({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
         const addDynRow=()=>{if(!expNewName.trim())return;saveOfficeExpenses({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat:"Доп.",name:expNewName.trim(),amount:0,type:"dynamic"}]});setExpNewName("");};
@@ -4665,22 +4707,129 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               );
             })()}
-            {/* Сводка */}
-            <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
-              {[
-                ["Валовой доход",salesGross,"#1d4ed8","#eff6ff","#bfdbfe"],
-                ["Выплачено агентам",agentPayTotal,"#7c3aed","#f5f3ff","#ede9fe"],
-                ["Расходы офиса",totalExpenses,"#b45309","#fffbeb","#fde68a"],
-                ["Чистая прибыль",netProfit,netProfit>=0?"#15803d":"#dc2626",netProfit>=0?"#f0fdf4":"#fff1f2",netProfit>=0?"#bbf7d0":"#fecaca"],
-              ].map(([l,v,col,bg,border])=>(
-                <div key={l} style={{background:bg,border:"1px solid "+border,borderRadius:10,padding:"12px 18px",minWidth:160}}>
-                  <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
-                  <div style={{fontSize:18,fontWeight:700,color:col}}>{fmt(v)}</div>
-                </div>
-              ))}
+            {/* ── ОСАГО ── */}
+            <div style={iS.divRow}><div style={iS.divLine}/><span style={iS.divLbl}>ОСАГО</span><div style={iS.divLine}/></div>
+            {Object.keys(offCoMap).length>0&&(
+              <div style={iS.card}>
+                <div style={iS.head("#1D4ED8")}><span style={iS.tit}>Прямые продажи офиса</span><span style={iS.chp}>Офис</span></div>
+                <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                  <thead><tr><th style={iS.thL}>Компания</th><th style={iS.thR}>Сумма продаж</th><th style={iS.thR}>Комиссия</th><th style={iS.thR}>Скидки</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                  <tbody>
+                    {Object.entries(offCoMap).map(([co,v])=>(
+                      <tr key={co}>
+                        <td style={iS.tdL}>{co}</td>
+                        <td style={iS.tdN}>{fmt(v.sales)}</td>
+                        <td style={iS.tdN}>{fmt(v.comm)}</td>
+                        <td style={iS.tdR}>{v.disc>0?`−${fmt(v.disc)}`:"—"}</td>
+                        <td style={iS.tdG}>{fmt(v.comm-v.disc)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={iS.ttL}>Итого</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(offCoMap,"sales"))}</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(offCoMap,"comm"))}</td>
+                      <td style={iS.ttR}>{_sumCo(offCoMap,"disc")>0?`−${fmt(_sumCo(offCoMap,"disc"))}`:"—"}</td>
+                      <td style={iS.ttG}>{fmt(offOsagoNet)}</td>
+                    </tr>
+                  </tbody>
+                </table></div>
+              </div>
+            )}
+            {Object.keys(agCoMap).length>0&&(
+              <div style={iS.card}>
+                <div style={iS.head("#78350F")}><span style={iS.tit}>Агентские продажи</span><span style={iS.chp}>Агенты</span></div>
+                <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                  <thead><tr><th style={iS.thL}>Компания</th><th style={iS.thR}>Сумма продаж</th><th style={iS.thR}>Комиссия</th><th style={iS.thR}>Начислено агентам</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                  <tbody>
+                    {Object.entries(agCoMap).map(([co,v])=>(
+                      <tr key={co}>
+                        <td style={iS.tdL}>{co}</td>
+                        <td style={iS.tdN}>{fmt(v.sales)}</td>
+                        <td style={iS.tdN}>{fmt(v.comm)}</td>
+                        <td style={iS.tdR}>−{fmt(v.paid)}</td>
+                        <td style={iS.tdG}>{fmt(v.comm-v.paid)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={iS.ttL}>Итого</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(agCoMap,"sales"))}</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(agCoMap,"comm"))}</td>
+                      <td style={iS.ttR}>−{fmt(_sumCo(agCoMap,"paid"))}</td>
+                      <td style={iS.ttG}>{fmt(agOsagoNet)}</td>
+                    </tr>
+                  </tbody>
+                </table></div>
+              </div>
+            )}
+            {Object.keys(mgrCoMap).length>0&&(
+              <div style={iS.card}>
+                <div style={iS.head("#4C1D95")}><span style={iS.tit}>Менеджерские продажи</span><span style={iS.chp}>Менеджер</span></div>
+                <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                  <thead><tr><th style={iS.thL}>Компания</th><th style={iS.thR}>Сумма продаж</th><th style={iS.thR}>Комиссия</th><th style={iS.thR}>Начислено менеджеру</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                  <tbody>
+                    {Object.entries(mgrCoMap).map(([co,v])=>(
+                      <tr key={co}>
+                        <td style={iS.tdL}>{co}</td>
+                        <td style={iS.tdN}>{fmt(v.sales)}</td>
+                        <td style={iS.tdN}>{fmt(v.comm)}</td>
+                        <td style={iS.tdR}>−{fmt(v.paid)}</td>
+                        <td style={iS.tdG}>{fmt(v.comm-v.paid)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={iS.ttL}>Итого</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(mgrCoMap,"sales"))}</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(mgrCoMap,"comm"))}</td>
+                      <td style={iS.ttR}>−{fmt(_sumCo(mgrCoMap,"paid"))}</td>
+                      <td style={iS.ttG}>{fmt(mgrOsagoNet)}</td>
+                    </tr>
+                  </tbody>
+                </table></div>
+              </div>
+            )}
+            <div style={iS.card}>
+              <div style={iS.head("#065F46")}><span style={iS.tit}>Итого ОСАГО</span></div>
+              <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                <thead><tr><th style={iS.thL}>Источник</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                <tbody>
+                  {Object.keys(offCoMap).length>0&&<tr><td style={iS.tdL}>Прямые продажи офиса</td><td style={iS.tdG}>{fmt(offOsagoNet)}</td></tr>}
+                  {Object.keys(agCoMap).length>0&&<tr><td style={iS.tdL}>Агентские продажи</td><td style={iS.tdG}>{fmt(agOsagoNet)}</td></tr>}
+                  {Object.keys(mgrCoMap).length>0&&<tr><td style={iS.tdL}>Менеджерские продажи</td><td style={iS.tdG}>{fmt(mgrOsagoNet)}</td></tr>}
+                  <tr><td style={iS.tsL}>Итого ОСАГО</td><td style={iS.tsR}>{fmt(osagoNetTotal)}</td></tr>
+                </tbody>
+              </table></div>
             </div>
+            {/* ── Добровольные ── */}
+            {Object.keys(volCoMap).length>0&&<>
+              <div style={iS.divRow}><div style={iS.divLine}/><span style={iS.divLbl}>Добровольные</span><div style={iS.divLine}/></div>
+              <div style={iS.card}>
+                <div style={iS.head("#0F766E")}><span style={iS.tit}>Добровольные полисы</span><span style={iS.chp}>Агенты + Офис</span></div>
+                <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                  <thead><tr><th style={iS.thL}>Компания</th><th style={iS.thR}>Сумма продаж</th><th style={iS.thR}>Комиссия</th><th style={iS.thR}>Начислено агентам</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                  <tbody>
+                    {Object.entries(volCoMap).map(([co,v])=>(
+                      <tr key={co}>
+                        <td style={iS.tdL}>{co}</td>
+                        <td style={iS.tdN}>{fmt(v.sales)}</td>
+                        <td style={iS.tdN}>{fmt(v.comm)}</td>
+                        <td style={iS.tdR}>−{fmt(v.paid)}</td>
+                        <td style={iS.tdG}>{fmt(v.comm-v.paid)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={iS.ttL}>Итого</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(volCoMap,"sales"))}</td>
+                      <td style={iS.ttN}>{fmt(_sumCo(volCoMap,"comm"))}</td>
+                      <td style={iS.ttR}>−{fmt(_sumCo(volCoMap,"paid"))}</td>
+                      <td style={iS.ttG}>{fmt(volNet)}</td>
+                    </tr>
+                  </tbody>
+                </table></div>
+              </div>
+            </>}
+            {/* ── Предупреждения об отсутствующих ставках ── */}
             {missingRateWarnings.length>0&&(
-              <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
+              <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"14px 18px",marginBottom:10}}>
                 <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:8}}>⚠ Полисы вне расчёта ({missingRateWarnings.length})</div>
                 <div style={{fontSize:12,color:"#78350f",marginBottom:10}}>Эти полисы включены в объём продаж, но не учтены в доходах — не найдены ставки:</div>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -4699,90 +4848,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </tr>
                   ))}</tbody>
                 </table>
-              </div>
-            )}
-            {/* Доходы агентов */}
-            <div style={{background:"white",border:"1px solid #bfdbfe",borderRadius:8,marginBottom:10,overflow:"hidden"}}>
-              <div style={{background:"#1d4ed8",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>💰 Доходы от продаж агентов — {fmtMonth(selMonth)}</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                <thead><tr>
-                  <th style={{...th,textAlign:"left",paddingLeft:14}}>Источник</th>
-                  <th style={th}>Брутто</th>
-                  <th style={th}>Выплачено агентам</th>
-                  <th style={th}>Нетто</th>
-                </tr></thead>
-                <tbody>
-                  <tr>
-                    <td style={{...td,paddingLeft:14}}>ОСАГО</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(osagoAgentIncome)}</td>
-                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(osagoPayTotal)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(osagoAgentIncome-osagoPayTotal)}</td>
-                  </tr>
-                  <tr>
-                    <td style={{...td,paddingLeft:14}}>Добровольные</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(volAgentIncome)}</td>
-                    <td style={{...td,textAlign:"right",color:"#dc2626"}}>−{fmt(volAgentPay)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(volAgentIncome-volAgentPay)}</td>
-                  </tr>
-                  <tr style={{background:"#eff6ff"}}>
-                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого агенты</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(agentSalesGross)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#dc2626"}}>−{fmt(agentPayTotal)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>{fmt(agentSalesNet)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            {/* Доходы офиса */}
-            <div style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
-              <div style={{background:"#16a34a",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>🏢 Доходы от продаж офиса — {fmtMonth(selMonth)}</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                <thead><tr>
-                  <th style={{...th,textAlign:"left",paddingLeft:14}}>Источник</th>
-                  <th style={th}>Брутто</th>
-                  <th style={th}>Нетто</th>
-                </tr></thead>
-                <tbody>
-                  <tr>
-                    <td style={{...td,paddingLeft:14}}>ОСАГО</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(officeDirectOsago)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(officeDirectOsago)}</td>
-                  </tr>
-                  <tr>
-                    <td style={{...td,paddingLeft:14}}>Добровольные</td>
-                    <td style={{...td,textAlign:"right"}}>{fmt(officeDirectVol)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:600}}>{fmt(officeDirectVol)}</td>
-                  </tr>
-                  <tr style={{background:"#f0fdf4"}}>
-                    <td style={{...td,paddingLeft:14,fontWeight:700}}>Итого офис</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700}}>{fmt(officeSalesGross)}</td>
-                    <td style={{...td,textAlign:"right",fontWeight:700,color:"#15803d"}}>{fmt(officeSalesGross)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            {/* Команда менеджера */}
-            {opR.length>0&&(
-              <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
-                <div style={{background:"#7c3aed",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>👔 Команда менеджера</div>
-                <div style={{padding:"12px 14px"}}>
-                  <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
-                    {[
-                      ["Объём продаж команды",fmt(mgrTeamSales),"#374151"],
-                      ["Бюджет менеджера (расход офиса)",fmt(totMgr),"#7c3aed"],
-                      ["Выплачено операторам",fmt(totOp+totFix),"#1d4ed8"],
-                      ["Доход менеджера лично",fmt(totMgrPersonal),totMgrPersonal>=0?"#15803d":"#dc2626"],
-                    ].map(([l,v,c])=>(
-                      <div key={l} style={{background:"#faf5ff",border:"1px solid #ede9fe",borderRadius:8,padding:"8px 14px",minWidth:155}}>
-                        <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
-                        <div style={{fontSize:15,fontWeight:700,color:c}}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{fontSize:12,color:"#6b7280",padding:"6px 10px",background:"#faf5ff",borderRadius:6,border:"1px solid #ede9fe"}}>
-                    ℹ️ Бюджет менеджера входит в строку «Выплачено агентам» выше — операторы учтены в общем расчёте
-                  </div>
-                </div>
               </div>
             )}
             {/* Расходы */}
@@ -4820,24 +4885,31 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <button onClick={addDynRow} style={btn("#374151",undefined,{fontSize:13,padding:"5px 14px"})}>+ Добавить</button>
               </div>
             </div>
-            {/* Итог */}
-            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
-              <div style={{background:"#111827",color:"white",padding:"8px 14px",fontWeight:600,fontSize:13}}>📊 Итоговый расчёт</div>
-              <div style={{padding:"14px"}}>
-                {[
-                  ["Нетто от продаж",salesNet,"#15803d"],
-                  ["Расходы офиса",-totalExpenses,"#dc2626"],
-                ].map(([l,v,c])=>(
-                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f3f4f6",fontSize:14}}>
-                    <span style={{color:"#374151"}}>{l}</span>
-                    <span style={{fontWeight:600,color:c}}>{v>=0?"+":""}{fmt(v)}</span>
-                  </div>
-                ))}
-                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontSize:16}}>
-                  <span style={{fontWeight:700}}>Чистая прибыль</span>
-                  <span style={{fontWeight:800,color:netProfit>=0?"#15803d":"#dc2626",fontSize:18}}>{fmt(netProfit)}</span>
-                </div>
-              </div>
+            {/* ── Итог ── */}
+            <div style={iS.divRow}><div style={iS.divLine}/><span style={iS.divLbl}>Итог</span><div style={iS.divLine}/></div>
+            <div style={iS.card}>
+              <div style={iS.head("#065F46")}><span style={iS.tit}>Итоговый доход офиса</span></div>
+              <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                <thead><tr><th style={iS.thL}>Источник</th><th style={iS.thR}>Доход офиса</th></tr></thead>
+                <tbody>
+                  <tr><td style={iS.tdL}>ОСАГО</td><td style={iS.tdG}>{fmt(osagoNetTotal)}</td></tr>
+                  {Object.keys(volCoMap).length>0&&<tr><td style={iS.tdL}>Добровольные</td><td style={iS.tdG}>{fmt(volNet)}</td></tr>}
+                  <tr><td style={iS.tsL}>Итого доход офиса</td><td style={iS.tsR}>{fmt(totalIncomeNet)}</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+            <div style={iS.card}>
+              <div style={iS.head("#065F46")}><span style={iS.tit}>Чистая прибыль</span></div>
+              <div style={{overflowX:"auto"}}><table style={iS.tbl}>
+                <tbody>
+                  <tr><td style={iS.tdL}>Итоговый доход офиса</td><td style={iS.tdG}>{fmt(totalIncomeNet)}</td></tr>
+                  <tr><td style={iS.tdL}>Расходы офиса</td><td style={iS.tdR}>−{fmt(totalExpenses)}</td></tr>
+                  <tr>
+                    <td style={{...iS.tpL,color:(totalIncomeNet-totalExpenses)>=0?"#087b52":"#b91c1c",background:(totalIncomeNet-totalExpenses)>=0?"#ecfdf5":"#fff0f0",borderTopColor:(totalIncomeNet-totalExpenses)>=0?"#087b52":"#b91c1c"}}>Чистая прибыль офиса</td>
+                    <td style={{...iS.tpR,color:(totalIncomeNet-totalExpenses)>=0?"#087b52":"#b91c1c",background:(totalIncomeNet-totalExpenses)>=0?"#ecfdf5":"#fff0f0",borderTopColor:(totalIncomeNet-totalExpenses)>=0?"#087b52":"#b91c1c"}}>{fmt(totalIncomeNet-totalExpenses)}</td>
+                  </tr>
+                </tbody>
+              </table></div>
             </div>
           </div>
         );
