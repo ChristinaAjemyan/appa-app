@@ -1660,6 +1660,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         if(!(opFD.carPlate||"").trim())errs.push("Рег. номер");
         if(!opFD.bm)errs.push("БМ");
       }
+      if(opFD.polType==="voluntary"){
+        if(!(opFD.productName||"").trim())errs.push("Тип продукта");
+      }
     }
     if(errs.length){setOpFormErrors(errs);return;}
     if(editingPaid&&!window.confirm("Вы изменяете данные уже оплаченного полиса.\n\nСтрахователь: "+(opFD.insuredName||opEditPol.insuredName||"—")+"\n№ полиса: "+(opFD.policyNum||opEditPol.policyNum||"—")+"\n\nПродолжить?"))return;
