@@ -187,6 +187,9 @@ const HMAP={
   phone:["phone"],
   productName:["productname","productName","Product","продукт","наименование","название","вид","тип","product","продукты"],
   company:["company","Company","компания","страховая","страховщик"],
+  passportNum:["passportnum","passportNum","паспорт","passport"],
+  bankAccount:["bankaccount","bankAccount","банк","account"],
+  email:["email","Email"],
 };
 
 function detectCols(headers,dataRows){
@@ -412,22 +415,13 @@ function downloadOfficeTemplate(){
 function downloadAgentTemplate(){
   const wb=XLSXStyle.utils.book_new();
   const sHdr={font:{bold:true,color:{rgb:"FFFFFF"},sz:11},fill:{patternType:"solid",fgColor:{rgb:"16A34A"}},alignment:{horizontal:"center",wrapText:true},border:{bottom:{style:"thin",color:{rgb:"86EFAC"}}}};
-  const sHint={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}},alignment:{wrapText:true}};
-  const sHintOpt={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"F3F4F6"}},alignment:{wrapText:true}};
-  const sEx={font:{italic:true,sz:10,color:{rgb:"92400E"}},fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},alignment:{wrapText:true}};
   const sData={font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:"FFFFFF"}}};
-  const headers=["agentUid","company","policyNum","insuredName","phone","dateStart","dateEnd","car","carPlate","bm","region","power","term","amount","passportNum","bankAccount","email"];
-  const labels=["Код агента","Компания","№ полиса","Страхователь","Телефон","Дата начала","Дата конца","Марка авто","Гос. номер","КБМ","Регион","Мощность","Срок","Сумма","Паспорт","Банк. счёт","Email"];
-  const hints=["*768-XX","*Nairi / Ingo...","№ полиса","*Иванов Иван","*+37400000000","*ДД.ММ.ГГГГ","*ДД.ММ.ГГГГ","Toyota Camry","00 AA 000","1-25","YR/AG...","л.с.","*L или SH","*число","серия и номер","до 20 цифр","email@example.com"];
-  const ex=["768-101","Nairi","AB123456","⚠ ПРИМЕР — не удалять","+37400000000","15.01.2024","15.01.2025","Toyota Camry","00 AA 000","3","YR","105","L","85000","","",""];
+  const headers=["agentCode","policyNum","amount","region","bm","power","term","car","insuredName","startDate","endDate","carPlate","phone","passportNum","bankAccount","email"];
   const ws={};
-  const range={s:{c:0,r:0},e:{c:headers.length-1,r:13}};
+  const range={s:{c:0,r:0},e:{c:headers.length-1,r:11}};
   headers.forEach((h,c)=>{
     ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr};
-    ws[XLSXStyle.utils.encode_cell({r:1,c})]={v:labels[c]||h,t:"s",s:sHdr};
-    ws[XLSXStyle.utils.encode_cell({r:2,c})]={v:hints[c]||"",t:"s",s:hints[c]&&hints[c].startsWith("*")?sHint:sHintOpt};
-    ws[XLSXStyle.utils.encode_cell({r:3,c})]={v:ex[c]||"",t:"s",s:sEx};
-    for(let r=4;r<14;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
+    for(let r=1;r<12;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
   });
   ws["!ref"]=XLSXStyle.utils.encode_range(range);
   ws["!cols"]=headers.map(()=>({wch:18}));
