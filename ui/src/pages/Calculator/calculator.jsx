@@ -270,12 +270,17 @@ function parseVolRows(rows){
     });
   }
   return rows.slice(1).filter(r=>r.some(c=>c!=="")).map((row,idx)=>{
-    const get=f=>cm[f]!==undefined?String(row[cm[f]]||"").trim():"";
+    const getRaw=f=>cm[f]!==undefined?row[cm[f]]:null;
+    const get=f=>{const v=getRaw(f);if(v instanceof Date)return v.toISOString();return String(v||"").trim();};
     const company=coIdx!==undefined?String(row[coIdx]||"").trim():get("company");
+    const sd=parseDate(getRaw("startDate"));
+    const ed=parseDate(getRaw("endDate"));
     return{_id:`vol-${idx}`,productName:get("productName"),company,
       agentCode:get("agentCode"),policyNum:get("policyNum"),
       amount:parseFloat(String(get("amount")).replace(/\s/g,"").replace(",","."))||0,
-      insuredName:get("insuredName")};
+      insuredName:get("insuredName"),car:get("car"),carPlate:get("carPlate"),
+      power:parseInt(get("power"))||0,term:get("term"),phone:get("phone"),
+      startDate:sd?sd.toISOString():null,endDate:ed?ed.toISOString():null};
   }).filter(p=>p.amount>0||p.productName);
 }
 
@@ -435,23 +440,16 @@ function downloadAgentVolTemplate(){
   const sHdr={font:{bold:true,color:{rgb:"FFFFFF"},sz:11},fill:{patternType:"solid",fgColor:{rgb:"1D4ED8"}},alignment:{horizontal:"center",wrapText:true},border:{bottom:{style:"thin",color:{rgb:"93C5FD"}}}};
   const sHint={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"DBEAFE"}},alignment:{wrapText:true}};
   const sHintOpt={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"F3F4F6"}},alignment:{wrapText:true}};
-  const sEx={font:{italic:true,sz:10,color:{rgb:"92400E"}},fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},alignment:{wrapText:true}};
   const sData={font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:"FFFFFF"}}};
-  const headers=  ["agentCode",    "company",         "policyNum","insuredName",      "productName",          "amount"];
-  const labels=   ["Код агента",   "Компания",        "№ полиса", "Страхователь",     "Продукт",              "Сумма"];
-  const hints=    ["*768-XX",      "*Nairi / Ingo...",  "№ полиса","*Иванов Иван",   "*КАСКО / КАСКО-ЛАЙТ...","*число"];
-  const ex=       ["768-101",      "Nairi",           "VOL123",   "⚠ ПРИМЕР — не удалять","КАСКО",           "150000"];
+  const headers=["agentCode","policyNum","amount","productName","company","power","term","car","insuredName","startDate","endDate","carPlate","phone"];
   const ws={};
-  const range={s:{c:0,r:0},e:{c:headers.length-1,r:13}};
+  const range={s:{c:0,r:0},e:{c:headers.length-1,r:11}};
   headers.forEach((h,c)=>{
     ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr};
-    ws[XLSXStyle.utils.encode_cell({r:1,c})]={v:labels[c]||h,t:"s",s:sHdr};
-    ws[XLSXStyle.utils.encode_cell({r:2,c})]={v:hints[c]||"",t:"s",s:hints[c]&&hints[c].startsWith("*")?sHint:sHintOpt};
-    ws[XLSXStyle.utils.encode_cell({r:3,c})]={v:ex[c]||"",t:"s",s:sEx};
-    for(let r=4;r<14;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
+    for(let r=1;r<12;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
   });
   ws["!ref"]=XLSXStyle.utils.encode_range(range);
-  ws["!cols"]=[{wch:14},{wch:16},{wch:14},{wch:26},{wch:22},{wch:14}];
+  ws["!cols"]=headers.map(()=>({wch:18}));
   XLSXStyle.utils.book_append_sheet(wb,ws,"Добровольные (агент)");
   XLSXStyle.writeFile(wb,"Шаблон_агент_добровольные.xlsx");
 }
