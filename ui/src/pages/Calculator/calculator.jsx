@@ -435,6 +435,33 @@ function downloadAgentTemplate(){
   XLSXStyle.writeFile(wb,"Шаблон_агент_осаго.xlsx");
 }
 
+// ─── Agent voluntary template download ───────────────────────────────────────
+function downloadAgentVolTemplate(){
+  const wb=XLSXStyle.utils.book_new();
+  const sHdr={font:{bold:true,color:{rgb:"FFFFFF"},sz:11},fill:{patternType:"solid",fgColor:{rgb:"1D4ED8"}},alignment:{horizontal:"center",wrapText:true},border:{bottom:{style:"thin",color:{rgb:"93C5FD"}}}};
+  const sHint={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"DBEAFE"}},alignment:{wrapText:true}};
+  const sHintOpt={font:{sz:10},fill:{patternType:"solid",fgColor:{rgb:"F3F4F6"}},alignment:{wrapText:true}};
+  const sEx={font:{italic:true,sz:10,color:{rgb:"92400E"}},fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},alignment:{wrapText:true}};
+  const sData={font:{sz:11},fill:{patternType:"solid",fgColor:{rgb:"FFFFFF"}}};
+  const headers=  ["agentCode",    "company",         "policyNum","insuredName",      "productName",          "amount"];
+  const labels=   ["Код агента",   "Компания",        "№ полиса", "Страхователь",     "Продукт",              "Сумма"];
+  const hints=    ["*768-XX",      "*Nairi / Ingo...",  "№ полиса","*Иванов Иван",   "*КАСКО / КАСКО-ЛАЙТ...","*число"];
+  const ex=       ["768-101",      "Nairi",           "VOL123",   "⚠ ПРИМЕР — не удалять","КАСКО",           "150000"];
+  const ws={};
+  const range={s:{c:0,r:0},e:{c:headers.length-1,r:13}};
+  headers.forEach((h,c)=>{
+    ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr};
+    ws[XLSXStyle.utils.encode_cell({r:1,c})]={v:labels[c]||h,t:"s",s:sHdr};
+    ws[XLSXStyle.utils.encode_cell({r:2,c})]={v:hints[c]||"",t:"s",s:hints[c]&&hints[c].startsWith("*")?sHint:sHintOpt};
+    ws[XLSXStyle.utils.encode_cell({r:3,c})]={v:ex[c]||"",t:"s",s:sEx};
+    for(let r=4;r<14;r++)ws[XLSXStyle.utils.encode_cell({r,c})]={v:"",t:"s",s:sData};
+  });
+  ws["!ref"]=XLSXStyle.utils.encode_range(range);
+  ws["!cols"]=[{wch:14},{wch:16},{wch:14},{wch:26},{wch:22},{wch:14}];
+  XLSXStyle.utils.book_append_sheet(wb,ws,"Добровольные (агент)");
+  XLSXStyle.writeFile(wb,"Шаблон_агент_добровольные.xlsx");
+}
+
 // ─── OOXML chart helpers ──────────────────────────────────────────────────────
 const escXml=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const buildPieChartXml=(title,labels,values)=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2676,7 +2703,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:14,marginBottom:12,background:"#fafafa"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
               <div style={{fontWeight:600,fontSize:14}}>{"📂 Файлы — "+fmtMonth(selMonth)}</div>
-              <button onClick={downloadAgentTemplate} style={btn("#16a34a",undefined,{fontSize:11,padding:"4px 12px"})}>📋 Шаблон ОСАГО (агент)</button>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button onClick={downloadAgentTemplate} style={btn("#16a34a",undefined,{fontSize:11,padding:"4px 12px"})}>📋 Шаблон ОСАГО (агент)</button>
+                <button onClick={downloadAgentVolTemplate} style={btn("#1d4ed8",undefined,{fontSize:11,padding:"4px 12px"})}>📋 Шаблон Добровольные (агент)</button>
+              </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
               {[...ALL_COMPANIES,"voluntary"].map(co=>{
