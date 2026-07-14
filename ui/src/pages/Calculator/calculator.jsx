@@ -814,6 +814,7 @@ export default function App(){
   const[cashLoaded,setCashLoaded]=useState(false);
   const[cashExpandDay,setCashExpandDay]=useState(null);
   const[cashCloseModal,setCashCloseModal]=useState(null);
+  const[cashCloseLoading,setCashCloseLoading]=useState(false);
   const[cashReopenModal,setCashReopenModal]=useState(null);
   const[cashMonthPols,setCashMonthPols]=useState([]);
   const[officeStaff,setOfficeStaff]=useState(["768-101","768-105","768-106"]);
@@ -944,8 +945,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const _cats={add_policy:"policy",edit_policy:"policy",delete_policy:"policy",import:"policy",pay_policy:"finance",cash_close:"finance",cash_reopen:"finance",expense_change:"finance",amex_topup:"amex",amex_topup_delete:"amex",lock_month:"month",unlock_month:"month",settings:"settings",dir_change:"settings",login:"auth",logout:"auth"};
     const entry={id:genUid(),ts:Date.now(),user,action,category:_cats[action]||"settings",details,month:month||selMonth};
     setAuditEntries(prev=>{
-      const updated=[entry,...prev].slice(0,1000);
-      calcStorage.set("auditLog",JSON.stringify(updated)).catch(()=>{});
+      const TWO_MONTHS=60*24*60*60*1000;
+      const updated=[entry,...prev].filter(e=>Date.now()-e.ts<TWO_MONTHS).slice(0,5000);
+      calcStorage.set("auditLog",JSON.stringify(updated)).catch(err=>console.error("auditLog save failed:",err));
       return updated;
     });
   };
@@ -1507,25 +1509,49 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setCashLoaded(true);
   };
   useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
-  const closeCashDay=(date)=>{
+  const closeCashDay=async(date)=>{
+    setCashCloseLoading(true);
     const pols=cashMonthPols.filter(p=>p.paid&&normPaidDate(p.paidDate)===date);
     const snapshot=pols.map(p=>({_id:p._id,insuredName:p.insuredName,polType:p.polType,productName:p.productName,car:p.car,carPlate:p.carPlate,policyNum:p.policyNum,company:p.company,phone:p.phone,date:p.date,amount:p.amount,discount:p.discount,paidAmount:p.paidAmount,paymentType:p.paymentType,paidDate:p.paidDate,agentUid:p.agentUid,comment:p.comment}));
     const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
     const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
     const ineco=pols.filter(p=>p.paymentType==="ineco").reduce((s,p)=>s+(p.paidAmount||0),0);
     const bank=pols.filter(p=>p.paymentType==="bank").reduce((s,p)=>s+(p.paidAmount||0),0);
-    const updated={...cashDays,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(cashDays[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,bank,total:cash+acba+ineco+bank}}};
-    setCashDays(updated);
-    calcStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
-    logAction("cash_close","Касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — 💵 "+fmt(cash)+" · ACBA "+fmt(acba)+" · ИНЭКО "+fmt(ineco)+" · Банк: "+fmt(bank)+" · Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
-    setCashCloseModal(null);
+    try{
+      const dbRaw=await calcStorage.get("cashBook:"+selMonth);
+      const dbState=dbRaw?.value?JSON.parse(dbRaw.value):{};
+      const merged={...dbState,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(dbState[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,bank,total:cash+acba+ineco+bank}}};
+      await calcStorage.set("cashBook:"+selMonth,JSON.stringify(merged));
+      const verifyRaw=await calcStorage.get("cashBook:"+selMonth);
+      const verified=verifyRaw?.value?JSON.parse(verifyRaw.value):null;
+      if(!verified||!verified[date]?.closed)throw new Error("Данные не подтверждены при повторной проверке базы данных.");
+      setCashDays(verified);
+      logAction("cash_close","Касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — 💵 "+fmt(cash)+" · ACBA "+fmt(acba)+" · ИНЭКО "+fmt(ineco)+" · Банк: "+fmt(bank)+" · Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
+      setCashCloseModal(null);
+    }catch(err){
+      alert("❌ Ошибка сохранения кассы:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.\nЕсли ошибка повторяется — обратитесь к администратору.");
+    }finally{
+      setCashCloseLoading(false);
+    }
   };
-  const reopenCashDay=(date)=>{
-    const updated={...cashDays,[date]:{...cashDays[date],closed:false,reopenedAt:new Date().toISOString()}};
-    setCashDays(updated);
-    calcStorage.set("cashBook:"+selMonth,JSON.stringify(updated)).catch(()=>{});
-    logAction("cash_reopen","Открыта касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU"));
-    setCashReopenModal(null);
+  const reopenCashDay=async(date)=>{
+    setCashCloseLoading(true);
+    try{
+      const dbRaw=await calcStorage.get("cashBook:"+selMonth);
+      const dbState=dbRaw?.value?JSON.parse(dbRaw.value):{};
+      const merged={...dbState,[date]:{...dbState[date],closed:false,reopenedAt:new Date().toISOString()}};
+      await calcStorage.set("cashBook:"+selMonth,JSON.stringify(merged));
+      const verifyRaw=await calcStorage.get("cashBook:"+selMonth);
+      const verified=verifyRaw?.value?JSON.parse(verifyRaw.value):null;
+      if(!verified||verified[date]?.closed!==false)throw new Error("Данные не подтверждены при повторной проверке базы данных.");
+      setCashDays(verified);
+      logAction("cash_reopen","Открыта касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU"));
+      setCashReopenModal(null);
+    }catch(err){
+      alert("❌ Ошибка открытия кассы:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
+    }finally{
+      setCashCloseLoading(false);
+    }
   };
 
   const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
@@ -3810,7 +3836,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{padding:"18px 24px 14px",borderBottom:"1px solid #e5e7eb"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                       <h3 style={{margin:0,fontSize:16}}>📒 Закрыть кассу — {fmtDay(cashCloseModal)}</h3>
-                      <button onClick={()=>setCashCloseModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af"}}>×</button>
+                      <button onClick={()=>{if(!cashCloseLoading)setCashCloseModal(null);}} style={{background:"none",border:"none",fontSize:20,cursor:cashCloseLoading?"not-allowed":"pointer",color:"#9ca3af"}}>×</button>
                     </div>
                     <p style={{margin:"4px 0 0",fontSize:12,color:"#6b7280"}}>Проверьте записи перед закрытием. После подтверждения изменения будут недоступны.</p>
                   </div>
@@ -3837,8 +3863,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       ⚠ После закрытия сотрудник не сможет вносить изменения. Администратор может открыть кассу при необходимости.
                     </div>
                     <div style={{display:"flex",gap:8}}>
-                      <button onClick={()=>closeCashDay(cashCloseModal)} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14}}>✓ Закрыть кассу</button>
-                      <button onClick={()=>setCashCloseModal(null)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                      <button onClick={()=>closeCashDay(cashCloseModal)} disabled={cashCloseLoading} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.6:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>{cashCloseLoading?"⏳ Сохранение...":"✓ Закрыть кассу"}</button>
+                      <button onClick={()=>setCashCloseModal(null)} disabled={cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.4:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
                     </div>
                   </div>
                 </div>
@@ -3857,8 +3883,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     После открытия сотрудник сможет принять новые платежи и повторно закрыть кассу. Снимок предыдущего закрытия будет очищен.
                   </div>
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>reopenCashDay(cashReopenModal)} style={{...btn("#d97706"),flex:1,padding:"10px",fontSize:14}}>🔓 Открыть</button>
-                    <button onClick={()=>setCashReopenModal(null)} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14}}>Отмена</button>
+                    <button onClick={()=>reopenCashDay(cashReopenModal)} disabled={cashCloseLoading} style={{...btn("#d97706"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.6:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>{cashCloseLoading?"⏳ Сохранение...":"🔓 Открыть"}</button>
+                    <button onClick={()=>setCashReopenModal(null)} disabled={cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.4:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
                   </div>
                 </div>
               </div>
