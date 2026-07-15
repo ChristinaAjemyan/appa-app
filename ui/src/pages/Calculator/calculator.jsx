@@ -2404,7 +2404,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const sPhonePaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}}};
     const sPhoneUnpaid={font:{sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"FFE4E6"}}};
     const sTot={font:{bold:true,sz:10},border:borders,fill:{patternType:"solid",fgColor:{rgb:"E0E7FF"}}};
-    const HEADERS=["Страхователь","Телефон","Компания","Рег.номер","№ полиса","Тип","Сумма","Скидка","К оплате","Дата заключения","Комментарий","Паспорт","Банк. счёт","Email"];
+    const HEADERS=["Страхователь","Телефон","Компания","Марка авто","Рег.номер","№ полиса","Тип","Продукт","Сумма","Скидка","К оплате","Дата заключения","Комментарий","Паспорт","Банк. счёт","Email"];
     const PHONE_COL=1;
     const ws={};
     HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr});
@@ -2413,8 +2413,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const sc=isPaid?sCellPaid:sCellUnpaid;
       const sp=isPaid?sPhonePaid:sPhoneUnpaid;
       const vals=[
-        p.insuredName||"",p.phone||"",p.company||"",p.carPlate||"",p.policyNum||"",
+        p.insuredName||"",p.phone||"",p.company||"",p.car||"",p.carPlate||"",p.policyNum||"",
         p.polType==="voluntary"?"Добровольный":"ОСАГО",
+        p.productName||"",
         p.amount||0,p.discount||0,(p.amount||0)-(p.discount||0),
         isoToDisplay(p.date),
         p.comment||"",p.passportNum||"",p.bankAccount||"",p.email||""
@@ -2422,10 +2423,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       vals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:sc});
     });
     const totRow=pols.length+1;
-    const totVals=["ИТОГО","","","","",`${pols.length} полисов`,pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,"","","",""];
+    const totVals=["ИТОГО","","","","","",`${pols.length} полисов`,"",pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,"","","",""];
     totVals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:typeof v==="number"?"n":"s",s:sTot});
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:totRow,c:HEADERS.length-1}});
-    ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:12},{wch:17},{wch:14},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30},{wch:18},{wch:22},{wch:30}];
+    ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:16},{wch:12},{wch:17},{wch:14},{wch:18},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30},{wch:18},{wch:22},{wch:30}];
     const wb=XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb,ws,"Продажи офиса");
     _dlXlsx(wb,`Продажи_офиса_${monthLabel||selMonth}.xlsx`);
