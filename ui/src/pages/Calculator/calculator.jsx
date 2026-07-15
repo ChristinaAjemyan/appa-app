@@ -819,6 +819,8 @@ export default function App(){
   const[cashMonthPols,setCashMonthPols]=useState([]);
   const[officeStaff,setOfficeStaff]=useState(["768-101","768-105","768-106"]);
   const[newStaffCode,setNewStaffCode]=useState("");
+  const[reminders,setReminders]=useState([]);
+  const[newReminder,setNewReminder]=useState("");
   const[managerConfig,setManagerConfig]=useState(DEFAULT_MGR_RATES);
   const[mgrDetail,setMgrDetail]=useState(null);
   const[showMgrSettings,setShowMgrSettings]=useState(false);
@@ -939,6 +941,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setLoginError("Неверный PIN");
   };
   useEffect(()=>{calcStorage.get("auditLog").then(r=>{if(r?.value)setAuditEntries(JSON.parse(r.value));}).catch(()=>{});},[]);
+  useEffect(()=>{calcStorage.get("reminders").then(r=>{if(r?.value)setReminders(JSON.parse(r.value));}).catch(()=>{});},[]);
   const _fmtPayLog=t=>t==="cash"?"💵 Наличные":t==="acba"?"🏦 ACBA":t==="ineco"?"🏦 ИНЭКО":t==="bank"?"💳 Банк. перевод":t||"—";
   const logAction=(action,details,month,userName)=>{
     const user=userName||(role==="admin"?"Администратор":(currentEmployee?.name||"Сотрудник"));
@@ -1086,6 +1089,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setCmpLoading(false);
   };
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
+  const saveReminders=(list)=>{setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>console.error("reminders save failed:",err));};
   const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});logAction("settings","Изменён список сотрудников","—");};
   const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(()=>{});};
@@ -2786,6 +2790,24 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               })}
             </div>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} style={{display:"none"}}/>
+          </div>
+
+          <div style={{border:"1px solid #fecaca",borderRadius:10,padding:14,marginBottom:12,background:"#fff5f5"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"#991b1b"}}>📌 Напоминания</div>
+            <div style={{display:"flex",gap:8,marginBottom:reminders.length>0?12:0}}>
+              <input value={newReminder} onChange={e=>setNewReminder(e.target.value)} onKeyDown={e=>e.key==="Enter"&&newReminder.trim()&&(saveReminders([...reminders,newReminder.trim()]),setNewReminder(""))} placeholder="Добавить напоминание..." style={{...inp,flex:1,padding:"7px 10px"}}/>
+              <button onClick={()=>{if(newReminder.trim()){saveReminders([...reminders,newReminder.trim()]);setNewReminder("");}}} disabled={!newReminder.trim()} style={{...btn("#dc2626"),opacity:newReminder.trim()?1:0.5}}>+ Добавить</button>
+            </div>
+            {reminders.length>0&&(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {reminders.map((r,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <div style={{flex:1,fontSize:17,fontWeight:700,color:"#dc2626",lineHeight:1.4}}>• {r}</div>
+                    <button onClick={()=>saveReminders(reminders.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",fontSize:18,padding:"2px 4px",flexShrink:0,lineHeight:1}}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {warnings.map((w,i)=><div key={i} style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#92400e"}}>{"⚠ "+w}</div>)}
