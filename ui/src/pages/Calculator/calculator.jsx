@@ -827,12 +827,15 @@ export default function App(){
   const[mgrNewOp,setMgrNewOp]=useState("");
   const[officeExpenses,setOfficeExpenses]=useState({});
   const[officeExpLoaded,setOfficeExpLoaded]=useState(false);
+  const[expensesPending,setExpensesPending]=useState(false);
+  const[expensesPendingFrom,setExpensesPendingFrom]=useState("");
   const[expNewName,setExpNewName]=useState("");
   const[lockedMonths,setLockedMonths]=useState({});
   const[monthSnapshot,setMonthSnapshot]=useState(null);
   const[searchQuery,setSearchQuery]=useState("");
   const[searchResults,setSearchResults]=useState(null);
   const[searchLoading,setSearchLoading]=useState(false);
+  const[searchSortBy,setSearchSortBy]=useState("date");
   const[searchViewPol,setSearchViewPol]=useState(null);
   const[notifs,setNotifs]=useState([]);
   const[showNotifs,setShowNotifs]=useState(false);
@@ -901,6 +904,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   },[role,currentEmployee]);
   useEffect(()=>{
     if(tab!=="income"||!officeExpLoaded)return;
+    setExpensesPending(false);
     setOfficeExpenses(prev=>{
       if(prev[selMonth])return prev;
       const months=Object.keys(prev).sort();
@@ -908,9 +912,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const rows=lastMo
         ?prev[lastMo].filter(r=>r.type==="static").map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
         :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
-      const next={...prev,[selMonth]:rows};
-      calcStorage.set("officeExpenses",JSON.stringify(next)).catch(err=>console.error("officeExpenses save failed:",err));
-      return next;
+      if(lastMo){setExpensesPending(true);setExpensesPendingFrom(lastMo);}
+      return{...prev,[selMonth]:rows};
     });
   },[tab,selMonth,officeExpLoaded]);
   const saveDir=d=>{setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
@@ -1621,6 +1624,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const deleteOfficePol=async(pol)=>{
     if(!window.confirm("Удалить полис "+pol.insuredName+"?"))return;
+    if(pol.paid&&pol.paidDate){
+      try{
+        const cashMo=pol.paidDate.slice(0,7);
+        const cbRaw=cashMo===selMonth?{value:JSON.stringify(cashDays)}:await calcStorage.get("cashBook:"+cashMo);
+        const cb=cbRaw?.value?JSON.parse(cbRaw.value):{};
+        if(cb[pol.paidDate]?.closed){
+          alert("⛔ Касса за "+new Date(pol.paidDate+"T00:00:00").toLocaleDateString("ru-RU")+" закрыта.\n\nОткройте кассу перед удалением оплаченного полиса.");
+          return;
+        }
+      }catch{}
+    }
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
     else{
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
@@ -1674,7 +1688,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     }catch{}
     setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:today});
-  };;
+  };
   const submitOpForm=()=>{
     const editingPaid=!!(opEditPol?.paid)&&isAdmin;
     const errs=[];
@@ -3960,23 +3974,28 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </div>
           </div>
 
-          {/* Фильтр по внутреннему коду агента */}
+          {/* Выбор агента */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-            <input
-              value={payrollIC}
-              onChange={e=>setPayrollIC(_ld(e.target.value,20))}
-              onKeyDown={e=>{if(e.key==="Enter"){const uid=Object.keys(agentDir).find(k=>agentDir[k].internalCode===payrollIC.trim());setPayrollUID(uid||"__notfound__");} }}
-              placeholder="Внутренний код агента (напр. 768-40)"
-              maxLength={20}
-              style={{padding:"7px 12px",border:"1px solid #d1d5db",borderRadius:6,fontSize:14,minWidth:260,outline:"none"}}
-            />
-            <button onClick={()=>{const uid=Object.keys(agentDir).find(k=>agentDir[k].internalCode===payrollIC.trim());setPayrollUID(uid||"__notfound__");}} style={btn("#2563eb")}>Показать</button>
+            <select
+              value={payrollUID||""}
+              onChange={e=>{
+                const uid=e.target.value;
+                if(!uid){setPayrollUID(null);setPayrollIC("");}
+                else{setPayrollUID(uid);setPayrollIC(agentDir[uid]?.internalCode||"");}
+              }}
+              style={{padding:"7px 12px",border:"1px solid #d1d5db",borderRadius:6,fontSize:14,minWidth:320,outline:"none",background:"white"}}
+            >
+              <option value="">— Выберите агента —</option>
+              {Object.keys(agentDir).sort((a,b)=>{const ca=agentDir[a]?.internalCode||"";const cb=agentDir[b]?.internalCode||"";return ca.localeCompare(cb);}).map(uid=>{
+                const ag=agentDir[uid];
+                return<option key={uid} value={uid}>{ag.internalCode||"—"} — {ag.name||"Без имени"}</option>;
+              })}
+            </select>
             {payrollUID&&<button onClick={()=>{setPayrollUID(null);setPayrollIC("");}} style={btn("#6b7280",undefined,{fontSize:12})}>✕ Сбросить</button>}
           </div>
 
           {/* Состояния */}
-          {!payrollUID&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>Введите внутренний код агента и нажмите «Показать»</div>}
-          {payrollUID==="__notfound__"&&<div style={{padding:30,textAlign:"center",color:"#dc2626",fontSize:14,background:"#fef2f2",borderRadius:8}}>Агент с кодом «{payrollIC}» не найден в справочнике</div>}
+          {!payrollUID&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>Выберите агента из списка выше</div>}
           {foundAgent&&foundAgent.policies.length===0&&<div style={{padding:30,textAlign:"center",color:"#9ca3af",fontSize:14}}>Нет полисов за {fmtMonth(selMonth)}</div>}
 
           {foundAgent&&foundAgent.policies.length>0&&(
@@ -4531,7 +4550,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const agentSalesGross=osagoAgentIncome+volAgentIncome;
         const officeSalesGross=officeDirectOsago+officeDirectVol;
         const agentSalesNet=agentSalesGross-agentPayTotal;
-        const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+        const totalExpenses=expensesPending?0:rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
         const netProfit=salesNet-totalExpenses;
         // ── per-company breakdowns ──
         const _accCo=(map,co,f)=>{if(!map[co])map[co]={};Object.entries(f).forEach(([k,v])=>{map[co][k]=(map[co][k]||0)+(v||0);});};
@@ -4575,9 +4594,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           divLine:{flex:1,height:1,background:"#e5e7eb"},
           divLbl:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",color:"#9ca3af"},
         };
-        const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);saveOfficeExpenses({...officeExpenses,[selMonth]:nr});};
-        const delRow=id=>saveOfficeExpenses({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
-        const addDynRow=()=>{if(!expNewName.trim())return;saveOfficeExpenses({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat:"Доп.",name:expNewName.trim(),amount:0,type:"dynamic"}]});setExpNewName("");};
+        const _setExp=d=>expensesPending?setOfficeExpenses(d):saveOfficeExpenses(d);
+        const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);_setExp({...officeExpenses,[selMonth]:nr});};
+        const delRow=id=>_setExp({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
+        const addDynRow=()=>{if(!expNewName.trim())return;_setExp({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat:"Доп.",name:expNewName.trim(),amount:0,type:"dynamic"}]});setExpNewName("");};
         const STATIC_CATS=["Зарплаты","Коммунальные","Связь","Налоги","Прочее"];
         const dynRows=rows.filter(r=>r.type==="dynamic");
         const catColors={"Зарплаты":"#eff6ff","Коммунальные":"#f0fdf4","Связь":"#fdf4ff","Налоги":"#fff7ed","Прочее":"#f8fafc"};
@@ -4676,6 +4696,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         opReal.filter(p=>p.polType==="voluntary").forEach(p=>{if(!checkExc(p,effExceptions,p.agentUid)&&!(effVolRates.rates||[]).find(r=>r.name===p.productName))missingRateWarnings.push({policyNum:p.policyNum||"—",insuredName:p.insuredName||"—",type:"Добровол. (офис прямой)",reason:`Продукт «${p.productName||"?"}» не найден`});});
         return(
           <div style={{maxWidth:960}}>
+            {expensesPending&&(
+              <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div style={{fontSize:13,color:"#92400e"}}>
+                  <strong>📋 Расходы скопированы из {fmtMonth(expensesPendingFrom)}</strong>
+                  <span style={{marginLeft:8,opacity:0.8}}>— проверьте суммы. Они не сохранены и не участвуют в расчёте прибыли.</span>
+                </div>
+                <button onClick={()=>{saveOfficeExpenses({...officeExpenses,[selMonth]:rows});setExpensesPending(false);}} style={btn("#d97706",undefined,{fontSize:13,fontWeight:700,padding:"7px 18px"})}>
+                  ✓ Подтвердить расходы
+                </button>
+              </div>
+            )}
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}}>
               <button onClick={exportDetailedIncomeXlsx} style={btn("#0f766e",undefined,{fontSize:12})}>⬇ Подробный Excel (по полисам)</button>
               <button onClick={exportIncomeExcel} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
@@ -4986,8 +5017,16 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             searchResults.length===0
               ?<div style={{textAlign:"center",padding:40,color:"#94a3b8",fontSize:14}}>Ничего не найдено</div>
               :<div style={{background:"white",borderRadius:10,border:"1px solid #e2e8f0",overflow:"hidden"}}>
-                <div style={{padding:"10px 16px",background:"#f8fafc",borderBottom:"1px solid #e2e8f0",fontSize:13,color:"#64748b",fontWeight:600}}>
-                  Найдено: {searchResults.length} {searchResults.length===1?"запись":searchResults.length<5?"записи":"записей"}
+                <div style={{padding:"10px 16px",background:"#f8fafc",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <span style={{fontSize:13,color:"#64748b",fontWeight:600}}>Найдено: {searchResults.length} {searchResults.length===1?"запись":searchResults.length<5?"записи":"записей"}</span>
+                  <span style={{display:"flex",gap:5,alignItems:"center",fontSize:12,color:"#64748b"}}>
+                    Сортировка:
+                    {[["date","По дате"],["amount","По сумме"],["name","По имени"]].map(([v,l])=>(
+                      <button key={v} onClick={()=>setSearchSortBy(v)} style={{...btn(searchSortBy===v?"#1d4ed8":"#94a3b8",undefined,{fontSize:11,padding:"3px 10px"})}}>
+                        {l}
+                      </button>
+                    ))}
+                  </span>
                 </div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -5005,7 +5044,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <th style={th}></th>
                     </tr></thead>
                     <tbody>
-                      {searchResults.map((p,i)=>{
+                      {[...searchResults].sort((a,b)=>{
+                        if(searchSortBy==="amount")return(b.amount||0)-(a.amount||0);
+                        if(searchSortBy==="name")return(a.insuredName||"").localeCompare(b.insuredName||"","ru");
+                        return(b._monthKey||"").localeCompare(a._monthKey||"");
+                      }).map((p,i)=>{
                         const agName=p.agentUid?(getName(p.agentUid)||p.agentUid):"—";
                         const isPaid=p._source==="office"?p.paid:null;
                         return(
