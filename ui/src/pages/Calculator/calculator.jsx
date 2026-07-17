@@ -80,6 +80,7 @@ const DEFAULT_EXCEPTIONS=[
   {id:"e6",company:"Nairi",enabled:true,type:"brand_whitelist",excludedAgents:[],conditions:[{field:"bm",op:"between",value:"10",value2:"17"}]},
 ];
 const FIELDS=[{key:"region",label:"Регион",type:"string"},{key:"bm",label:"БМ",type:"number"},{key:"power",label:"Мощность",type:"number"},{key:"term",label:"Срок",type:"string"},{key:"car",label:"Марка авто",type:"string"}];
+const DEFAULT_MREO_CONFIG={enabled:false,name:"МРЭО",internalCode:"",linkedAgentCode:"768-40",osagoSplitPct:2,volEmployeePct:10,fixedSalary:50000,startDate:""};
 const OPS_NUM=[{key:"eq",label:"="},{key:"gte",label:"≥"},{key:"lte",label:"≤"},{key:"between",label:"от–до"}];
 const OPS_STR=[{key:"eq",label:"="},{key:"neq",label:"≠"},{key:"contains",label:"содержит"}];
 
@@ -776,8 +777,9 @@ export default function App(){
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
-    {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false,notifType:"unpaid"},
-    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales","renewals"],viewOnly:true,notifType:"expiring7"},
+    {id:"emp1",name:"Сотрудник 1",pin:"111111",tabs:["policydb","officesales","cashbook","payroll"],viewOnly:false,notifType:"unpaid",cashMode:"main"},
+    {id:"emp2",name:"Сотрудник 2",pin:"222222",tabs:["policydb","officesales","renewals"],viewOnly:true,notifType:"expiring7",cashMode:"main"},
+    {id:"emp_mreo",name:"МРЭО",pin:"333333",tabs:["officesales","cashbook","renewals_mreo"],viewOnly:false,notifType:"none",cashMode:"mreo",restrictToVoluntary:true},
   ];
   const[role,setRole]=useState(null);
   const[currentEmployee,setCurrentEmployee]=useState(null);
@@ -876,13 +878,22 @@ export default function App(){
   const[amexLoaded,setAmexLoaded]=useState(false);
   const[amexNewTopup,setAmexNewTopup]=useState({date:"",amount:"",comment:""});
   const[amexShowOld,setAmexShowOld]=useState(false);
+  const[mreoConfig,setMreoConfig]=useState(DEFAULT_MREO_CONFIG);
+  const[mreoCashDays,setMreoCashDays]=useState({});
+  const[mreoCashLoaded,setMreoCashLoaded]=useState(false);
+  const[mreoCashExpandDay,setMreoCashExpandDay]=useState(null);
+  const[mreoCashCloseModal,setMreoCashCloseModal]=useState(null);
+  const[mreoCashCloseLoading,setMreoCashCloseLoading]=useState(false);
+  const[mreoCashReopenModal,setMreoCashReopenModal]=useState(null);
+  const[cashMode,setCashMode]=useState("main");
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>"__err__");if(r&&r!=="__err__"&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}else if(!r||r===null){setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}else{setAgentDir(SEED_AGENTS);}}catch{setAgentDir(SEED_AGENTS);}
     try{const r=await calcStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
-    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));return newTabs.length?{...emp,tabs:[...(emp.tabs||[]),...newTabs]}:emp;});setEmployees(merged);}}}catch{}
+    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));return newTabs.length?{...emp,tabs:[...(emp.tabs||[]),...newTabs]}:emp;});const defNotInStored=DEFAULT_EMPLOYEES.filter(d=>!p.employees.find(e=>e.id===d.id));setEmployees([...merged,...defNotInStored]);}}}catch{}
+    try{const r=await calcStorage.get("mreoConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setMreoConfig(prev=>({...prev,...p}));}}catch{}
     try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[],managerStartDate:p.managerStartDate||""});}}catch{}
     try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
     try{const r=await calcStorage.get("lockedMonths").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setLockedMonths(p);}}catch{}
@@ -926,7 +937,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(_saveErr("исключения"));};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
-  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
+  const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","renewals_mreo","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
 
   const saveAppSettings=(updates={})=>{
     const s={adminPin,employees,officeStaff,...updates};
@@ -1097,6 +1108,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});logAction("settings","Изменён список сотрудников","—");};
   const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация менеджера"));logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(_saveErr("расходы офиса"));};
+  const saveMreoConfig=cfg=>{setMreoConfig(cfg);calcStorage.set("mreoConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация МРЭО"));logAction("settings","Изменена конфигурация МРЭО","—");};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
@@ -1517,6 +1529,56 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setCashLoaded(true);
   };
   useEffect(()=>{if(tab==="cashbook")loadCashBook();},[tab,selMonth]);
+  const loadMreoCashBook=async()=>{
+    setMreoCashLoaded(false);
+    try{const r=await calcStorage.get("cashBook_mro:"+selMonth).catch(()=>null);setMreoCashDays(r&&r.value?JSON.parse(r.value):{});}catch{setMreoCashDays({});}
+    setMreoCashLoaded(true);
+  };
+  useEffect(()=>{if(tab==="cashbook")loadMreoCashBook();},[tab,selMonth]);
+  const closeMreoCashDay=async(date,polsForDay)=>{
+    setMreoCashCloseLoading(true);
+    const pols=polsForDay||[];
+    const snapshot=pols.map(p=>({_id:p._id,insuredName:p.insuredName,polType:p.polType,productName:p.productName,car:p.car,carPlate:p.carPlate,policyNum:p.policyNum,company:p.company,phone:p.phone,date:p.date,amount:p.amount,discount:p.discount,paidAmount:p.paidAmount,paymentType:p.paymentType,paidDate:p.paidDate,agentUid:p.agentUid,comment:p.comment}));
+    const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const ineco=pols.filter(p=>p.paymentType==="ineco").reduce((s,p)=>s+(p.paidAmount||0),0);
+    const bank=pols.filter(p=>p.paymentType==="bank").reduce((s,p)=>s+(p.paidAmount||0),0);
+    try{
+      const dbRaw=await calcStorage.get("cashBook_mro:"+selMonth);
+      const dbState=dbRaw?.value?JSON.parse(dbRaw.value):{};
+      const merged={...dbState,[date]:{closed:true,closedAt:new Date().toISOString(),reopenedAt:(dbState[date]||{}).reopenedAt||null,snapshot,totals:{cash,acba,ineco,bank,total:cash+acba+ineco+bank}}};
+      await calcStorage.set("cashBook_mro:"+selMonth,JSON.stringify(merged));
+      const verifyRaw=await calcStorage.get("cashBook_mro:"+selMonth);
+      const verified=verifyRaw?.value?JSON.parse(verifyRaw.value):null;
+      if(!verified||!verified[date]?.closed)throw new Error("Данные не подтверждены при повторной проверке базы данных.");
+      setMreoCashDays(verified);
+      logAction("cash_close","Касса МРЭО "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
+      setMreoCashCloseModal(null);
+    }catch(err){
+      alert("❌ Ошибка сохранения кассы МРЭО:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.");
+    }finally{
+      setMreoCashCloseLoading(false);
+    }
+  };
+  const reopenMreoCashDay=async(date)=>{
+    setMreoCashCloseLoading(true);
+    try{
+      const dbRaw=await calcStorage.get("cashBook_mro:"+selMonth);
+      const dbState=dbRaw?.value?JSON.parse(dbRaw.value):{};
+      const merged={...dbState,[date]:{...dbState[date],closed:false,reopenedAt:new Date().toISOString()}};
+      await calcStorage.set("cashBook_mro:"+selMonth,JSON.stringify(merged));
+      const verifyRaw=await calcStorage.get("cashBook_mro:"+selMonth);
+      const verified=verifyRaw?.value?JSON.parse(verifyRaw.value):null;
+      if(!verified||verified[date]?.closed!==false)throw new Error("Данные не подтверждены при повторной проверке базы данных.");
+      setMreoCashDays(verified);
+      logAction("cash_reopen","Открыта касса МРЭО "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU"));
+      setMreoCashReopenModal(null);
+    }catch(err){
+      alert("❌ Ошибка открытия кассы МРЭО:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
+    }finally{
+      setMreoCashCloseLoading(false);
+    }
+  };
   const closeCashDay=async(date)=>{
     setCashCloseLoading(true);
     const pols=cashMonthPols.filter(p=>p.paid&&normPaidDate(p.paidDate)===date);
@@ -1675,7 +1737,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(_saveErr("удаление пополнения Amex"));
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
-  const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormErrors([]);setOpFormOpen(true);};
+  const openOpNew=()=>{
+    const fd=initOpFD();
+    if(!isAdmin&&currentEmployee?.restrictToVoluntary){
+      fd.polType="voluntary";
+      const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||"":"";
+      fd.agentUid=mreoUid;
+    }
+    setOpEditPol(null);setOpFD(fd);setOpFormErrors([]);setOpFormOpen(true);
+  };
   const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false,passportNum:pol.passportNum||"",bankAccount:pol.bankAccount||"",email:pol.email||""});setOpFormErrors([]);setOpFormOpen(true);};
   const openOpPay=async(pol)=>{
     const today=new Date().toISOString().slice(0,10);
@@ -2566,8 +2636,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       </div>
 
       <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
-        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"],["bookmarks","🔖 Закладки","#b45309","#fef3c7"],["tasks","📋 Задачи","#be185d","#fce7f3"],["renewals","🔄 Продления","#0f766e","#ccfbf1"],["amex","💳 Amex","#1d4ed8","#dbeafe"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
-          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();if(id==="renewals"){const aid=rnActiveId;setTimeout(()=>loadRnTabCache(aid),0);}}}
+        {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"],["bookmarks","🔖 Закладки","#b45309","#fef3c7"],["tasks","📋 Задачи","#be185d","#fce7f3"],["renewals","🔄 Продления","#0f766e","#ccfbf1"],["renewals_mreo","📋 Прод. МРЭО","#047857","#d1fae5"],["amex","💳 Amex","#1d4ed8","#dbeafe"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
+          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();if(id==="renewals"||id==="renewals_mreo"){const aid=rnActiveId;setTimeout(()=>loadRnTabCache(aid),0);}}}
             style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",position:"relative"}}>
             {label}
             {id==="tasks"&&taskUnread.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",minWidth:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1}}>{taskUnread.length}</span>}
@@ -2654,7 +2724,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </tr></thead>
                   <tbody>
                     {employees.map((emp,i)=>{
-                      const TAB_LABELS={policydb:"📋 База",officesales:"🏢 Продажи",cashbook:"📒 Касса",payroll:"📝 Начисления",amex:"💳 Amex"};
+                      const TAB_LABELS={policydb:"📋 База",officesales:"🏢 Продажи",cashbook:"📒 Касса",payroll:"📝 Начисления",renewals:"🔄 Продления",renewals_mreo:"📋 Прод.МРЭО",amex:"💳 Amex"};
                       return(
                         <tr key={emp.id}>
                           <td style={td}><input value={emp.name} onChange={e=>{const l=[...employees];l[i]={...l[i],name:e.target.value.slice(0,60)};saveEmployees(l);}} maxLength={60} style={{...inp,width:"100%"}}/></td>
@@ -2681,6 +2751,52 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </tbody>
                 </table>
                 <button onClick={()=>saveEmployees([...employees,{id:"emp"+Date.now(),name:"Новый сотрудник",pin:"000000",tabs:["policydb","officesales"],viewOnly:false}])} style={btn("#2563eb",undefined,{fontSize:12})}>+ Добавить сотрудника</button>
+              </div>
+              {/* МРЭО Config */}
+              <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16,marginBottom:16}}>
+                <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151",display:"flex",alignItems:"center",gap:10}}>
+                  🏢 Настройки МРЭО
+                  <label style={{display:"flex",alignItems:"center",gap:6,fontWeight:400,fontSize:12,cursor:"pointer"}}>
+                    <input type="checkbox" checked={mreoConfig.enabled||false} onChange={e=>saveMreoConfig({...mreoConfig,enabled:e.target.checked})}/>
+                    {mreoConfig.enabled?"Активен":"Неактивен"}
+                  </label>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:580}}>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Имя сотрудника</div>
+                    <input value={mreoConfig.name||""} onChange={e=>saveMreoConfig({...mreoConfig,name:e.target.value.slice(0,30)})} placeholder="МРЭО" maxLength={30} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Внутренний код (в справочнике)</div>
+                    <input value={mreoConfig.internalCode||""} onChange={e=>saveMreoConfig({...mreoConfig,internalCode:e.target.value.trim().slice(0,20)})} placeholder="768-XX" maxLength={20} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Внутр. код партнёра (768-40)</div>
+                    <input value={mreoConfig.linkedAgentCode||""} onChange={e=>saveMreoConfig({...mreoConfig,linkedAgentCode:e.target.value.trim().slice(0,20)})} placeholder="768-40" maxLength={20} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>% ОСАГО → МРЭО</div>
+                    <input type="number" value={mreoConfig.osagoSplitPct??2} min={0} max={100} onChange={e=>saveMreoConfig({...mreoConfig,osagoSplitPct:Number(e.target.value)||0})} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>% Добровольные → МРЭО</div>
+                    <input type="number" value={mreoConfig.volEmployeePct??10} min={0} max={100} onChange={e=>saveMreoConfig({...mreoConfig,volEmployeePct:Number(e.target.value)||0})} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Фиксированный оклад (AMD)</div>
+                    <input type="number" value={mreoConfig.fixedSalary??50000} min={0} onChange={e=>saveMreoConfig({...mreoConfig,fixedSalary:Number(e.target.value)||0})} style={{...inp,width:"100%",padding:"6px 10px"}}/>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>Дата начала работы</div>
+                    <input type="date" value={mreoConfig.startDate||""} onChange={e=>saveMreoConfig({...mreoConfig,startDate:e.target.value})} style={{...inp,padding:"6px 10px"}}/>
+                  </div>
+                </div>
+                {mreoConfig.internalCode&&(()=>{
+                  const uid=Object.keys(agentDir).find(u=>agentDir[u]?.internalCode===mreoConfig.internalCode)||null;
+                  return uid
+                    ?<div style={{marginTop:8,fontSize:12,color:"#16a34a"}}>✓ Агент найден в справочнике: {agentDir[uid]?.name} {agentDir[uid]?.surname}</div>
+                    :<div style={{marginTop:8,fontSize:12,color:"#dc2626"}}>⚠ Агент с кодом «{mreoConfig.internalCode}» не найден в справочнике. Добавьте его через «Справочник агентов».</div>;
+                })()}
               </div>
               <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16}}>
               <div style={{fontWeight:600,fontSize:13,marginBottom:4,color:"#374151"}}>Операторы (в форме «Продажи офиса»)</div>
@@ -3014,7 +3130,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           return true;
         };
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
-        const matchesAgent=p=>opAgentFilter==="all"||p.agentUid===opAgentFilter;
+        const _mreoLockedUid=(!isAdmin&&currentEmployee?.restrictToVoluntary&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
+        const matchesAgent=p=>_mreoLockedUid?(p.agentUid===_mreoLockedUid):(opAgentFilter==="all"||p.agentUid===opAgentFilter);
         const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
         const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all";
@@ -3146,13 +3263,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {ALL_COMPANIES.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {!_mreoLockedUid&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Оператор</span>
                 <select value={opAgentFilter} onChange={e=>setOpAgentFilter(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:140}}>
                   <option value="all">Все</option>
                   {staffAgents.map(([uid,a])=><option key={uid} value={uid}>{(a.name+" "+a.surname).trim()||uid}</option>)}
                 </select>
-              </div>
+              </div>}
               {(hasFilter||opSrch||opStatusFilter!=="all")&&(
                 <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить фильтры</button>
               )}
@@ -3391,7 +3508,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {paidLock&&isAdmin&&<div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#92400e"}}>⚠ Вы редактируете уже оплаченный полис. Изменения потребуют подтверждения.</div>}
                   {/* --- Тип продукта --- */}
                   <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb",opacity:effectiveLock?0.6:1,pointerEvents:effectiveLock?"none":"auto"}}>
-                    {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].map(([k,l])=>(
+                    {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].filter(([k])=>!(!isAdmin&&currentEmployee?.restrictToVoluntary)||k==="voluntary").map(([k,l])=>(
                       <button key={k} onClick={()=>setOpFD(p=>({...initOpFD(),polType:k,insuredName:p.insuredName,phone:p.phone,policyNum:p.policyNum,agentUid:p.agentUid,date:p.date,comment:p.comment}))}
                         style={{flex:1,padding:"9px 0",fontSize:13,fontWeight:600,cursor:paidLock?"not-allowed":"pointer",border:"none",background:opFD.polType===k?"#2563eb":"#f8fafc",color:opFD.polType===k?"#fff":"#6b7280",transition:"all .15s"}}>
                         {l}
@@ -3426,10 +3543,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
+                      {(!isAdmin&&currentEmployee?.restrictToVoluntary)?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
                       <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
-                      </select>
+                      </select>)}
                     </div>
                     <div>
                       <div style={flbl}>Дата составления{req}</div>
@@ -3532,10 +3650,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
+                      {(!isAdmin&&currentEmployee?.restrictToVoluntary)?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
                       <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
-                      </select>
+                      </select>)}
                     </div>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>Дата составления{req}</div>
@@ -3693,13 +3812,32 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const fmtDatetime=iso=>{try{const d=new Date(iso);return d.toLocaleDateString("ru-RU")+", "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
         const fmtTime=iso=>{try{return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});}catch{return"";}};
         const payLabel=t=>({cash:"💵 Наличные",acba:"🏦 ACBA",ineco:"🏦 INECO",bank:"💳 Банк. перевод"})[t]||t||"—";
+        const mreoEnabled=mreoConfig.enabled&&mreoConfig.internalCode;
+        const mreoAgentUid=mreoEnabled?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
+        const effectiveCashMode=isAdmin?cashMode:(currentEmployee?.cashMode||"main");
+        const isMreoMode=effectiveCashMode==="mreo";
+        const _cashDays=isMreoMode?mreoCashDays:cashDays;
+        const _cashLoaded=isMreoMode?mreoCashLoaded:cashLoaded;
+        const _cashExpandDay=isMreoMode?mreoCashExpandDay:cashExpandDay;
+        const _setCashExpandDay=isMreoMode?setMreoCashExpandDay:setCashExpandDay;
+        const _cashCloseModal=isMreoMode?mreoCashCloseModal:cashCloseModal;
+        const _setCashCloseModal=isMreoMode?setMreoCashCloseModal:setCashCloseModal;
+        const _cashCloseLoading=isMreoMode?mreoCashCloseLoading:cashCloseLoading;
+        const _cashReopenModal=isMreoMode?mreoCashReopenModal:cashReopenModal;
+        const _setCashReopenModal=isMreoMode?setMreoCashReopenModal:setCashReopenModal;
+        const _closeDay=(date,pols)=>isMreoMode?closeMreoCashDay(date,pols):closeCashDay(date);
+        const _reopenDay=date=>isMreoMode?reopenMreoCashDay(date):reopenCashDay(date);
+        const _cashLabel=isMreoMode?"Касса МРЭО":"Основная касса";
         const polTypeBadge=p=>p.polType==="voluntary"
           ?<span style={{background:"#ede9fe",color:"#6d28d9",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🛡 Доброволь.</span>
           :<span style={{background:"#dbeafe",color:"#1e40af",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600}}>🚗 ОСАГО</span>;
 
-        // Group live payments by paidDate
+        // Group live payments by paidDate (filtered by cash mode)
+        const _relevantPols=isMreoMode
+          ?(mreoAgentUid?cashMonthPols.filter(p=>p.agentUid===mreoAgentUid):cashMonthPols)
+          :(mreoAgentUid?cashMonthPols.filter(p=>p.agentUid!==mreoAgentUid):cashMonthPols);
         const byDay={};
-        cashMonthPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
+        _relevantPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
           const d=normPaidDate(p.paidDate);
           if(!byDay[d])byDay[d]={cash:0,acba:0,ineco:0,bank:0,pols:[]};
           const amt=p.paidAmount||0;
@@ -3713,19 +3851,19 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
         // For closed days use snapshot totals; for open use live
         const getTotals=date=>{
-          const cd=cashDays[date];
+          const cd=_cashDays[date];
           if(cd&&cd.closed&&cd.totals)return cd.totals;
           const d=byDay[date]||{cash:0,acba:0,ineco:0,bank:0};
           return{cash:d.cash,acba:d.acba,ineco:d.ineco,bank:d.bank||0,total:(d.cash+d.acba+d.ineco+(d.bank||0))};
         };
         const getPols=date=>{
-          const cd=cashDays[date];
+          const cd=_cashDays[date];
           if(cd&&cd.closed&&cd.snapshot)return cd.snapshot;
           return(byDay[date]||{pols:[]}).pols;
         };
 
-        // All days: union of live byDay keys + closed cashDays keys
-        const allDayKeys=new Set([...Object.keys(byDay),...Object.keys(cashDays)]);
+        // All days: union of live byDay keys + closed _cashDays keys
+        const allDayKeys=new Set([...Object.keys(byDay),...Object.keys(_cashDays)]);
         const days=[...allDayKeys].filter(d=>d.startsWith(selMonth)).sort().reverse();
 
         // Month totals (sum of all days — closed use snapshot, open use live)
@@ -3765,17 +3903,32 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const printCashReport=(date)=>{
           const pols=getPols(date);
           const t=getTotals(date);
-          const isClosed=cashDays[date]&&cashDays[date].closed;
+          const isClosed=_cashDays[date]&&_cashDays[date].closed;
           const fmtAmd=v=>(v||0).toLocaleString("ru-RU")+" AMD";
           const pTypeLabel=p=>p.polType==="voluntary"?(p.productName||"Добровольный"):"ОСАГО";
           const rows=pols.map(p=>`<tr><td>${p.insuredName||"—"}</td><td>${pTypeLabel(p)}</td><td>${p.company||"—"}</td><td>${p.policyNum||"—"}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"}[p.paymentType]||"—"}</td><td>${p.comment||"—"}</td></tr>`).join("");
-          const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;font-weight:600;padding:16px;color:#111}h1.title{margin:0 0 4px;font-size:24px;font-weight:800;color:#111}p.sub{margin:0 0 16px;color:#555;font-size:12px;font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left;font-weight:600}th{background:#e8edf2;font-size:11px;font-weight:700}td{font-size:12px}.totals{border:2px solid #374151;border-radius:4px;padding:12px 16px;max-width:340px;page-break-inside:avoid;break-inside:avoid}.totals .row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;font-weight:600}.totals .grand{font-size:16px;font-weight:800;border-top:2px solid #374151;margin-top:6px;padding-top:8px}.footer{margin-top:16px;font-size:10px;color:#999;font-weight:400}@media print{.no-print{display:none}}</style></head><body><h1 class="title">Касса — ${fmtDay(date)}</h1><p class="sub">${isClosed?"✓ Касса закрыта · "+fmtDatetime(cashDays[date].closedAt):"⏳ Открыта"}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row"><span>💳 Банк. перевод</span><span>${fmtAmd(t.bank||0)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco+(t.bank||0))}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;font-weight:600;padding:16px;color:#111}h1.title{margin:0 0 4px;font-size:24px;font-weight:800;color:#111}p.sub{margin:0 0 16px;color:#555;font-size:12px;font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left;font-weight:600}th{background:#e8edf2;font-size:11px;font-weight:700}td{font-size:12px}.totals{border:2px solid #374151;border-radius:4px;padding:12px 16px;max-width:340px;page-break-inside:avoid;break-inside:avoid}.totals .row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;font-weight:600}.totals .grand{font-size:16px;font-weight:800;border-top:2px solid #374151;margin-top:6px;padding-top:8px}.footer{margin-top:16px;font-size:10px;color:#999;font-weight:400}@media print{.no-print{display:none}}</style></head><body><h1 class="title">Касса — ${fmtDay(date)}</h1><p class="sub">${isClosed?"✓ Касса закрыта · "+fmtDatetime(_cashDays[date].closedAt):"⏳ Открыта"}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row"><span>💳 Банк. перевод</span><span>${fmtAmd(t.bank||0)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco+(t.bank||0))}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
           const w=window.open("","_blank","width=900,height=650");
           if(w){w.document.write(html);w.document.close();}
         };
 
         return(
           <div>
+            {/* Cash mode switcher (admin or МРЭО enabled) */}
+            {(isAdmin&&mreoEnabled)&&(
+              <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+                {[["main","📒 Основная касса"],["mreo","📒 Касса МРЭО"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>setCashMode(k)}
+                    style={{padding:"7px 18px",borderRadius:8,border:"2px solid "+(cashMode===k?"#b45309":"#d1d5db"),background:cashMode===k?"#fef3c7":"#f9fafb",color:cashMode===k?"#92400e":"#374151",fontWeight:cashMode===k?700:400,fontSize:13,cursor:"pointer"}}>
+                    {l}
+                  </button>
+                ))}
+                <span style={{fontSize:12,color:"#9ca3af",marginLeft:4}}>({_cashLabel})</span>
+              </div>
+            )}
+            {(!isAdmin&&isMreoMode)&&(
+              <div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"7px 14px",marginBottom:12,fontSize:12,fontWeight:600,color:"#92400e"}}>📒 Касса МРЭО</div>
+            )}
             {/* Month nav */}
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#f1f5f9",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
               <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
@@ -3790,15 +3943,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {card("💳 Банк. перевод",mTotals.bank,"#7c3aed")}
               {card("📊 Итого за месяц",mTotal,"#374151")}
             </div>
-            {!cashLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
-            {cashLoaded&&days.length===0&&(
+            {!_cashLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
+            {_cashLoaded&&days.length===0&&(
               <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
                 <div style={{fontSize:32,marginBottom:8}}>📒</div>
                 <div>Нет платежей за {fmtMonth(selMonth)}</div>
               </div>
             )}
             {/* Days table */}
-            {cashLoaded&&days.length>0&&(
+            {_cashLoaded&&days.length>0&&(
               <div style={{border:"1px solid #e5e7eb",borderRadius:8,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead>
@@ -3811,14 +3964,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       const t=getTotals(date);
                       const pols=getPols(date);
                       const total=t.total||t.cash+t.acba+t.ineco+(t.bank||0);
-                      const isClosed=!!(cashDays[date]&&cashDays[date].closed);
-                      const wasReopened=!!(cashDays[date]&&cashDays[date].reopenedAt);
+                      const isClosed=!!(_cashDays[date]&&_cashDays[date].closed);
+                      const wasReopened=!!(_cashDays[date]&&_cashDays[date].reopenedAt);
                       const isToday=date===today;
                       const isPast=date<today;
-                      const isExpanded=cashExpandDay===date;
+                      const isExpanded=_cashExpandDay===date;
                       const canClose=!isClosed&&(isToday||(isAdmin&&isPast));
                       return(<Fragment key={date}>
-                        <tr onClick={()=>setCashExpandDay(isExpanded?null:date)}
+                        <tr onClick={()=>_setCashExpandDay(isExpanded?null:date)}
                           style={{background:isToday?"#fffbeb":isClosed?"#f0fdf4":"white",borderBottom:"1px solid #e5e7eb",cursor:"pointer"}}>
                           <td style={{...td,fontWeight:700,whiteSpace:"nowrap"}}>
                             <span style={{marginRight:6,fontSize:11,color:"#9ca3af"}}>{isExpanded?"▾":"▸"}</span>
@@ -3834,21 +3987,21 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,whiteSpace:"nowrap"}}>
                             {isClosed
                               ?<><span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 9px",fontSize:11,fontWeight:600}}>✓ Закрыта</span>
-                                <span style={{marginLeft:5,fontSize:10,color:"#9ca3af"}}>{fmtTime(cashDays[date].closedAt)}</span>
+                                <span style={{marginLeft:5,fontSize:10,color:"#9ca3af"}}>{fmtTime(_cashDays[date].closedAt)}</span>
                                 {wasReopened&&<span style={{marginLeft:5,fontSize:10,color:"#d97706"}}>переоткрывалась</span>}</>
                               :<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 9px",fontSize:11,fontWeight:600}}>⏳ Открыта</span>
                             }
                           </td>
                           <td style={{...td,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
-                            {canClose&&<button onClick={()=>setCashCloseModal(date)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 10px"}),marginRight:4}}>Закрыть кассу</button>}
+                            {canClose&&<button onClick={()=>_setCashCloseModal(date)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 10px"}),marginRight:4}}>Закрыть кассу</button>}
                             {isClosed&&<button onClick={()=>printCashReport(date)} style={{...btn("#f3f4f6","#374151",{fontSize:11,padding:"3px 10px"}),marginRight:4}}>🖨 Печать</button>}
-                            {isClosed&&isAdmin&&<button onClick={()=>setCashReopenModal(date)} style={btn("#fff7ed","#b45309",{fontSize:11,padding:"3px 10px",border:"1px solid #fcd34d"})}>🔓 Открыть</button>}
+                            {isClosed&&isAdmin&&<button onClick={()=>_setCashReopenModal(date)} style={btn("#fff7ed","#b45309",{fontSize:11,padding:"3px 10px",border:"1px solid #fcd34d"})}>🔓 Открыть</button>}
                           </td>
                         </tr>
                         {isExpanded&&(
                           <tr key={date+"-exp"}>
                             <td colSpan={9} style={{padding:"12px 16px",background:"#fafafa",borderBottom:"1px solid #e5e7eb"}}>
-                              {isClosed&&<div style={{fontSize:11,color:"#6b7280",marginBottom:8}}>Снимок на момент закрытия · {fmtDatetime(cashDays[date].closedAt)}</div>}
+                              {isClosed&&<div style={{fontSize:11,color:"#6b7280",marginBottom:8}}>Снимок на момент закрытия · {fmtDatetime(_cashDays[date].closedAt)}</div>}
                               {pols.length>0
                                 ?<div style={{overflowX:"auto"}}>{polsTable(pols,true)}</div>
                                 :<div style={{color:"#9ca3af",fontSize:12,padding:"8px 0"}}>Нет платежей за этот день</div>
@@ -3864,8 +4017,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             )}
 
             {/* === Close-of-day modal === */}
-            {cashCloseModal&&(()=>{
-              const d=byDay[cashCloseModal]||{cash:0,acba:0,ineco:0,bank:0,pols:[]};
+            {_cashCloseModal&&(()=>{
+              const d=byDay[_cashCloseModal]||{cash:0,acba:0,ineco:0,bank:0,pols:[]};
               const total=d.cash+d.acba+d.ineco+(d.bank||0);
               return(
               <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -3873,8 +4026,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {/* Header */}
                   <div style={{padding:"18px 24px 14px",borderBottom:"1px solid #e5e7eb"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <h3 style={{margin:0,fontSize:16}}>📒 Закрыть кассу — {fmtDay(cashCloseModal)}</h3>
-                      <button onClick={()=>{if(!cashCloseLoading)setCashCloseModal(null);}} style={{background:"none",border:"none",fontSize:20,cursor:cashCloseLoading?"not-allowed":"pointer",color:"#9ca3af"}}>×</button>
+                      <h3 style={{margin:0,fontSize:16}}>📒 Закрыть кассу {isMreoMode?"(МРЭО) ":""}— {fmtDay(_cashCloseModal)}</h3>
+                      <button onClick={()=>{if(!_cashCloseLoading)_setCashCloseModal(null);}} style={{background:"none",border:"none",fontSize:20,cursor:_cashCloseLoading?"not-allowed":"pointer",color:"#9ca3af"}}>×</button>
                     </div>
                     <p style={{margin:"4px 0 0",fontSize:12,color:"#6b7280"}}>Проверьте записи перед закрытием. После подтверждения изменения будут недоступны.</p>
                   </div>
@@ -3901,8 +4054,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       ⚠ После закрытия сотрудник не сможет вносить изменения. Администратор может открыть кассу при необходимости.
                     </div>
                     <div style={{display:"flex",gap:8}}>
-                      <button onClick={()=>closeCashDay(cashCloseModal)} disabled={cashCloseLoading} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.6:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>{cashCloseLoading?"⏳ Сохранение...":"✓ Закрыть кассу"}</button>
-                      <button onClick={()=>setCashCloseModal(null)} disabled={cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.4:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
+                      <button onClick={()=>_closeDay(_cashCloseModal,d.pols)} disabled={_cashCloseLoading} style={{...btn("#16a34a"),flex:1,padding:"10px",fontSize:14,opacity:_cashCloseLoading?0.6:1,cursor:_cashCloseLoading?"not-allowed":"pointer"}}>{_cashCloseLoading?"⏳ Сохранение...":"✓ Закрыть кассу"}</button>
+                      <button onClick={()=>_setCashCloseModal(null)} disabled={_cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:_cashCloseLoading?0.4:1,cursor:_cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
                     </div>
                   </div>
                 </div>
@@ -3911,18 +4064,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* === Reopen modal (admin only) === */}
-            {cashReopenModal&&(
+            {_cashReopenModal&&(
               <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:"white",borderRadius:12,padding:28,width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
                   <div style={{textAlign:"center",fontSize:36,marginBottom:8}}>🔓</div>
-                  <h3 style={{margin:"0 0 10px",fontSize:16,textAlign:"center"}}>Открыть кассу</h3>
-                  <p style={{textAlign:"center",fontSize:14,color:"#374151",margin:"0 0 16px"}}>за <strong>{fmtDay(cashReopenModal)}</strong></p>
+                  <h3 style={{margin:"0 0 10px",fontSize:16,textAlign:"center"}}>Открыть кассу {isMreoMode?"(МРЭО)":""}</h3>
+                  <p style={{textAlign:"center",fontSize:14,color:"#374151",margin:"0 0 16px"}}>за <strong>{fmtDay(_cashReopenModal)}</strong></p>
                   <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:6,padding:"8px 12px",marginBottom:16,fontSize:12,color:"#92400e"}}>
                     После открытия сотрудник сможет принять новые платежи и повторно закрыть кассу. Снимок предыдущего закрытия будет очищен.
                   </div>
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>reopenCashDay(cashReopenModal)} disabled={cashCloseLoading} style={{...btn("#d97706"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.6:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>{cashCloseLoading?"⏳ Сохранение...":"🔓 Открыть"}</button>
-                    <button onClick={()=>setCashReopenModal(null)} disabled={cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:cashCloseLoading?0.4:1,cursor:cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
+                    <button onClick={()=>_reopenDay(_cashReopenModal)} disabled={_cashCloseLoading} style={{...btn("#d97706"),flex:1,padding:"10px",fontSize:14,opacity:_cashCloseLoading?0.6:1,cursor:_cashCloseLoading?"not-allowed":"pointer"}}>{_cashCloseLoading?"⏳ Сохранение...":"🔓 Открыть"}</button>
+                    <button onClick={()=>_setCashReopenModal(null)} disabled={_cashCloseLoading} style={{...btn("#f3f4f6","#374151"),flex:1,padding:"10px",fontSize:14,opacity:_cashCloseLoading?0.4:1,cursor:_cashCloseLoading?"not-allowed":"pointer"}}>Отмена</button>
                   </div>
                 </div>
               </div>
@@ -3997,6 +4150,86 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           {/* Состояния */}
           {!payrollUID&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>Выберите агента из списка выше</div>}
           {foundAgent&&foundAgent.policies.length===0&&<div style={{padding:30,textAlign:"center",color:"#9ca3af",fontSize:14}}>Нет полисов за {fmtMonth(selMonth)}</div>}
+
+          {/* МРЭО special payroll card */}
+          {(()=>{
+            if(!mreoConfig.enabled||!mreoConfig.internalCode)return null;
+            const mreoUid=Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null;
+            if(!mreoUid||!foundAgent||foundAgent.uid!==mreoUid)return null;
+            const osagoPols=validPols;
+            const mreoOsagoComm=Math.round(osagoPols.reduce((s,p)=>s+(p.amount||0)*mreoConfig.osagoSplitPct/100,0));
+            const mreoVolComm=Math.round(volPols.reduce((s,v)=>s+(v.amount||0)*mreoConfig.volEmployeePct/100,0));
+            return(
+              <div style={{background:"#fffbeb",border:"2px solid #fcd34d",borderRadius:10,padding:"16px 20px",marginBottom:20}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:12}}>💼 Начисления МРЭО — {fmtMonth(selMonth)}</div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12}}>
+                  <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>🚗 ОСАГО ({mreoConfig.osagoSplitPct}%)</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#b45309"}}>{fmt(mreoOsagoComm)}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>{osagoPols.length} полисов</div>
+                  </div>
+                  <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>🛡 Добровольные ({mreoConfig.volEmployeePct}%)</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#b45309"}}>{fmt(mreoVolComm)}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>{volPols.length} полисов</div>
+                  </div>
+                  <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>💵 Оклад (справочно)</div>
+                    <div style={{fontWeight:700,fontSize:18,color:"#b45309"}}>{fmt(mreoConfig.fixedSalary||0)}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>вносится в расходы</div>
+                  </div>
+                  <div style={{background:"#92400e",border:"1px solid #b45309",borderRadius:8,padding:"10px 16px",minWidth:160}}>
+                    <div style={{fontSize:11,color:"#fde68a",marginBottom:4}}>ИТОГО начислений</div>
+                    <div style={{fontWeight:700,fontSize:20,color:"#fff"}}>{fmt(mreoOsagoComm+mreoVolComm)}</div>
+                    <div style={{fontSize:11,color:"#fcd34d"}}>без оклада</div>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:"#92400e"}}>
+                  Агент-партнёр (768-40): получает разницу ставок по ОСАГО полисам МРЭО (ставка агента − {mreoConfig.osagoSplitPct}%).
+                  Добровольные — {mreoConfig.volEmployeePct}% сотруднику, остальное офису.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* МРЭО bonus section for agent 768-40 */}
+          {(()=>{
+            if(!mreoConfig.enabled||!mreoConfig.internalCode||!foundAgent)return null;
+            const linkedUid=Object.keys(agentDir).find(uid=>(agentDir[uid]?.internalCode||"")===(mreoConfig.linkedAgentCode||""))||null;
+            if(!linkedUid||foundAgent.uid!==linkedUid)return null;
+            const mreoUid=Object.keys(agentDir).find(uid=>(agentDir[uid]?.internalCode||"")===mreoConfig.internalCode)||null;
+            if(!mreoUid)return null;
+            const mreoPols=agentData.find(a=>a.uid===mreoUid);
+            if(!mreoPols||!mreoPols.policies.length)return null;
+            const mreoBonusPols=mreoPols.policies.filter(p=>!p.exception);
+            const totalBonus=Math.round(mreoBonusPols.reduce((s,p)=>{const bonus=(p.agentRate||0)-mreoConfig.osagoSplitPct;return s+(bonus>0?(p.amount||0)*bonus/100:0);},0));
+            return(
+              <div style={{background:"#f0f9ff",border:"2px solid #93c5fd",borderRadius:10,padding:"16px 20px",marginBottom:20}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#1d4ed8",marginBottom:10}}>📋 Начисления от МРЭО ({mreoConfig.name||"МРЭО"})</div>
+                <div style={{fontSize:12,color:"#1d4ed8",marginBottom:10}}>
+                  По ОСАГО полисам МРЭО: ставка агента − {mreoConfig.osagoSplitPct}% = доп. начисление 768-40
+                </div>
+                <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #bfdbfe",marginBottom:12}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#1d4ed8"}}>{["№ полиса","Компания","Страхователь","Сумма","Ставка %","Ставка МРЭО","Доп. начисление"].map(h=><th key={h} style={{...th,color:"white",padding:"6px 10px"}}>{h}</th>)}</tr></thead>
+                    <tbody>{mreoBonusPols.map((p,i)=>{const bonus=(p.agentRate||0)-mreoConfig.osagoSplitPct;const bonusAmt=bonus>0?Math.round((p.amount||0)*bonus/100):0;return(
+                      <tr key={i} style={{background:i%2===0?"white":"#eff6ff",borderBottom:"1px solid #dbeafe"}}>
+                        <td style={td}>{p.policyNum||"—"}</td>
+                        <td style={td}>{p.company||"—"}</td>
+                        <td style={td}>{p.insuredName||"—"}</td>
+                        <td style={{...td,textAlign:"right"}}>{fmt(p.amount||0)}</td>
+                        <td style={{...td,textAlign:"center",color:"#6366f1"}}>{(p.agentRate||0)}%</td>
+                        <td style={{...td,textAlign:"center",color:"#dc2626"}}>{mreoConfig.osagoSplitPct}%</td>
+                        <td style={{...td,textAlign:"right",fontWeight:700,color:bonusAmt>0?"#16a34a":"#9ca3af"}}>{bonusAmt>0?fmt(bonusAmt):"—"}</td>
+                      </tr>
+                    );})}
+                    </tbody>
+                    <tfoot><tr style={{background:"#dbeafe"}}><td colSpan={6} style={{...td,fontWeight:700,borderTop:"2px solid #93c5fd"}}>ИТОГО от МРЭО</td><td style={{...td,textAlign:"right",fontWeight:700,color:"#1d4ed8",borderTop:"2px solid #93c5fd"}}>{fmt(totalBonus)}</td></tr></tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {foundAgent&&foundAgent.policies.length>0&&(
             <div>
@@ -5490,7 +5723,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         ):[];
         const matchAgent=p=>!rntab.agentFilter||(p.agentUid&&p.agentUid===rntab.agentFilter)||((!p.agentUid)&&p.agentCode===rntab.agentFilter);
         const getEndDate=p=>rntab.subTab==="office"?p.dateEnd:p.endDate;
-        const missed=rntab.results?[...rntab.results.filter(r=>r._status!=="renewed"&&matchAgent(r))].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
+        const missed=rntab.results?[...rntab.results.filter(r=>r._status!=="renewed"&&matchAgent(r)&&(rntab.work[rnPolKey(r)]?.operatorStatus)!=="refused")].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
+        const refused=rntab.results?[...rntab.results.filter(r=>r._status!=="renewed"&&matchAgent(r)&&(rntab.work[rnPolKey(r)]?.operatorStatus)==="refused")].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();}):[];
         const renewed=rntab.results?rntab.results.filter(r=>r._status==="renewed"&&matchAgent(r)):[];
         const promisedCnt=missed.filter(p=>(rntab.work[rnPolKey(p)]?.operatorStatus)==="promised").length;
         const totals=rntab.results?{renewed:renewed.length,missed:rntab.results.filter(r=>r._status==="missed").length,noplate:rntab.results.filter(r=>r._status==="noplate").length,promised:promisedCnt}:null;
@@ -5673,6 +5907,47 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               </div>
             )}
+            {/* REFUSED TABLE (collapsible) */}
+            {rntab.results&&refused.length>0&&(
+              <div style={{marginBottom:16}}>
+                <button onClick={()=>rnUpdateTab(tid,{refusedOpen:!rntab.refusedOpen})}
+                  style={{display:"flex",alignItems:"center",gap:8,background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 16px",cursor:"pointer",marginBottom:rntab.refusedOpen?10:0,width:"100%",textAlign:"left"}}>
+                  <span style={{fontSize:14}}>{rntab.refusedOpen?"▼":"▶"}</span>
+                  <span style={{fontWeight:700,color:"#991b1b",fontSize:14}}>❌ Отказы — {refused.length}</span>
+                </button>
+                {rntab.refusedOpen&&(
+                  <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#dc2626"}}>
+                        {["Дата оконч.","Страхователь","Телефон","Госномер","Компания","№ полиса",""].map((h,i)=><th key={i} style={thS}>{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {refused.map((p,i)=>{
+                          const pk=rnPolKey(p);
+                          const endDate=rntab.subTab==="office"?isoToDisp(p.dateEnd):(p.endDateFmt||isoToDisp(p.endDate)||"");
+                          return(
+                            <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
+                              <td style={{...tdS,fontWeight:600,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
+                              <td style={{...tdS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                              <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e",fontWeight:600}}>{p.phone||"—"}</td>
+                              <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
+                              <td style={tdS}>{p.company||"—"}</td>
+                              <td style={{...tdS,color:"#1d4ed8",fontWeight:600,fontSize:11}}>{p.policyNum||"—"}</td>
+                              <td style={{...tdS,textAlign:"center"}}>
+                                {rnCanEdit&&<select value="refused" onChange={e=>updateRnStatus(tid,pk,e.target.value)}
+                                  style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:"#fff1f2",color:"#dc2626",fontWeight:600,cursor:"pointer",minWidth:120}}>
+                                  {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                                </select>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
             {/* BOTTOM TABLE: renewed (collapsible) */}
             {rntab.results&&renewed.length>0&&(
               <div>
@@ -5792,6 +6067,136 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               );
             })()}
+          </div>
+        );
+      })()}
+
+      {tab==="renewals_mreo"&&(()=>{
+        const linkedUid=mreoConfig.linkedAgentCode?Object.keys(agentDir).find(uid=>(agentDir[uid]?.internalCode||"")===mreoConfig.linkedAgentCode)||null:null;
+        const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
+        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"},"sold":{label:"💸 Продано",color:"#9a3412",bg:"#fff7ed"}};
+        const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
+        const rnCanEdit=!isAdmin;const rnCanCheck=!isAdmin;
+        const rntab=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
+        const tid=rntab.id;
+        const matchAgent=p=>!linkedUid||(p.agentUid&&p.agentUid===linkedUid)||((!p.agentUid)&&agentDir[linkedUid]&&p.agentCode===(agentDir[linkedUid].codes?.Nairi||agentDir[linkedUid].codes?.Ingo||""));
+        const getEndDate=p=>p.endDate;
+        const missed=[...((rntab.results||[]).filter(r=>r._status!=="renewed"&&matchAgent(r)&&(rntab.work[rnPolKey(r)]?.operatorStatus)!=="refused"))].sort((a,b)=>{const da=parseAnyDate(getEndDate(a));const db=parseAnyDate(getEndDate(b));if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da.getTime()-db.getTime();});
+        const refused=[...((rntab.results||[]).filter(r=>r._status!=="renewed"&&matchAgent(r)&&(rntab.work[rnPolKey(r)]?.operatorStatus)==="refused"))];
+        const renewed=(rntab.results||[]).filter(r=>r._status==="renewed"&&matchAgent(r));
+        const tdS={padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontSize:12,verticalAlign:"middle"};
+        const thS={padding:"9px 10px",fontWeight:700,fontSize:11,color:"white",background:"transparent",textAlign:"left"};
+        return(
+          <div style={{maxWidth:1300}}>
+            <div style={{background:"#d1fae5",border:"1px solid #6ee7b7",borderRadius:8,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <span style={{fontWeight:700,fontSize:14,color:"#065f46"}}>📋 Продления МРЭО</span>
+              <span style={{fontSize:12,color:"#047857"}}>Портфель агента: {linkedUid?(agentDir[linkedUid]?.name+" "+agentDir[linkedUid]?.surname+" ("+mreoConfig.linkedAgentCode+")"):(mreoConfig.linkedAgentCode||"не задан")}</span>
+            </div>
+            <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
+              <div style={{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Месяц истечения</div>
+                  <select value={rntab.month} onChange={e=>rnUpdateTab(tid,{month:e.target.value,results:null,subTab:"agents"})} style={{...inp,padding:"6px 8px",fontSize:13}}>
+                    {EXPIRY_OPTIONS.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}
+                  </select>
+                </div>
+                <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"flex-end",flexWrap:"wrap"}}>
+                  {rntab.checkedAt&&<span style={{fontSize:11,color:"#9ca3af",whiteSpace:"nowrap",alignSelf:"center"}}>Проверено: {new Date(rntab.checkedAt).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>}
+                  {rnCanCheck&&<button onClick={()=>{rnUpdateTab(tid,{subTab:"agents"});checkRenewals(tid);}} disabled={rntab.loading} style={btn("#047857",undefined,{fontSize:13,padding:"8px 20px"})}>{rntab.loading?"⏳ Проверяю...":"🔍 Проверить"}</button>}
+                  {!rnCanCheck&&!rntab.results&&!rntab.loading&&<button onClick={()=>loadRnTabCache(tid,"agents")} style={btn("#6b7280",undefined,{fontSize:13,padding:"8px 16px"})}>📂 Загрузить</button>}
+                  {rntab.results&&rntab.results.length>0&&<button onClick={()=>exportRenewalsResult({...rntab,subTab:"agents"})} style={btn("#16a34a",undefined,{fontSize:13})}>⬇ Excel</button>}
+                </div>
+              </div>
+            </div>
+            {rntab.results&&(
+              <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+                <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>{missed.length}</div>
+                  <div style={{fontSize:11,color:"#991b1b",fontWeight:600}}>❌ Требуют внимания</div>
+                </div>
+                <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{renewed.length}</div>
+                  <div style={{fontSize:11,color:"#166534",fontWeight:600}}>✅ Продлено</div>
+                </div>
+                <div style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:10,padding:"10px 18px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:"#374151"}}>{missed.length+renewed.length+refused.length}</div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>Всего</div>
+                </div>
+              </div>
+            )}
+            {rntab.results&&missed.length>0&&(
+              <div style={{marginBottom:18}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#dc2626",marginBottom:8}}>❌ Требуют внимания — {missed.length}</div>
+                <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#dc2626"}}>
+                      {["Дата оконч.","Страхователь","Телефон","Госномер","Компания","Работа оператора","Звонки",""].map((h,i)=><th key={i} style={thS}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{missed.map((p,i)=>{
+                      const pk=rnPolKey(p);const work=rntab.work[pk]||{};const opSt=work.operatorStatus||"";const stInfo=OP_STATUS[opSt]||OP_STATUS[""];const callCount=(work.calls||[]).length;const endDate=p.endDateFmt||isoToDisp(p.endDate)||"";
+                      return(<tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
+                        <td style={{...tdS,fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>{endDate||"—"}</td>
+                        <td style={{...tdS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.insuredName||"—"}</td>
+                        <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e",fontWeight:600}}>{p.phone||"—"}</td>
+                        <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
+                        <td style={tdS}>{p.company||"—"}</td>
+                        <td style={tdS}>
+                          {rnCanEdit?<select value={opSt} onChange={e=>updateRnStatus(tid,pk,e.target.value)}
+                            style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:stInfo.bg,color:stInfo.color,fontWeight:600,cursor:"pointer",minWidth:148}}>
+                            {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                          </select>:<span style={{fontSize:11,fontWeight:600,color:stInfo.color}}>{stInfo.label}</span>}
+                        </td>
+                        <td style={{...tdS,textAlign:"center"}}>
+                          {rnCanEdit?<button onClick={()=>{setRnCallModal({tid,polKey:pk,pol:{...p,_viewSrc:"agents"}});setRnNewCall({result:"no_answer",comment:""}); }}
+                            style={{background:callCount>0?"#eff6ff":"#f1f5f9",border:"1px solid "+(callCount>0?"#93c5fd":"#cbd5e1"),borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",color:callCount>0?"#1d4ed8":"#374151",fontWeight:700}}>
+                            📞{callCount>0?" "+callCount:""}</button>:<span style={{fontSize:11,color:"#9ca3af"}}>{callCount>0?"📞 "+callCount:"—"}</span>}
+                        </td>
+                        <td style={{...tdS,textAlign:"center"}}>
+                          <button onClick={()=>setRnDetailPol({...p,_viewSrc:"agents"})}
+                            style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",color:"#475569",fontWeight:600}}>👁</button>
+                        </td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {rntab.results&&refused.length>0&&(
+              <div style={{marginBottom:16}}>
+                <button onClick={()=>rnUpdateTab(tid,{refusedOpen:!rntab.refusedOpen})}
+                  style={{display:"flex",alignItems:"center",gap:8,background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 16px",cursor:"pointer",marginBottom:rntab.refusedOpen?10:0,width:"100%",textAlign:"left"}}>
+                  <span>{rntab.refusedOpen?"▼":"▶"}</span>
+                  <span style={{fontWeight:700,color:"#991b1b",fontSize:14}}>❌ Отказы — {refused.length}</span>
+                </button>
+                {rntab.refusedOpen&&<div style={{overflowX:"auto",borderRadius:10,border:"1px solid #fca5a5"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#dc2626"}}>{["Дата оконч.","Страхователь","Телефон","Госномер",""].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
+                    <tbody>{refused.map((p,i)=>{const pk=rnPolKey(p);const work=rntab.work[pk]||{};const opSt=work.operatorStatus||"";const stInfo=OP_STATUS[opSt]||OP_STATUS[""];return(
+                      <tr key={i} style={{background:i%2===0?"#fff":"#fff7f7",borderBottom:"1px solid #fde8e8"}}>
+                        <td style={{...tdS,fontWeight:600,color:"#dc2626",whiteSpace:"nowrap"}}>{p.endDateFmt||isoToDisp(p.endDate)||"—"}</td>
+                        <td style={tdS}>{p.insuredName||"—"}</td>
+                        <td style={{...tdS,fontFamily:"monospace",fontSize:11,color:"#0f766e"}}>{p.phone||"—"}</td>
+                        <td style={{...tdS,fontFamily:"monospace",fontWeight:700}}>{p.carPlate||"—"}</td>
+                        <td style={{...tdS,textAlign:"center"}}>
+                          {rnCanEdit&&<select value="refused" onChange={e=>updateRnStatus(tid,pk,e.target.value)}
+                            style={{fontSize:11,padding:"3px 6px",borderRadius:6,border:"1px solid #d1d5db",background:"#fff1f2",color:"#dc2626",fontWeight:600,cursor:"pointer",minWidth:120}}>
+                            {Object.entries(OP_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                          </select>}
+                        </td>
+                      </tr>
+                    );})}
+                    </tbody>
+                  </table>
+                </div>}
+              </div>
+            )}
+            {!rntab.results&&!rntab.loading&&(
+              <div style={{textAlign:"center",color:"#94a3b8",padding:"60px 20px"}}>
+                <div style={{fontSize:40,marginBottom:12}}>📋</div>
+                <div style={{fontWeight:600,fontSize:14,color:"#64748b"}}>{rnCanCheck?"Выберите месяц и нажмите «Проверить»":"Нажмите «Загрузить»"}</div>
+              </div>
+            )}
+            {rntab.loading&&<div style={{textAlign:"center",padding:"40px",color:"#9ca3af",fontSize:14}}>⏳ Проверка продлений...</div>}
           </div>
         );
       })()}
