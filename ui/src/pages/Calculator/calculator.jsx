@@ -892,7 +892,7 @@ export default function App(){
     try{const r=await calcStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
-    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));return newTabs.length?{...emp,tabs:[...(emp.tabs||[]),...newTabs]}:emp;});const defNotInStored=DEFAULT_EMPLOYEES.filter(d=>!p.employees.find(e=>e.id===d.id));setEmployees([...merged,...defNotInStored]);}}}catch{}
+    try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin)setAdminPin(p.adminPin);if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length)setOfficeStaff(p.officeStaff);if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));const updates={};if(newTabs.length)updates.tabs=[...(emp.tabs||[]),...newTabs];if(def.cashMode&&!emp.cashMode)updates.cashMode=def.cashMode;if(def.restrictToVoluntary&&!emp.restrictToVoluntary)updates.restrictToVoluntary=def.restrictToVoluntary;return Object.keys(updates).length?{...emp,...updates}:emp;});const defNotInStored=DEFAULT_EMPLOYEES.filter(d=>!p.employees.find(e=>e.id===d.id));setEmployees([...merged,...defNotInStored]);}}}catch{}
     try{const r=await calcStorage.get("mreoConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setMreoConfig(prev=>({...prev,...p}));}}catch{}
     try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[],managerStartDate:p.managerStartDate||""});}}catch{}
     try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
@@ -1739,7 +1739,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const openOpNew=()=>{
     const fd=initOpFD();
-    if(!isAdmin&&currentEmployee?.restrictToVoluntary){
+    if(!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo")){
       fd.polType="voluntary";
       const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||"":"";
       fd.agentUid=mreoUid;
@@ -3130,7 +3130,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           return true;
         };
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
-        const _mreoLockedUid=(!isAdmin&&currentEmployee?.restrictToVoluntary&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
+        const _isMreoEmployee=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
+        const _mreoLockedUid=(_isMreoEmployee&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
         const matchesAgent=p=>_mreoLockedUid?(p.agentUid===_mreoLockedUid):(opAgentFilter==="all"||p.agentUid===opAgentFilter);
         const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
@@ -3508,7 +3509,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   {paidLock&&isAdmin&&<div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#92400e"}}>⚠ Вы редактируете уже оплаченный полис. Изменения потребуют подтверждения.</div>}
                   {/* --- Тип продукта --- */}
                   <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb",opacity:effectiveLock?0.6:1,pointerEvents:effectiveLock?"none":"auto"}}>
-                    {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].filter(([k])=>!(!isAdmin&&currentEmployee?.restrictToVoluntary)||k==="voluntary").map(([k,l])=>(
+                    {[["osago","🚗 ОСАГО"],["voluntary","🛡 Добровольный"]].filter(([k])=>!_isMreoEmployee||k==="voluntary").map(([k,l])=>(
                       <button key={k} onClick={()=>setOpFD(p=>({...initOpFD(),polType:k,insuredName:p.insuredName,phone:p.phone,policyNum:p.policyNum,agentUid:p.agentUid,date:p.date,comment:p.comment}))}
                         style={{flex:1,padding:"9px 0",fontSize:13,fontWeight:600,cursor:paidLock?"not-allowed":"pointer",border:"none",background:opFD.polType===k?"#2563eb":"#f8fafc",color:opFD.polType===k?"#fff":"#6b7280",transition:"all .15s"}}>
                         {l}
@@ -3543,7 +3544,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
-                      {(!isAdmin&&currentEmployee?.restrictToVoluntary)?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
+                      {_isMreoEmployee?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
                       <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
@@ -3650,7 +3651,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
-                      {(!isAdmin&&currentEmployee?.restrictToVoluntary)?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
+                      {_isMreoEmployee?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
                       <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
