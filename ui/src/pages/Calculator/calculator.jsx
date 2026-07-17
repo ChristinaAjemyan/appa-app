@@ -909,24 +909,25 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         ?prev[lastMo].filter(r=>r.type==="static").map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
         :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
       const next={...prev,[selMonth]:rows};
-      calcStorage.set("officeExpenses",JSON.stringify(next)).catch(()=>{});
+      calcStorage.set("officeExpenses",JSON.stringify(next)).catch(err=>console.error("officeExpenses save failed:",err));
       return next;
     });
   },[tab,selMonth,officeExpLoaded]);
   const saveDir=d=>{setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
-  const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(()=>{});};
+  const _saveErr=(what)=>(err)=>alert("⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+err.message);
+  const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(_saveErr("коды офиса"));};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
-  const saveRates=r=>{setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(()=>{});};
-  const saveVR=r=>{setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(()=>{});};
-  const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(()=>{});};
+  const saveRates=r=>{setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(_saveErr("ставки комиссий"));};
+  const saveVR=r=>{setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(_saveErr("ставки добровольных"));};
+  const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(_saveErr("исключения"));};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
   const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
 
   const saveAppSettings=(updates={})=>{
     const s={adminPin,employees,officeStaff,...updates};
-    calcStorage.set("appSettings",JSON.stringify(s)).catch(()=>{});
+    calcStorage.set("appSettings",JSON.stringify(s)).catch(_saveErr("настройки приложения"));
   };
   const tryLogin=()=>{
     const p=loginPin.trim();
@@ -1004,7 +1005,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     }catch{}
   };
-  const saveBookmarks=(list)=>{setBookmarks(list);if(bkmKey)calcStorage.set(bkmKey,JSON.stringify(list)).catch(()=>{});};
+  const saveBookmarks=(list)=>{setBookmarks(list);if(bkmKey)calcStorage.set(bkmKey,JSON.stringify(list)).catch(_saveErr("закладки"));};
   const checkDueReminders=(list)=>{
     const now=Date.now();
     const due=(list||bookmarks).filter(b=>b.status==="active"&&b.reminderAt&&!b.reminderFired&&new Date(b.reminderAt).getTime()<=now);
@@ -1017,7 +1018,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       else setTasks([]);
     }catch{setTasks([]);}
   };
-  const saveTasks=(list)=>{setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(()=>{});};
+  const saveTasks=(list)=>{setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(_saveErr("задачи"));};
   const currentUserId=role==="admin"?"admin":(currentEmployee?.id||"");
   const currentUserName=role==="admin"?"Администратор":(currentEmployee?.name||"");
   const taskUnread=tasks.filter(t=>(t.unreadFor||[]).includes(currentUserId)&&t.status!=="closed");
@@ -1091,8 +1092,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
   const saveReminders=(list)=>{setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>console.error("reminders save failed:",err));};
   const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});logAction("settings","Изменён список сотрудников","—");};
-  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(()=>{});logAction("settings","Изменена конфигурация менеджера","—");};
-  const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(()=>{});};
+  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация менеджера"));logAction("settings","Изменена конфигурация менеджера","—");};
+  const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(_saveErr("расходы офиса"));};
   const changePin=()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
@@ -1378,8 +1379,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const pols=agentData.flatMap(a=>a.policies);
     const vols=[...effVol];
     const snap={rates,volRates,exceptions,agentDir,managerConfig};
-    calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:vols})).catch(()=>{});
-    calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
+    calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:vols})).catch(_saveErr("сохранение месяца"));
+    calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(_saveErr("снимок ставок"));
     setStoredPols(pols);
     setStoredVol(vols);
     setUploadedFiles([]);
@@ -1391,12 +1392,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(!window.confirm("Удалить все сохранённые "+label+" за "+fmtMonth(selMonth)+"?\nЭто действие необратимо."))return;
     if(co==="voluntary"){
       const newData={policies:storedPols,voluntary:[]};
-      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(()=>{});
+      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(_saveErr("удаление добровольных"));
       setStoredVol([]);setVolSession([]);
     }else{
       const newPols=storedPols.filter(p=>p.company!==co);
       const newData={policies:newPols,voluntary:storedVol};
-      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(()=>{});
+      await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(_saveErr("удаление данных компании"));
       setStoredPols(newPols);
       setUploadedFiles(prev=>prev.filter(f=>f.company!==co));
     }
@@ -1404,7 +1405,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const clearAllMonthData=async()=>{
     if(!window.confirm("Полностью очистить все данные за "+fmtMonth(selMonth)+"?\n\nБудут удалены все агентские полисы и добровольные.\nЭто действие необратимо."))return;
-    await calcStorage.set("month:"+selMonth,JSON.stringify({policies:[],voluntary:[]})).catch(()=>{});
+    await calcStorage.set("month:"+selMonth,JSON.stringify({policies:[],voluntary:[]})).catch(_saveErr("полная очистка месяца"));
     setStoredPols([]);setStoredVol([]);setUploadedFiles([]);setVolSession([]);
     logAction("import","Полная очистка данных за "+fmtMonth(selMonth),"—");
   };
@@ -1412,10 +1413,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const lockMonth=async()=>{
     if(!window.confirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам."))return;
     const snap={rates,volRates,exceptions,agentDir,managerConfig};
-    await calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(()=>{});
+    await calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(_saveErr("снимок месяца"));
     const updated={...lockedMonths,[selMonth]:true};
     setLockedMonths(updated);setMonthSnapshot(snap);
-    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
+    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(_saveErr("блокировка месяца"));
     logAction("lock_month","Закрыт месяц: "+fmtMonth(selMonth));
   };
 
@@ -1423,7 +1424,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(!window.confirm("Открыть "+fmtMonth(selMonth)+"?\nМесяц снова станет редактируемым."))return;
     const updated={...lockedMonths};delete updated[selMonth];
     setLockedMonths(updated);
-    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(()=>{});
+    await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(_saveErr("разблокировка месяца"));
     logAction("unlock_month","Открыт месяц: "+fmtMonth(selMonth));
   };
 
@@ -1558,7 +1559,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
   };
 
-  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(()=>{});};
+  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(_saveErr("полисы офиса"));};
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true,passportNum:"",bankAccount:"",email:""});
   const addOfficePol=(fd)=>{
@@ -1569,7 +1570,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);
     if(policyMonth===selMonth){saveOpMonth([...opCurrentMonth,pol]);return;}
     calcStorage.get("officePol:"+policyMonth).catch(()=>null).then(r=>{
-      try{const existing=r&&r.value?JSON.parse(r.value):[];if(!existing.find(p=>p._id===pol._id))calcStorage.set("officePol:"+policyMonth,JSON.stringify([...existing,pol])).catch(()=>{});}catch{}
+      try{const existing=r&&r.value?JSON.parse(r.value):[];if(!existing.find(p=>p._id===pol._id))calcStorage.set("officePol:"+policyMonth,JSON.stringify([...existing,pol])).catch(_saveErr("полис (прошлый месяц)"));}catch{}
     });
     setOpPrevAll(prev=>[...prev.filter(p=>p._id!==pol._id),pol]);
     if(!pol.paid)setOpPrevUnpaid(prev=>[...prev.filter(p=>p._id!==pol._id),pol].sort((a,b)=>new Date(a.date)-new Date(b.date)));
@@ -1580,7 +1581,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const updated={...pol,...updates};
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(_saveErr("редактирование полиса"));
       setOpPrevUnpaid(prev=>prev.map(p=>p._id===pol._id?updated:p));
       setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
@@ -1592,7 +1593,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     else{
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(_saveErr("оплата полиса"));
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
       setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
@@ -1611,7 +1612,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     else{
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.map(p=>p._id===pol._id?updated:p))).catch(_saveErr("отмена оплаты полиса"));
       setOpPrevUnpaid(prev=>[...prev.filter(p=>p._id!==pol._id),updated].sort((a,b)=>new Date(a.date)-new Date(b.date)));
       setOpPrevAll(prev=>prev.map(p=>p._id===pol._id?updated:p));
     }
@@ -1624,7 +1625,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     else{
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(()=>{});
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(_saveErr("удаление полиса"));
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
       setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
     }
@@ -1649,7 +1650,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const t={id:genUid(),date:amexNewTopup.date,amount:parseFloat(amexNewTopup.amount),comment:(amexNewTopup.comment||"").trim()};
     const updated=[...amexTopups,t].sort((a,b)=>a.date.localeCompare(b.date));
     setAmexTopups(updated);
-    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(()=>{});
+    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(_saveErr("пополнение Amex"));
     logAction("amex_topup","Пополнение Amex: +"+fmt(t.amount)+" ֏"+(t.comment?" ("+t.comment+")":""),"—");
     setAmexNewTopup({date:"",amount:"",comment:""});
   };
@@ -1657,7 +1658,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(!window.confirm("Удалить запись о пополнении?"))return;
     const _removed=amexTopups.find(t=>t.id===id);const updated=amexTopups.filter(t=>t.id!==id);
     setAmexTopups(updated);
-    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(()=>{});
+    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(_saveErr("удаление пополнения Amex"));
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
   const openOpNew=()=>{setOpEditPol(null);setOpFD(initOpFD());setOpFormErrors([]);setOpFormOpen(true);};
