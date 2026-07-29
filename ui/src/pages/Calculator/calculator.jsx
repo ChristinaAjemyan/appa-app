@@ -1767,7 +1767,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       if(!(opFD.insuredName||"").trim())errs.push("ФИО страхователя");
       if(!(opFD.policyNum||"").trim())errs.push("№ полиса");
       if(!(opFD.phone||"").trim())errs.push("Телефон");
-      if(!(opFD.agentUid||"").trim())errs.push("Оператор (принял полис)");
+      const _isMreoSub=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
+      if(!_isMreoSub&&!(opFD.agentUid||"").trim())errs.push("Оператор (принял полис)");
       if(!opFD.date)errs.push("Дата составления");
       if(!opFD.amount||parseFloat(opFD.amount)<=0)errs.push("Страховая премия (AMD)");
       if(opFD.polType==="osago"){
