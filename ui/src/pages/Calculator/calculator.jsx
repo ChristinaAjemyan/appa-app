@@ -988,6 +988,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const month=key.replace("officePol:","");
         for(const p of pols){
           if(!p.insuredName||p.insuredName.includes("ПРИМЕР"))continue;
+          if(p._mreo)continue;
           if((ntype==="unpaid"||ntype==="all")&&!p.paid){
             all.push({...p,_monthKey:month,_source:"office",_ntype:"unpaid"});
           }
