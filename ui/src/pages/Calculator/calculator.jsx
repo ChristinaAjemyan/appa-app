@@ -886,6 +886,7 @@ export default function App(){
   const[mreoCashCloseLoading,setMreoCashCloseLoading]=useState(false);
   const[mreoCashReopenModal,setMreoCashReopenModal]=useState(null);
   const[cashMode,setCashMode]=useState("main");
+  const[mreoOpBlockOpen,setMreoOpBlockOpen]=useState(false);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>"__err__");if(r&&r!=="__err__"&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}else if(!r||r===null){setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}else{setAgentDir(SEED_AGENTS);}}catch{setAgentDir(SEED_AGENTS);}
@@ -1057,7 +1058,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       for(const m of months){
         result[m]={office:0,agents:0,manager:0};
         const or=await calcStorage.get("officePol:"+m).catch(()=>null);
-        if(or?.value)JSON.parse(or.value).forEach(p=>{if(!p.insuredName?.includes("ПРИМЕР"))result[m].office+=Number(p.amount)||0;});
+        if(or?.value)JSON.parse(or.value).forEach(p=>{if(!p.insuredName?.includes("ПРИМЕР")&&!p._mreo)result[m].office+=Number(p.amount)||0;});
         const ar=await calcStorage.get("month:"+m).catch(()=>null);
         if(ar?.value){
           const dd=JSON.parse(ar.value);
@@ -1082,7 +1083,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const r={office:0,agents:0,manager:0,officeCount:0,agentCount:0,managerCount:0,expenses:0};
         const or=await calcStorage.get("officePol:"+m).catch(()=>null);
         if(or?.value){
-          const pols=JSON.parse(or.value).filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+          const pols=JSON.parse(or.value).filter(p=>!p.insuredName?.includes("ПРИМЕР")&&!p._mreo);
           r.officeCount=pols.length;
           r.office=pols.reduce((s,p)=>s+(Number(p.amount)||0),0);
         }
@@ -1149,7 +1150,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       for(let i=0;i<=12;i++){let sm=rm-i,sy=ry;while(sm<1){sm+=12;sy--;}scanMonths.push(`${sy}-${String(sm).padStart(2,"0")}`);}
       let expiring=[];
       if(subTab==="office"){
-        for(const mk of scanMonths){const r=await calcStorage.get(`officePol:${mk}`).catch(()=>null);if(!r?.value)continue;JSON.parse(r.value).filter(p=>{if(p.insuredName?.includes("ПРИМЕР"))return false;if(p.term==="SH")return false;if(!p.carPlate)return false;const d=parseAnyDate(p.dateEnd);return d&&d>=pStart&&d<=pEnd;}).forEach(p=>expiring.push({...p,_mk:mk}));}
+        for(const mk of scanMonths){const r=await calcStorage.get(`officePol:${mk}`).catch(()=>null);if(!r?.value)continue;JSON.parse(r.value).filter(p=>{if(p.insuredName?.includes("ПРИМЕР"))return false;if(p._mreo)return false;if(p.term==="SH")return false;if(!p.carPlate)return false;const d=parseAnyDate(p.dateEnd);return d&&d>=pStart&&d<=pEnd;}).forEach(p=>expiring.push({...p,_mk:mk}));}
       }else{
         for(const mk of scanMonths){const r=await calcStorage.get(`month:${mk}`).catch(()=>null);if(!r?.value)continue;const data=JSON.parse(r.value);(data.policies||[]).filter(p=>{if(!p.carPlate)return false;if(p.term==="SH")return false;const d=parseAnyDate(p.endDate);return d&&d>=pStart&&d<=pEnd;}).forEach(p=>expiring.push({...p,_mk:mk}));}
       }
@@ -1630,7 +1631,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const addOfficePol=(fd)=>{
     const policyMonth=(fd.date||selMonth).slice(0,7);
     const defaults=fd.paid?{}:{paid:false,paidAt:null,paidAmount:null,paymentType:null};
-    const pol={_id:genUid(),_monthKey:policyMonth,...fd,...defaults};
+    const pol={_id:genUid(),_monthKey:policyMonth,...fd,...defaults,...((!isAdmin&&currentEmployee?.cashMode==="mreo")?{_mreo:true}:{})};
     const _src=fd.paid_from_amex?"\u{1F4B3} Amex":"\u{1F3E6} Другой";
     logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);
     if(policyMonth===selMonth){saveOpMonth([...opCurrentMonth,pol]);return;}
@@ -1909,7 +1910,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     };
     const operatorUids=new Set(managerConfig?.operatorUids||[]);
-    const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР'));
+    const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР')&&!p._mreo);
     const gName=uid=>{const a=effAgentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
     const gCode=uid=>effAgentDir[uid]?.internalCode||uid||'';
 
@@ -2092,7 +2093,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const wb=new JSZip();
     const month=selMonth;
     const rows=officeExpenses[month]||[];
-    const opPols=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+    const opPols=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР")&&!p._mreo);
     const totalExp=rows.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
     const mgrActiveEx=!managerConfig.managerStartDate||selMonth>=managerConfig.managerStartDate;
     const opREx=mgrActiveEx?_computeOpR(agentData,managerConfig):[];
@@ -3113,8 +3114,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           const ma=(a[1].internalCode||"").match(/(\d+)$/);const mb=(b[1].internalCode||"").match(/(\d+)$/);
           return (ma?parseInt(ma[1]):99999)-(mb?parseInt(mb[1]):99999);
         });
-        const allUnpaid=[...opPrevUnpaid,...opCurrentMonth.filter(p=>!p.paid)].sort((a,b)=>new Date(b.date)-new Date(a.date));
-        const currentPaid=opCurrentMonth.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
+        const _isMreoEmployee=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
+        const _opCurr=_isMreoEmployee?opCurrentMonth.filter(p=>p._mreo===true):opCurrentMonth.filter(p=>!p._mreo);
+        const _opPrevUnpaid=_isMreoEmployee?opPrevUnpaid.filter(p=>p._mreo===true):opPrevUnpaid.filter(p=>!p._mreo);
+        const _opPrevAll=_isMreoEmployee?opPrevAll.filter(p=>p._mreo===true):opPrevAll.filter(p=>!p._mreo);
+        const _mreoAdminPols=isAdmin?[...opCurrentMonth,...opPrevAll].filter((p,_,a)=>p._mreo===true&&!a.slice(0,a.indexOf(p)).find(q=>q._id===p._id)):[];
+        const allUnpaid=[..._opPrevUnpaid,..._opCurr.filter(p=>!p.paid)].sort((a,b)=>new Date(b.date)-new Date(a.date));
+        const currentPaid=_opCurr.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
         const staffAgents=sortedAgents.filter(([,a])=>officeStaff.includes((a.internalCode||"").trim()));
         const tblH={...th,whiteSpace:"nowrap"};
         const actBtn=(label,bg,col,onClick)=><button onClick={onClick} style={{...btn(bg,col,{fontSize:11,padding:"3px 8px"}),marginRight:3}}>{label}</button>;
@@ -3130,16 +3136,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           return true;
         };
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
-        const _isMreoEmployee=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
         const _mreoLockedUid=(_isMreoEmployee&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
-        const matchesAgent=p=>_mreoLockedUid?(p.agentUid===_mreoLockedUid):(opAgentFilter==="all"||p.agentUid===opAgentFilter);
+        const matchesAgent=p=>_isMreoEmployee?true:(opAgentFilter==="all"||p.agentUid===opAgentFilter);
         const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
         const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all";
         const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");};
-        const allFiltered=[...opPrevUnpaid,...opCurrentMonth].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
+        const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
-        const basePols=(()=>{if(!hasDateFilter)return opCurrentMonth;const seen=new Set();return[...opPrevAll,...opCurrentMonth].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
+        const basePols=(()=>{if(!hasDateFilter)return _opCurr;const seen=new Set();return[..._opPrevAll,..._opCurr].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
         const normPolType=t=>{const v=(t||"").toLowerCase().trim();return v==="voluntary"?"voluntary":"osago";};
         const osagoList=basePols.filter(p=>normPolType(p.polType)==="osago");
         const volList=basePols.filter(p=>normPolType(p.polType)==="voluntary");
@@ -3803,6 +3808,42 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
               </div>
             )}
+          {/* ── МРЭО admin block ── */}
+          {isAdmin&&_mreoAdminPols.length>0&&(
+            <div style={{marginTop:20,border:"2px solid #a855f7",borderRadius:10,overflow:"hidden"}}>
+              <button onClick={()=>setMreoOpBlockOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:"#f5f3ff",border:"none",cursor:"pointer",textAlign:"left"}}>
+                <span style={{fontSize:14}}>{mreoOpBlockOpen?"▼":"▶"}</span>
+                <span style={{fontWeight:700,color:"#7e22ce",fontSize:14}}>📋 Продажи МРЭО — {_mreoAdminPols.length} пол. / {fmt(_mreoAdminPols.reduce((s,p)=>s+(p.amount||0),0))} ֏</span>
+                <span style={{marginLeft:"auto",fontSize:12,color:"#9ca3af"}}>{_mreoAdminPols.filter(p=>!p.paid).length} неопл.</span>
+              </button>
+              {mreoOpBlockOpen&&(
+                <div style={{overflowX:"auto",background:"#fff",padding:"0 0 8px"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr style={{background:"#7e22ce"}}>
+                      {["Дата","Полис","Страхователь","Компания","Сумма","Статус","Действия"].map(h=><th key={h} style={{...th,color:"#fff",fontWeight:700,padding:"8px 10px",textAlign:"left",fontSize:12}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {[..._mreoAdminPols].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(p=>(
+                        <tr key={p._id} style={{borderBottom:"1px solid #f3e8ff",background:p.paid?"#fafafa":"#fff8ff"}}>
+                          <td style={{...td,fontSize:12}}>{p.date||"—"}</td>
+                          <td style={{...td,fontSize:12,color:"#6b7280"}}>{p.policyNum||"б/н"}</td>
+                          <td style={{...td,fontSize:12}}>{p.insuredName||"—"}</td>
+                          <td style={{...td,fontSize:12}}>{p.company||"—"}</td>
+                          <td style={{...td,fontSize:12,fontWeight:600}}>{fmt(p.amount||0)} ֏</td>
+                          <td style={{...td,fontSize:11}}>{p.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:9,padding:"2px 8px",fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#854d0e",borderRadius:9,padding:"2px 8px",fontWeight:600}}>⏳ Не опл.</span>}</td>
+                          <td style={{...td,fontSize:11,whiteSpace:"nowrap"}}>
+                            {!p.paid&&<button onClick={()=>{setOpPayPol(p);setOpPayData({paidAmount:String(p.amount||""),paymentType:"cash",paidDate:new Date().toISOString().slice(0,10)});}} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"2px 8px"}),marginRight:3}}>💰 Оплата</button>}
+                            <button onClick={()=>{setOpEditPol(p);setOpFD({...p});setOpFormErrors([]);setOpFormOpen(true);}} style={{...btn("#3b82f6",undefined,{fontSize:11,padding:"2px 8px"}),marginRight:3}}>✏</button>
+                            <button onClick={()=>deleteOfficePol(p)} style={btn("#ef4444",undefined,{fontSize:11,padding:"2px 8px"})}>🗑</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
           </div>
         );
       })()}
@@ -3835,8 +3876,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
         // Group live payments by paidDate (filtered by cash mode)
         const _relevantPols=isMreoMode
-          ?(mreoAgentUid?cashMonthPols.filter(p=>p.agentUid===mreoAgentUid):cashMonthPols)
-          :(mreoAgentUid?cashMonthPols.filter(p=>p.agentUid!==mreoAgentUid):cashMonthPols);
+          ?cashMonthPols.filter(p=>p._mreo===true)
+          :cashMonthPols.filter(p=>!p._mreo);
         const byDay={};
         _relevantPols.filter(p=>p.paid&&p.paidDate).forEach(p=>{
           const d=normPaidDate(p.paidDate);
