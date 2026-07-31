@@ -1370,6 +1370,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const norm=s=>String(s||"").toLowerCase().replace(/\s/g,"");
     const qn=norm(q);
     const match=p=>[p.insuredName,p.carPlate,p.policyNum,p.phone].some(v=>norm(v).includes(qn));
+    const _isMreoEmp=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
     try{
       const mk1=await calcStorage.list("month:").catch(()=>({keys:[]}));
       for(const key of(mk1.keys||[])){
@@ -1388,7 +1389,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         pols.forEach(p=>{if(match(p))results.push({...p,_source:"office",_monthKey:mk});});
       }
       results.sort((a,b)=>b._monthKey.localeCompare(a._monthKey));
-      setSearchResults(results);
+      const filtered=isAdmin?results:results.filter(p=>_isMreoEmp?isMreoPol(p):!isMreoPol(p));
+      setSearchResults(filtered);
     }catch{setSearchResults([]);}
     setSearchLoading(false);
   };
@@ -3508,7 +3510,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {opFormOpen&&(
               <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-                  {(()=>{const paidLock=!!(opEditPol?.paid);const effectiveLock=paidLock&&!isAdmin;const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
+                  {(()=>{const paidLock=!!(opEditPol?.paid);const effectiveLock=paidLock&&!isAdmin;const amtLock=!!opEditPol&&!isAdmin;const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <h3 style={{margin:0,fontSize:16}}>{paidLock&&!isAdmin?"👁 Просмотр полиса":paidLock&&isAdmin?"⚠ Редактировать оплаченный полис":opEditPol?"✎ Редактировать полис":"➕ Новый полис"}</h3>
                     {paidLock&&<span style={{background:"#dcfce7",color:"#166534",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>✓ Оплачен</span>}
@@ -3674,12 +3676,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Финансы</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
-                      <div style={flbl}>Страховая премия (AMD){req}{isLocked&&opEditPol&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock)}}/>
+                      <div style={flbl}>Страховая премия (AMD){req}{(isLocked&&opEditPol||amtLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
+                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock||amtLock)}}/>
                     </div>
                     <div>
                       <div style={flbl}>Скидка (AMD){req}</div>
-                      <input type="text" value={opFD.discount||"0"} onChange={e=>setOpFD(p=>({...p,discount:_dig(e.target.value,5)}))} placeholder="0" maxLength={5} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(effectiveLock)}}/>
+                      <input type="text" value={opFD.discount||"0"} onChange={e=>setOpFD(p=>({...p,discount:_dig(e.target.value,5)}))} placeholder="0" maxLength={5} disabled={effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(effectiveLock||amtLock)}}/>
                     </div>
                     <div style={{gridColumn:"1/-1",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:12,color:"#166534"}}>К оплате клиентом:</span>
@@ -4163,10 +4165,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           {(()=>{
             if(!mreoConfig.enabled||!mreoConfig.internalCode)return null;
             const mreoUid=Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null;
-            if(!mreoUid||!foundAgent||foundAgent.uid!==mreoUid)return null;
-            const osagoPols=validPols;
-            const mreoOsagoComm=Math.round(osagoPols.reduce((s,p)=>s+(p.amount||0)*mreoConfig.osagoSplitPct/100,0));
-            const mreoVolComm=Math.round(volPols.reduce((s,v)=>s+(v.amount||0)*mreoConfig.volEmployeePct/100,0));
+            if(!mreoUid)return null;
+            const isSelectedMreo=payrollUID===mreoUid||(foundAgent&&foundAgent.uid===mreoUid);
+            if(!isSelectedMreo)return null;
+            const mreoOffPols=opCurrentMonth.filter(p=>isMreoPol(p)&&!p.insuredName?.includes("ПРИМЕР"));
+            const mreoOsagoPols=mreoOffPols.filter(p=>(p.polType||"osago")==="osago");
+            const mreoVolPols2=mreoOffPols.filter(p=>p.polType==="voluntary");
+            const mreoOsagoComm=Math.round(mreoOsagoPols.reduce((s,p)=>s+(p.amount||0)*mreoConfig.osagoSplitPct/100,0));
+            const mreoVolComm=Math.round(mreoVolPols2.reduce((s,v)=>s+(v.amount||0)*mreoConfig.volEmployeePct/100,0));
             return(
               <div style={{background:"#fffbeb",border:"2px solid #fcd34d",borderRadius:10,padding:"16px 20px",marginBottom:20}}>
                 <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:12}}>💼 Начисления МРЭО — {fmtMonth(selMonth)}</div>
@@ -4174,12 +4180,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
                     <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>🚗 ОСАГО ({mreoConfig.osagoSplitPct}%)</div>
                     <div style={{fontWeight:700,fontSize:18,color:"#b45309"}}>{fmt(mreoOsagoComm)}</div>
-                    <div style={{fontSize:11,color:"#9ca3af"}}>{osagoPols.length} полисов</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>{mreoOsagoPols.length} полисов</div>
                   </div>
                   <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
                     <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>🛡 Добровольные ({mreoConfig.volEmployeePct}%)</div>
                     <div style={{fontWeight:700,fontSize:18,color:"#b45309"}}>{fmt(mreoVolComm)}</div>
-                    <div style={{fontSize:11,color:"#9ca3af"}}>{volPols.length} полисов</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>{mreoVolPols2.length} полисов</div>
                   </div>
                   <div style={{background:"white",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 16px",minWidth:160}}>
                     <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>💵 Оклад (справочно)</div>
