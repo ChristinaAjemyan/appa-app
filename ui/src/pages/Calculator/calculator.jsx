@@ -1586,7 +1586,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const closeCashDay=async(date)=>{
     setCashCloseLoading(true);
-    const pols=cashMonthPols.filter(p=>p.paid&&normPaidDate(p.paidDate)===date);
+    const pols=cashMonthPols.filter(p=>p.paid&&normPaidDate(p.paidDate)===date&&!isMreoPol(p));
     const snapshot=pols.map(p=>({_id:p._id,insuredName:p.insuredName,polType:p.polType,productName:p.productName,car:p.car,carPlate:p.carPlate,policyNum:p.policyNum,company:p.company,phone:p.phone,date:p.date,amount:p.amount,discount:p.discount,paidAmount:p.paidAmount,paymentType:p.paymentType,paidDate:p.paidDate,agentUid:p.agentUid,comment:p.comment}));
     const cash=pols.filter(p=>p.paymentType==="cash").reduce((s,p)=>s+(p.paidAmount||0),0);
     const acba=pols.filter(p=>p.paymentType==="acba").reduce((s,p)=>s+(p.paidAmount||0),0);
@@ -1672,7 +1672,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const cancelOpPayment=async(pol)=>{
     const pd=pol.paidDate?pol.paidDate.slice(0,10):null;
-    if(pd&&cashDays[pd]?.closed){
+    const _closedDays=isMreoPol(pol)?mreoCashDays:cashDays;
+    if(pd&&_closedDays[pd]?.closed){
       window.alert("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.");
       return;
     }
@@ -1694,7 +1695,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(pol.paid&&pol.paidDate){
       try{
         const cashMo=pol.paidDate.slice(0,7);
-        const cbRaw=cashMo===selMonth?{value:JSON.stringify(cashDays)}:await calcStorage.get("cashBook:"+cashMo);
+        const _isMreo=isMreoPol(pol);
+        const _cbKey=_isMreo?"cashBook_mro:":"cashBook:";
+        const cbRaw=cashMo===selMonth?{value:JSON.stringify(_isMreo?mreoCashDays:cashDays)}:await calcStorage.get(_cbKey+cashMo);
         const cb=cbRaw?.value?JSON.parse(cbRaw.value):{};
         if(cb[pol.paidDate]?.closed){
           alert("⛔ Касса за "+new Date(pol.paidDate+"T00:00:00").toLocaleDateString("ru-RU")+" закрыта.\n\nОткройте кассу перед удалением оплаченного полиса.");
