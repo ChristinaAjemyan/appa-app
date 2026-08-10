@@ -832,6 +832,8 @@ export default function App(){
   const[expensesPending,setExpensesPending]=useState(false);
   const[expensesPendingFrom,setExpensesPendingFrom]=useState("");
   const[expNewName,setExpNewName]=useState("");
+  const[expNewCat,setExpNewCat]=useState("Прочее");
+  const[expNewCatCustom,setExpNewCatCustom]=useState("");
   const[lockedMonths,setLockedMonths]=useState({});
   const[monthSnapshot,setMonthSnapshot]=useState(null);
   const[searchQuery,setSearchQuery]=useState("");
@@ -2954,11 +2956,44 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
           {hasData&&(
             <div>
-              <div style={{display:"flex",gap:16,flexWrap:"wrap",background:"#111827",color:"#fff",borderRadius:10,padding:"14px 20px",marginBottom:16}}>
-                {[["Доход офиса",fmt(totals.office),"#93c5fd"],["Выплачено агентам",fmt(totals.agent),"#fcd34d"],["Прибыль офиса",fmt(totals.profit),"#4ade80"]].map(([l,v,c])=>(
-                  <div key={l} style={{minWidth:160}}><div style={{fontSize:11,opacity:.55,marginBottom:2}}>{l}</div><div style={{fontSize:18,fontWeight:700,color:c}}>{v}</div></div>
-                ))}
-              </div>
+              {(()=>{
+                const coSales={};
+                agentData.forEach(a=>a.policies.forEach(p=>{const co=p.company||"Прочие";if(!coSales[co])coSales[co]={osago:0,vol:0};coSales[co].osago+=Number(p.amount)||0;}));
+                effVol.forEach(v=>{const co=v.company||"Прочие";if(!coSales[co])coSales[co]={osago:0,vol:0};coSales[co].vol+=Number(v.amount)||0;});
+                const cos=Object.keys(coSales).sort();
+                if(!cos.length)return null;
+                const totO=cos.reduce((s,c)=>s+coSales[c].osago,0);
+                const totV=cos.reduce((s,c)=>s+coSales[c].vol,0);
+                const hasVol=totV>0;
+                return(
+                  <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead><tr style={{background:"#f1f5f9"}}>
+                        <th style={{...th,textAlign:"left",padding:"8px 14px"}}>Компания</th>
+                        <th style={{...th,textAlign:"right",padding:"8px 14px"}}>ОСАГО</th>
+                        {hasVol&&<th style={{...th,textAlign:"right",padding:"8px 14px"}}>Добровольные</th>}
+                        <th style={{...th,textAlign:"right",padding:"8px 14px"}}>Итого продаж</th>
+                      </tr></thead>
+                      <tbody>
+                        {cos.map((co,i)=>(
+                          <tr key={co} style={{background:i%2===0?"white":"#f8fafc",borderBottom:"1px solid #f3f4f6"}}>
+                            <td style={{...td,fontWeight:600,padding:"7px 14px"}}>{co}</td>
+                            <td style={{...td,textAlign:"right",padding:"7px 14px",fontVariantNumeric:"tabular-nums"}}>{coSales[co].osago>0?fmt(coSales[co].osago):"—"}</td>
+                            {hasVol&&<td style={{...td,textAlign:"right",padding:"7px 14px",fontVariantNumeric:"tabular-nums",color:"#6d28d9"}}>{coSales[co].vol>0?fmt(coSales[co].vol):"—"}</td>}
+                            <td style={{...td,textAlign:"right",padding:"7px 14px",fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(coSales[co].osago+coSales[co].vol)}</td>
+                          </tr>
+                        ))}
+                        <tr style={{background:"#f1f5f9",borderTop:"2px solid #e5e7eb"}}>
+                          <td style={{...td,fontWeight:700,padding:"8px 14px"}}>ИТОГО</td>
+                          <td style={{...td,textAlign:"right",padding:"8px 14px",fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(totO)}</td>
+                          {hasVol&&<td style={{...td,textAlign:"right",padding:"8px 14px",fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#6d28d9"}}>{fmt(totV)}</td>}
+                          <td style={{...td,textAlign:"right",padding:"8px 14px",fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(totO+totV)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
 
               {agentData.length>0&&(
                 <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
@@ -4847,8 +4882,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const _setExp=d=>expensesPending?setOfficeExpenses(d):saveOfficeExpenses(d);
         const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);_setExp({...officeExpenses,[selMonth]:nr});};
         const delRow=id=>_setExp({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
-        const addDynRow=()=>{if(!expNewName.trim())return;_setExp({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat:"Доп.",name:expNewName.trim(),amount:0,type:"dynamic"}]});setExpNewName("");};
         const STATIC_CATS=["Зарплаты","Коммунальные","Связь","Налоги","Прочее"];
+        const addDynRow=()=>{
+          if(!expNewName.trim())return;
+          const cat=expNewCat==="__new__"?(expNewCatCustom.trim()||"Прочее"):expNewCat;
+          _setExp({...officeExpenses,[selMonth]:[...rows,{id:"dyn"+Date.now()+Math.random().toString(36).slice(2),cat,name:expNewName.trim(),amount:0,type:"dynamic"}]});
+          setExpNewName("");
+          if(expNewCat==="__new__"&&expNewCatCustom.trim())setExpNewCat(expNewCatCustom.trim());
+          setExpNewCatCustom("");
+        };
+        const allExpCats=(()=>{
+          const extra=[];
+          rows.forEach(r=>{if(r.type==="dynamic"&&r.cat&&!STATIC_CATS.includes(r.cat)&&!extra.includes(r.cat))extra.push(r.cat);});
+          return[...STATIC_CATS,...extra];
+        })();
         const dynRows=rows.filter(r=>r.type==="dynamic");
         const catColors={"Зарплаты":"#eff6ff","Коммунальные":"#f0fdf4","Связь":"#fdf4ff","Налоги":"#fff7ed","Прочее":"#f8fafc"};
         const catBorders={"Зарплаты":"#bfdbfe","Коммунальные":"#bbf7d0","Связь":"#e9d5ff","Налоги":"#fed7aa","Прочее":"#e2e8f0"};
@@ -5191,8 +5238,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <span style={{fontSize:12,fontWeight:400,opacity:0.85}}>Итого: {fmt(totalExpenses)}</span>
               </div>
               {rows.length===0&&<div style={{padding:20,textAlign:"center",color:"#9ca3af",fontSize:13}}>Загрузка данных...</div>}
-              {STATIC_CATS.map(cat=>{
-                const catRows=rows.filter(r=>r.cat===cat&&r.type==="static");
+              {allExpCats.map(cat=>{
+                const catRows=rows.filter(r=>r.cat===cat);
                 if(!catRows.length)return null;
                 const catTotal=catRows.reduce((s,r)=>s+(Number(r.amount)||0),0);
                 return(
@@ -5205,18 +5252,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 );
               })}
-              {dynRows.length>0&&(
-                <div style={{borderBottom:"1px solid #f3f4f6"}}>
-                  <div style={{background:"#f9fafb",borderBottom:"1px solid #e5e7eb",padding:"5px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontWeight:600,fontSize:12,color:"#374151"}}>Дополнительно</span>
-                    <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>{fmt(dynRows.reduce((s,r)=>s+(Number(r.amount)||0),0))}</span>
-                  </div>
-                  {dynRows.map(r=>rowEl(r))}
+              <div style={{padding:"10px 14px",borderTop:"1px solid #f3f4f6",display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                  <select value={expNewCat} onChange={e=>setExpNewCat(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:13,minWidth:140}}>
+                    {[...STATIC_CATS,...rows.filter(r=>r.type==="dynamic"&&!STATIC_CATS.includes(r.cat)&&r.cat).map(r=>r.cat).filter((c,i,a)=>a.indexOf(c)===i)].map(c=><option key={c} value={c}>{c}</option>)}
+                    <option value="__new__">+ Новая категория...</option>
+                  </select>
+                  <input value={expNewName} onChange={e=>setExpNewName(e.target.value.slice(0,50))} placeholder="Название расхода..." maxLength={50} style={{...inp,flex:1,minWidth:160,padding:"5px 8px",fontSize:13}} onKeyDown={e=>e.key==="Enter"&&addDynRow()}/>
+                  <button onClick={addDynRow} disabled={!expNewName.trim()||(expNewCat==="__new__"&&!expNewCatCustom.trim())} style={{...btn("#374151",undefined,{fontSize:13,padding:"5px 14px"}),opacity:!expNewName.trim()||(expNewCat==="__new__"&&!expNewCatCustom.trim())?0.5:1}}>+ Добавить</button>
                 </div>
-              )}
-              <div style={{padding:"10px 14px",display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #f3f4f6"}}>
-                <input value={expNewName} onChange={e=>setExpNewName(e.target.value.slice(0,50))} placeholder="Название доп. расхода..." maxLength={50} style={{...inp,flex:1,padding:"5px 8px",fontSize:13}} onKeyDown={e=>e.key==="Enter"&&addDynRow()}/>
-                <button onClick={addDynRow} style={btn("#374151",undefined,{fontSize:13,padding:"5px 14px"})}>+ Добавить</button>
+                {expNewCat==="__new__"&&(
+                  <input value={expNewCatCustom} onChange={e=>setExpNewCatCustom(e.target.value.slice(0,40))} placeholder="Название новой категории..." maxLength={40} style={{...inp,padding:"5px 8px",fontSize:13}} autoFocus/>
+                )}
               </div>
             </div>
             {/* ── Итог ── */}
