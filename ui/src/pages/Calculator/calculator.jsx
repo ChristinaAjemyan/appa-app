@@ -12,8 +12,6 @@ const EXCEPTION_BRANDS=["opel","mercedes","mercedes-benz","bmw","nissan"];
 const _ascii=(v,n)=>Array.from(v||"").filter(c=>{const cc=c.charCodeAt(0);return cc>=32&&cc<=126;}).join("").slice(0,n);
 const _ld=(v,n)=>Array.from(v||"").filter(c=>/[A-Za-z0-9 \-]/.test(c)).join("").slice(0,n);
 const _dig=(v,n)=>Array.from(v||"").filter(c=>/[0-9]/.test(c)).join("").slice(0,n);
-const _now=new Date();
-const CURRENT_MONTH=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}`;
 const getThisMonth=()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;}
 const MIN_MONTH="2023-01";const MAX_MONTH="2030-12";
 const EXPIRY_OPTIONS=[];
@@ -805,6 +803,51 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
   );
 }
 
+const OP_FIELD_LABELS={insuredName:"ФИО страхователя",policyNum:"№ полиса",phone:"Телефон",agentUid:"Оператор (принял полис)",date:"Дата составления",amount:"Страховая премия (AMD)",dateStart:"Дата вступления в силу",dateEnd:"Дата окончания",carPlate:"Рег. номер",bm:"БМ",productName:"Тип продукта"};
+const _DRAG_KEY="opFormDrag";
+function DraggableModal({open,onClose,title,titleRight,children}){
+  const boxRef=useRef(null);
+  const drag=useRef({active:false,mx:0,my:0,ex:0,ey:0});
+  useEffect(()=>{
+    if(!open||!boxRef.current)return;
+    try{const s=JSON.parse(localStorage.getItem(_DRAG_KEY)||"{}");
+      if(s.x!=null){boxRef.current.style.left=s.x+"px";boxRef.current.style.top=s.y+"px";boxRef.current.style.transform="none";}
+      if(s.w)boxRef.current.style.width=s.w+"px";
+      if(s.h)boxRef.current.style.height=s.h+"px";
+    }catch{}
+  },[open]);
+  useEffect(()=>{
+    if(!open||!boxRef.current)return;
+    let t;
+    const obs=new ResizeObserver(()=>{clearTimeout(t);t=setTimeout(()=>{if(!boxRef.current)return;try{const s=JSON.parse(localStorage.getItem(_DRAG_KEY)||"{}");s.w=boxRef.current.offsetWidth;s.h=boxRef.current.offsetHeight;localStorage.setItem(_DRAG_KEY,JSON.stringify(s));}catch{}},300);});
+    obs.observe(boxRef.current);
+    return()=>{obs.disconnect();clearTimeout(t);};
+  },[open]);
+  const onHdrDown=e=>{
+    if(!boxRef.current)return;
+    const r=boxRef.current.getBoundingClientRect();
+    drag.current={active:true,mx:e.clientX,my:e.clientY,ex:r.left,ey:r.top};
+    const onMove=ev=>{if(!drag.current.active||!boxRef.current)return;boxRef.current.style.left=(drag.current.ex+ev.clientX-drag.current.mx)+"px";boxRef.current.style.top=(drag.current.ey+ev.clientY-drag.current.my)+"px";boxRef.current.style.transform="none";};
+    const onUp=()=>{drag.current.active=false;document.removeEventListener("mousemove",onMove);document.removeEventListener("mouseup",onUp);if(!boxRef.current)return;try{const s=JSON.parse(localStorage.getItem(_DRAG_KEY)||"{}");s.x=parseInt(boxRef.current.style.left);s.y=parseInt(boxRef.current.style.top);localStorage.setItem(_DRAG_KEY,JSON.stringify(s));}catch{}};
+    document.addEventListener("mousemove",onMove);document.addEventListener("mouseup",onUp);e.preventDefault();
+  };
+  if(!open)return null;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000}}>
+      <div ref={boxRef} style={{position:"absolute",top:"4vh",left:"50%",transform:"translateX(-50%)",background:"white",borderRadius:12,width:590,minWidth:340,minHeight:220,maxWidth:"96vw",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",overflow:"hidden",resize:"both"}}>
+        <div onMouseDown={onHdrDown} style={{padding:"11px 16px 9px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"grab",background:"#f8fafc",borderRadius:"12px 12px 0 0",userSelect:"none",flexShrink:0}}>
+          <div style={{fontWeight:700,fontSize:15,color:"#1e293b",pointerEvents:"none"}}>{title}</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}} onMouseDown={e=>e.stopPropagation()}>
+            {titleRight}
+            <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af",lineHeight:1,padding:"0 4px",pointerEvents:"auto"}}>×</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
   const[tab,setTab]=useState("commissions");
   const[selMonth,setSelMonth]=useState(getThisMonth);
@@ -950,6 +993,13 @@ export default function App(){
   const[mreoCashCloseLoading,setMreoCashCloseLoading]=useState(false);
   const[mreoCashReopenModal,setMreoCashReopenModal]=useState(null);
   const[cashMode,setCashMode]=useState("main");
+  const[toasts,setToasts]=useState([]);
+  const toastIdRef=useRef(0);
+  const[confirmState,setConfirmState]=useState(null);
+  const confirmResolveRef=useRef(null);
+  const[showLoginPin,setShowLoginPin]=useState(false);
+  const[showEmpPins,setShowEmpPins]=useState({});
+  const[saveMonthLoading,setSaveMonthLoading]=useState(false);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>"__err__");if(r&&r!=="__err__"&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}else if(!r||r===null){setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}else{setAgentDir(SEED_AGENTS);}}catch{setAgentDir(SEED_AGENTS);}
@@ -990,8 +1040,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(sourceMo){setExpensesPending(true);setExpensesPendingFrom(sourceMo);}
     saveOfficeExpenses({...officeExpenses,[selMonth]:rows});
   },[tab,selMonth,officeExpLoaded]);
-  const saveDir=d=>{const prev=agentDir;setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{setAgentDir(prev);alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
-  const _saveErr=(what)=>(err)=>alert("⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+err.message);
+  const showToast=(msg,type="error")=>{const id=++toastIdRef.current;setToasts(prev=>[...prev,{id,msg,type}]);};
+  const showConfirm=(msg,opts={})=>new Promise(resolve=>{confirmResolveRef.current=resolve;setConfirmState({msg,...opts});});
+  const saveDir=d=>{const prev=agentDir;setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{setAgentDir(prev);showToast("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
+  const _saveErr=(what)=>(err)=>showToast("⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+err.message);
   const saveOfficeCodes=codes=>{const prev=officeCodes;setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(err=>{setOfficeCodes(prev);_saveErr("коды офиса")(err);});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
@@ -1074,8 +1126,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           }
         }
       }
-      const now=Date.now();
-      if(forceReshuffle||now-lastShuffleRef.current>30*60*1000){lastShuffleRef.current=now;setNotifs([...all].sort(()=>Math.random()-0.5).slice(0,5));}
+      setNotifs([...all].sort((a,b)=>new Date(a.date)-new Date(b.date)));
     }catch{setNotifs([]);}
   };
   useEffect(()=>{if(role)buildNotifications(true);},[role]);
@@ -1093,7 +1144,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     }catch{}
   };
-  const saveBookmarks=(list)=>{setBookmarks(list);if(bkmKey)calcStorage.set(bkmKey,JSON.stringify(list)).catch(_saveErr("закладки"));};
+  const saveBookmarks=(list)=>{const prev=bookmarks;setBookmarks(list);if(bkmKey)calcStorage.set(bkmKey,JSON.stringify(list)).catch(err=>{setBookmarks(prev);_saveErr("закладки")(err);});};
   const checkDueReminders=(list)=>{
     const now=Date.now();
     const due=(list||bookmarks).filter(b=>b.status==="active"&&b.reminderAt&&!b.reminderFired&&new Date(b.reminderAt).getTime()<=now);
@@ -1106,7 +1157,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       else setTasks([]);
     }catch{setTasks([]);}
   };
-  const saveTasks=(list)=>{setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(_saveErr("задачи"));};
+  const saveTasks=(list)=>{const prev=tasks;setTasks(list);calcStorage.set("tasks",JSON.stringify(list)).catch(err=>{setTasks(prev);_saveErr("задачи")(err);});};
   const currentUserId=role==="admin"?"admin":(currentEmployee?.id||"");
   const currentUserName=role==="admin"?"Администратор":(currentEmployee?.name||"");
   const taskUnread=tasks.filter(t=>(t.unreadFor||[]).includes(currentUserId)&&t.status!=="closed");
@@ -1178,7 +1229,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setCmpLoading(false);
   };
   const saveOfficeStaff=(list)=>{const prev=officeStaff;setOfficeStaff(list);const s={adminPin,employees,officeStaff:list};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{setOfficeStaff(prev);_saveErr("сотрудники офиса")(err);});};
-  const saveReminders=(list)=>{setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>console.error("reminders save failed:",err));};
+  const saveReminders=(list)=>{const prev=reminders;setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>{setReminders(prev);_saveErr("напоминания")(err);});};
   const saveEmployees=(list)=>{const prev=employees;setEmployees(list);const s={adminPin,employees:list,officeStaff};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{setEmployees(prev);_saveErr("сотрудники")(err);});logAction("settings","Изменён список сотрудников","—");};
   const saveManagerConfig=cfg=>{const prev=managerConfig;setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(err=>{setManagerConfig(prev);_saveErr("конфигурация менеджера")(err);});logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{const prev=officeExpenses;setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(err=>{setOfficeExpenses(prev);_saveErr("расходы офиса")(err);});};
@@ -1291,7 +1342,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         rnUpdateTab(tid,{results:newResults,checking:{...tabNow.checking,[pk]:false}});
         await saveRnCache(subTab,month,newResults,tabNow.checkedAt||new Date().toISOString());
       }else{
-        alert("Продление не найдено для "+(p.carPlate||p.insuredName||"данного полиса"));
+        showToast("Продление не найдено для "+(p.carPlate||p.insuredName||"данного полиса"),"warning");
         rnUpdateTab(tid,{checking:{...tabNow.checking,[pk]:false}});
       }
     }catch(e){console.error(e);const t2=rnTabs.find(t=>t.id===tid)||{checking:{}};rnUpdateTab(tid,{checking:{...t2.checking,[pk]:false}});}
@@ -1305,11 +1356,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
 
-  const addAgent=()=>{
+  const addAgent=async()=>{
     if(!newName.trim())return;
     const dups=[];
     Object.entries(newCodes).forEach(([co,code])=>{if(!code.trim())return;const c=code.replace(/\s+/g,"").trim();Object.entries(agentDir).forEach(([,a])=>{const ex=(a.codes?.[co]||"").replace(/\s+/g,"").trim();if(ex&&ex===c)dups.push(`${co}: ${c} (${a.name} ${a.surname})`);});});
-    if(dups.length&&!window.confirm("⚠ Дублирующийся код агента:\n"+dups.join("\n")+"\n\nПродолжить?"))return;
+    if(dups.length&&!await showConfirm("⚠ Дублирующийся код агента:\n"+dups.join("\n")+"\n\nПродолжить?"))return;
     const id=genUid();
     saveDir({...agentDir,[id]:{name:newName.trim(),surname:newSur.trim(),internalCode:newIC.trim(),codes:{...newCodes}}});
     setNewName("");setNewSur("");setNewIC("");setNewCodes(Object.fromEntries(ALL_COMPANIES.map(c=>[c,""])));
@@ -1480,7 +1531,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const clearCompanyData=async(co)=>{
     const label=co==="voluntary"?"добровольных полисов":"данных компании "+co;
-    if(!window.confirm("Удалить все сохранённые "+label+" за "+fmtMonth(selMonth)+"?\nЭто действие необратимо."))return;
+    if(!await showConfirm("Удалить все сохранённые "+label+" за "+fmtMonth(selMonth)+"?\nЭто действие необратимо.",{danger:true,confirmText:"Удалить"}))return;
     if(co==="voluntary"){
       const newData={policies:storedPols,voluntary:[]};
       await calcStorage.set("month:"+selMonth,JSON.stringify(newData)).catch(_saveErr("удаление добровольных"));
@@ -1495,14 +1546,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     logAction("import","Удалены данные "+label+" за "+fmtMonth(selMonth),"—");
   };
   const clearAllMonthData=async()=>{
-    if(!window.confirm("Полностью очистить все данные за "+fmtMonth(selMonth)+"?\n\nБудут удалены все агентские полисы и добровольные.\nЭто действие необратимо."))return;
+    if(!await showConfirm("Полностью очистить все данные за "+fmtMonth(selMonth)+"?\n\nБудут удалены все агентские полисы и добровольные.\nЭто действие необратимо.",{danger:true,confirmText:"Очистить"}))return;
     await calcStorage.set("month:"+selMonth,JSON.stringify({policies:[],voluntary:[]})).catch(_saveErr("полная очистка месяца"));
     setStoredPols([]);setStoredVol([]);setUploadedFiles([]);setVolSession([]);
     logAction("import","Полная очистка данных за "+fmtMonth(selMonth),"—");
   };
 
   const lockMonth=async()=>{
-    if(!window.confirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам."))return;
+    if(!await showConfirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам.",{danger:true,confirmText:"Закрыть месяц"}))return;
     const snap={rates,volRates,exceptions,agentDir,managerConfig};
     await calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(_saveErr("снимок месяца"));
     const updated={...lockedMonths,[selMonth]:true};
@@ -1512,7 +1563,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
   const unlockMonth=async()=>{
-    if(!window.confirm("Открыть "+fmtMonth(selMonth)+"?\nМесяц снова станет редактируемым."))return;
+    if(!await showConfirm("Открыть "+fmtMonth(selMonth)+"?\nМесяц снова станет редактируемым."))return;
     const updated={...lockedMonths};delete updated[selMonth];
     setLockedMonths(updated);
     await calcStorage.set("lockedMonths",JSON.stringify(updated)).catch(_saveErr("разблокировка месяца"));
@@ -1631,7 +1682,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       logAction("cash_close","Касса МРЭО "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
       setMreoCashCloseModal(null);
     }catch(err){
-      alert("❌ Ошибка сохранения кассы МРЭО:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.");
+      showToast("❌ Ошибка сохранения кассы МРЭО:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.");
     }finally{
       setMreoCashCloseLoading(false);
     }
@@ -1650,7 +1701,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       logAction("cash_reopen","Открыта касса МРЭО "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU"));
       setMreoCashReopenModal(null);
     }catch(err){
-      alert("❌ Ошибка открытия кассы МРЭО:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
+      showToast("❌ Ошибка открытия кассы МРЭО:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
     }finally{
       setMreoCashCloseLoading(false);
     }
@@ -1675,7 +1726,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       logAction("cash_close","Касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU")+" — 💵 "+fmt(cash)+" · ACBA "+fmt(acba)+" · ИНЭКО "+fmt(ineco)+" · Банк: "+fmt(bank)+" · Итого: "+fmt(cash+acba+ineco+bank)+" ֏");
       setCashCloseModal(null);
     }catch(err){
-      alert("❌ Ошибка сохранения кассы:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.\nЕсли ошибка повторяется — обратитесь к администратору.");
+      showToast("❌ Ошибка сохранения кассы:\n\n"+err.message+"\n\nКасса НЕ закрыта. Проверьте соединение и попробуйте ещё раз.\nЕсли ошибка повторяется — обратитесь к администратору.");
     }finally{
       setCashCloseLoading(false);
     }
@@ -1694,7 +1745,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       logAction("cash_reopen","Открыта касса "+new Date(date+"T00:00:00").toLocaleDateString("ru-RU"));
       setCashReopenModal(null);
     }catch(err){
-      alert("❌ Ошибка открытия кассы:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
+      showToast("❌ Ошибка открытия кассы:\n\n"+err.message+"\n\nПопробуйте ещё раз или обратитесь к администратору.");
     }finally{
       setCashCloseLoading(false);
     }
@@ -1761,15 +1812,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const cbRaw=cashMo===selMonth?{value:JSON.stringify(_isMreo?mreoCashDays:cashDays)}:await calcStorage.get(_cbKey+cashMo);
         const cb=cbRaw?.value?JSON.parse(cbRaw.value):{};
         if(cb[pd]?.closed){
-          window.alert("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.");
+          showToast("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.","warning");
           return;
         }
       }catch{
-        alert("⛔ Ошибка чтения кассового журнала.\n\nОтмена заблокирована для безопасности. Перезагрузите страницу и повторите попытку.");
+        showToast("⛔ Ошибка чтения кассового журнала.\n\nОтмена заблокирована для безопасности. Перезагрузите страницу и повторите попытку.");
         return;
       }
     }
-    if(!window.confirm("Отменить оплату для «"+(pol.insuredName||"—")+"» / "+(pol.policyNum||"б/н")+"?\n\nПолис вернётся в статус «Не оплачен»."))return;
+    if(!await showConfirm("Отменить оплату для «"+(pol.insuredName||"—")+"» / "+(pol.policyNum||"б/н")+"?\n\nПолис вернётся в статус «Не оплачен».",{danger:true,confirmText:"Отменить оплату"}))return;
     const updated={...pol,paid:false,paidAt:null,paidAmount:null,paymentType:null,paidDate:null};
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
     else{
@@ -1785,7 +1836,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOpFormOpen(false);
   };
   const deleteOfficePol=async(pol)=>{
-    if(!window.confirm("Удалить полис "+pol.insuredName+"?"))return;
+    if(!await showConfirm("Удалить полис "+pol.insuredName+"?",{danger:true,confirmText:"Удалить"}))return;
     if(pol.paid&&pol.paidDate){
       try{
         const cashMo=pol.paidDate.slice(0,7);
@@ -1794,18 +1845,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const cbRaw=cashMo===selMonth?{value:JSON.stringify(_isMreo?mreoCashDays:cashDays)}:await calcStorage.get(_cbKey+cashMo);
         const cb=cbRaw?.value?JSON.parse(cbRaw.value):{};
         if(cb[pol.paidDate]?.closed){
-          alert("⛔ Касса за "+new Date(pol.paidDate+"T00:00:00").toLocaleDateString("ru-RU")+" закрыта.\n\nОткройте кассу перед удалением оплаченного полиса.");
+          showToast("⛔ Касса за "+new Date(pol.paidDate+"T00:00:00").toLocaleDateString("ru-RU")+" закрыта.\n\nОткройте кассу перед удалением оплаченного полиса.","warning");
           return;
         }
-      }catch{alert("⛔ Ошибка чтения кассового журнала.\n\nУдаление заблокировано для безопасности. Перезагрузите страницу и повторите попытку.");return;}
+      }catch{showToast("⛔ Ошибка чтения кассового журнала.\n\nУдаление заблокировано для безопасности. Перезагрузите страницу и повторите попытку.");return;}
     }
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
     else{
+      const prevUnpaid=opPrevUnpaid;
+      const prevAll=opPrevAll;
       const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(_saveErr("удаление полиса"));
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
       setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
+      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(err=>{setOpPrevUnpaid(prevUnpaid);setOpPrevAll(prevAll);_saveErr("удаление полиса")(err);});
     }
     logAction("delete_policy",(pol.polType==="osago"?"ОСАГО":"Добровольный")+": "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(pol.amount||0)+" ֏",pol._monthKey);
   };
@@ -1827,16 +1880,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(!amexNewTopup.date||!(parseFloat(amexNewTopup.amount)>0))return;
     const t={id:genUid(),date:amexNewTopup.date,amount:parseFloat(amexNewTopup.amount),comment:(amexNewTopup.comment||"").trim()};
     const updated=[...amexTopups,t].sort((a,b)=>a.date.localeCompare(b.date));
+    const prev=amexTopups;
     setAmexTopups(updated);
-    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(_saveErr("пополнение Amex"));
+    try{await calcStorage.set("amexTopups",JSON.stringify(updated));}
+    catch(err){setAmexTopups(prev);_saveErr("пополнение Amex")(err);return;}
     logAction("amex_topup","Пополнение Amex: +"+fmt(t.amount)+" ֏"+(t.comment?" ("+t.comment+")":""),"—");
     setAmexNewTopup({date:"",amount:"",comment:""});
   };
   const deleteAmexTopup=async(id)=>{
-    if(!window.confirm("Удалить запись о пополнении?"))return;
+    if(!await showConfirm("Удалить запись о пополнении?",{danger:true,confirmText:"Удалить"}))return;
     const _removed=amexTopups.find(t=>t.id===id);const updated=amexTopups.filter(t=>t.id!==id);
+    const prev=amexTopups;
     setAmexTopups(updated);
-    await calcStorage.set("amexTopups",JSON.stringify(updated)).catch(_saveErr("удаление пополнения Amex"));
+    try{await calcStorage.set("amexTopups",JSON.stringify(updated));}
+    catch(err){setAmexTopups(prev);_saveErr("удаление пополнения Amex")(err);return;}
     if(_removed)logAction("amex_topup_delete","Удалено пополнение Amex: "+fmt(_removed.amount)+" ֏ от "+new Date(_removed.date+"T00:00:00").toLocaleDateString("ru-RU"),"—");
   };
   const openOpNew=()=>{
@@ -1852,55 +1909,72 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const openOpPay=async(pol)=>{
     const today=new Date().toISOString().slice(0,10);
     try{
-      const r=await calcStorage.get("cashBook:"+today.slice(0,7)).catch(()=>null);
+      const cbKey=(isMreoPol(pol)?"cashBook_mro:":"cashBook:")+today.slice(0,7);
+      const r=await calcStorage.get(cbKey).catch(()=>null);
       const days=r&&r.value?JSON.parse(r.value):{};
       if(days[today]?.closed){
-        window.alert("⛔ Касса за "+new Date(today+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nДля принятия оплаты сначала откройте кассу за этот день.");
+        showToast("⛔ Касса за "+new Date(today+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nДля принятия оплаты сначала откройте кассу за этот день. Либо принимайте оплату завтра.","warning");
         return;
       }
     }catch{}
     setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:today});
   };
-  const submitOpForm=()=>{
-    const editingPaid=!!(opEditPol?.paid)&&isAdmin;
-    const errs=[];
-    if(!editingPaid){
-      if(!(opFD.insuredName||"").trim())errs.push("ФИО страхователя");
-      if(!(opFD.policyNum||"").trim())errs.push("№ полиса");
-      if(!(opFD.phone||"").trim())errs.push("Телефон");
-      const _isMreoSub=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
-      if(!_isMreoSub&&!(opFD.agentUid||"").trim())errs.push("Оператор (принял полис)");
-      if(!opFD.date)errs.push("Дата составления");
-      if(!opFD.amount||parseFloat(opFD.amount)<=0)errs.push("Страховая премия (AMD)");
-      if(opFD.polType==="osago"){
-        if(!opFD.dateStart)errs.push("Дата вступления в силу");
-        if(!opFD.dateEnd)errs.push("Дата окончания");
-        if(!(opFD.carPlate||"").trim())errs.push("Рег. номер");
-        if(!opFD.bm)errs.push("БМ");
+  const submitOpForm=async()=>{
+    if(saveMonthLoading)return;
+    setSaveMonthLoading(true);
+    try{
+      const editingPaid=!!(opEditPol?.paid)&&isAdmin;
+      const errs=[];
+      if(!editingPaid){
+        if(!(opFD.insuredName||"").trim())errs.push("insuredName");
+        if(!(opFD.policyNum||"").trim())errs.push("policyNum");
+        if(!(opFD.phone||"").trim())errs.push("phone");
+        const _isMreoSub=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
+        if(!_isMreoSub&&!(opFD.agentUid||"").trim())errs.push("agentUid");
+        if(!opFD.date)errs.push("date");
+        if(!opFD.amount||parseFloat(opFD.amount)<=0)errs.push("amount");
+        if(opFD.polType==="osago"){
+          if(!opFD.dateStart)errs.push("dateStart");
+          if(!opFD.dateEnd)errs.push("dateEnd");
+          if(!(opFD.carPlate||"").trim())errs.push("carPlate");
+          if(!opFD.bm)errs.push("bm");
+        }
+        if(opFD.polType==="voluntary"){
+          if(!(opFD.productName||"").trim())errs.push("productName");
+        }
       }
-      if(opFD.polType==="voluntary"){
-        if(!(opFD.productName||"").trim())errs.push("Тип продукта");
+      if(errs.length){setOpFormErrors(errs);return;}
+      if(editingPaid&&!await showConfirm("Вы изменяете данные уже оплаченного полиса.\n\nСтрахователь: "+(opFD.insuredName||opEditPol.insuredName||"—")+"\n№ полиса: "+(opFD.policyNum||opEditPol.policyNum||"—")+"\n\nПродолжить?"))return;
+      setOpFormErrors([]);
+      const _amt=parseFloat(opFD.amount)||0;
+      const _disc=parseFloat(opFD.discount)||0;
+      if(_amt>80000&&!await showConfirm("Страховая премия "+_amt.toLocaleString()+" AMD выше обычного значения (>80 000). Сохранить полис?",{confirmText:"Сохранить"}))return;
+      if(_disc>0&&_amt>0&&_disc>_amt*0.1&&!await showConfirm("Скидка "+_disc.toLocaleString()+" AMD превышает 10% от страховой премии. Сохранить полис?",{confirmText:"Сохранить"}))return;
+      const today=new Date().toISOString().slice(0,10);
+      if(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType){
+        try{
+          const _isMreo=!isAdmin&&currentEmployee?.cashMode==="mreo";
+          const cbKey=(_isMreo?"cashBook_mro:":"cashBook:")+today.slice(0,7);
+          const r=await calcStorage.get(cbKey).catch(()=>null);
+          const days=r&&r.value?JSON.parse(r.value):{};
+          if(days[today]?.closed){
+            showToast("⛔ Касса за "+new Date(today+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nДля принятия оплаты сначала откройте кассу за этот день. Либо принимайте оплату завтра.","warning");
+            return;
+          }
+        }catch{}
       }
-    }
-    if(errs.length){setOpFormErrors(errs);return;}
-    if(editingPaid&&!window.confirm("Вы изменяете данные уже оплаченного полиса.\n\nСтрахователь: "+(opFD.insuredName||opEditPol.insuredName||"—")+"\n№ полиса: "+(opFD.policyNum||opEditPol.policyNum||"—")+"\n\nПродолжить?"))return;
-    setOpFormErrors([]);
-    const _amt=parseFloat(opFD.amount)||0;
-    const _disc=parseFloat(opFD.discount)||0;
-    if(_amt>80000&&!window.confirm("Страховая премия "+_amt.toLocaleString()+" AMD выше обычного значения (>80 000). Сохранить полис?"))return;
-    if(_disc>0&&_amt>0&&_disc>_amt*0.1&&!window.confirm("Скидка "+_disc.toLocaleString()+" AMD превышает 10% от страховой премии. Сохранить полис?"))return;
-    const today=new Date().toISOString().slice(0,10);
-    const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim(),paid_from_amex:opFD.polType==="osago"?(opFD.paid_from_amex||false):false,passportNum:(opFD.passportNum||"").trim()||null,bankAccount:(opFD.bankAccount||"").trim()||null,email:(opFD.email||"").trim()||null};
-    const typeData=opFD.polType==="voluntary"
-      ?{productName:(opFD.productName||"").trim()}
-      :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:(opFD.carPlate||"").trim(),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
-    const payData=(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType)
-      ?{paid:true,paidAt:new Date().toISOString(),paidAmount:parseFloat(opFD.amount||0)-(parseFloat(opFD.discount)||0),paymentType:opFD.paymentType,paidDate:today}
-      :{};
-    const data={...base,...typeData,...payData};
-    if(opEditPol?.paid&&opFD.paymentType)data.paymentType=opFD.paymentType;
-    if(opEditPol)saveEditPol(opEditPol,data);else addOfficePol(data);
-    setOpFormOpen(false);
+      const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim(),paid_from_amex:opFD.polType==="osago"?(opFD.paid_from_amex||false):false,passportNum:(opFD.passportNum||"").trim()||null,bankAccount:(opFD.bankAccount||"").trim()||null,email:(opFD.email||"").trim()||null};
+      const typeData=opFD.polType==="voluntary"
+        ?{productName:(opFD.productName||"").trim()}
+        :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:(opFD.carPlate||"").trim(),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
+      const payData=(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType)
+        ?{paid:true,paidAt:new Date().toISOString(),paidAmount:parseFloat(opFD.amount||0)-(parseFloat(opFD.discount)||0),paymentType:opFD.paymentType,paidDate:today}
+        :{};
+      const data={...base,...typeData,...payData};
+      if(opEditPol?.paid&&opFD.paymentType)data.paymentType=opFD.paymentType;
+      if(opEditPol)saveEditPol(opEditPol,data);else addOfficePol(data);
+      setOpFormOpen(false);
+    }finally{setSaveMonthLoading(false);}
   };
 
   const filteredDB=useMemo(()=>{
@@ -1911,7 +1985,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const importBackup=e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(d.agentDir&&valD(d.agentDir))saveDir(d.agentDir);if(d.rates&&valR(d.rates))saveRates(d.rates);if(d.volRates&&valV(d.volRates))saveVR(d.volRates);if(d.exceptions&&valE(d.exceptions))saveExcs(d.exceptions);alert("Восстановлено.");}catch{alert("Ошибка файла.");}};
+    r.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(d.agentDir&&valD(d.agentDir))saveDir(d.agentDir);if(d.rates&&valR(d.rates))saveRates(d.rates);if(d.volRates&&valV(d.volRates))saveVR(d.volRates);if(d.exceptions&&valE(d.exceptions))saveExcs(d.exceptions);showToast("✓ Восстановлено.","success");}catch{showToast("Ошибка файла.");}};
     r.readAsText(f);e.target.value="";
   };
 
@@ -1966,9 +2040,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             allRows.push(obj);
           }
         });
-        if(!allRows.length){alert("Данных для импорта не найдено. Данные должны начинаться с 5-й строки.");return;}
+        if(!allRows.length){showToast("Данных для импорта не найдено. Данные должны начинаться с 5-й строки.");return;}
         setImportPreview({rows:allRows,month:selMonth});
-      }catch(err){alert("Ошибка чтения файла: "+err.message);}
+      }catch(err){showToast("Ошибка чтения файла: "+err.message);}
     };
     reader.readAsArrayBuffer(f);
   };
@@ -1980,7 +2054,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }else{
       saveOpMonth(validPols);
       logAction("import","Импорт: "+validPols.length+" полисов за "+fmtMonth(selMonth));
-      alert("Импортировано "+validPols.length+" записей за "+fmtMonth(selMonth));
+      showToast("✓ Импортировано "+validPols.length+" записей за "+fmtMonth(selMonth),"success");
     }
   };
 
@@ -2767,17 +2841,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           <div style={{fontSize:32,marginBottom:8}}>🏢</div>
           <h2 style={{margin:"0 0 4px",fontSize:22,color:"#1e293b"}}>INSURANCE MANAGER</h2>
           <div style={{color:"#64748b",fontSize:13,marginBottom:28}}>Введите PIN-код для входа</div>
-          <input
-            type="password"
-            value={loginPin}
-            onChange={e=>setLoginPin(_ascii(e.target.value,16))}
-            onKeyDown={e=>e.key==="Enter"&&!loginLoading&&tryLogin()}
-            placeholder="••••••"
-            maxLength={16}
-            disabled={loginLoading}
-            style={{...inp,width:"100%",fontSize:22,textAlign:"center",letterSpacing:6,padding:"10px 16px",marginBottom:12,boxSizing:"border-box",opacity:loginLoading?0.6:1}}
-            autoFocus
-          />
+          <div style={{position:"relative",marginBottom:12}}>
+            <input
+              type={showLoginPin?"text":"password"}
+              value={loginPin}
+              onChange={e=>setLoginPin(_ascii(e.target.value,16))}
+              onKeyDown={e=>e.key==="Enter"&&!loginLoading&&tryLogin()}
+              placeholder="••••••"
+              maxLength={16}
+              disabled={loginLoading}
+              style={{...inp,width:"100%",fontSize:22,textAlign:"center",letterSpacing:6,padding:"10px 48px 10px 16px",boxSizing:"border-box",opacity:loginLoading?0.6:1}}
+              autoFocus
+            />
+            <button type="button" onClick={()=>setShowLoginPin(p=>!p)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#64748b",padding:"0 4px",lineHeight:1}} title={showLoginPin?"Скрыть PIN":"Показать PIN"}>{showLoginPin?"🙈":"👁"}</button>
+          </div>
           {loginError&&<div style={{color:"#dc2626",fontSize:13,marginBottom:10,fontWeight:600}}>{loginError}</div>}
           <button onClick={tryLogin} disabled={loginLoading} style={{...btn("#1d4ed8"),width:"100%",fontSize:15,padding:"10px 0",opacity:loginLoading?0.7:1}}>{loginLoading?"Проверка...":"Войти"}</button>
         </div>
@@ -2833,7 +2910,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <span style={{fontSize:12,color:"#1d4ed8"}}>📋 База 768-XX: 74 агента</span>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>saveDir({...SEED_AGENTS,...agentDir})} style={btn("#1d4ed8")}>⬇ Загрузить / дополнить</button>
-                  <button onClick={()=>{if(window.confirm("Заменить весь справочник базой 768-XX?"))saveDir({...SEED_AGENTS});}} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>Заменить</button>
+                  <button onClick={async()=>{if(await showConfirm("Заменить весь справочник базой 768-XX?",{danger:true,confirmText:"Заменить"}))saveDir({...SEED_AGENTS});}} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>Заменить</button>
                 </div>
               </div>
               <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:8,padding:12,marginBottom:12}}>
@@ -2885,8 +2962,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </div>
                 {!adminPin&&<p style={{fontSize:12,color:"#6b7280",marginBottom:12,marginTop:0}}>PIN ещё не установлен. После сохранения при следующем входе потребуется этот PIN.</p>}
                 <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
-                  <input type="password" value={newPinA} onChange={e=>setNewPinA(_ascii(e.target.value,16))} placeholder="Новый PIN" maxLength={16} style={{...inp,width:150,padding:"7px 10px",letterSpacing:3,fontSize:16}}/>
-                  <input type="password" value={newPinB} onChange={e=>setNewPinB(_ascii(e.target.value,16))} onKeyDown={e=>e.key==="Enter"&&changePin()} placeholder="Повторите PIN" maxLength={16} style={{...inp,width:150,padding:"7px 10px",letterSpacing:3,fontSize:16}}/>
+                  <div style={{position:"relative"}}>
+                    <input type={showEmpPins["__admin_a"]?"text":"password"} value={newPinA} onChange={e=>setNewPinA(_ascii(e.target.value,16))} placeholder="Новый PIN" maxLength={16} style={{...inp,width:150,padding:"7px 36px 7px 10px",letterSpacing:3,fontSize:16}}/>
+                    <button type="button" onClick={()=>setShowEmpPins(p=>({...p,__admin_a:!p.__admin_a}))} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#64748b",padding:"0 2px",lineHeight:1}}>{showEmpPins["__admin_a"]?"🙈":"👁"}</button>
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input type={showEmpPins["__admin_b"]?"text":"password"} value={newPinB} onChange={e=>setNewPinB(_ascii(e.target.value,16))} onKeyDown={e=>e.key==="Enter"&&changePin()} placeholder="Повторите PIN" maxLength={16} style={{...inp,width:150,padding:"7px 36px 7px 10px",letterSpacing:3,fontSize:16}}/>
+                    <button type="button" onClick={()=>setShowEmpPins(p=>({...p,__admin_b:!p.__admin_b}))} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#64748b",padding:"0 2px",lineHeight:1}}>{showEmpPins["__admin_b"]?"🙈":"👁"}</button>
+                  </div>
                   <button onClick={changePin} style={btn("#7c3aed")}>Сохранить</button>
                 </div>
                 {pinChangeMsg&&<div style={{fontSize:13,color:pinChangeMsg.startsWith("✓")?"#16a34a":"#dc2626"}}>{pinChangeMsg}</div>}
@@ -2907,12 +2990,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       return(
                         <tr key={emp.id}>
                           <td style={td}><input value={emp.name} onChange={e=>{const l=[...employees];l[i]={...l[i],name:e.target.value.slice(0,60)};saveEmployees(l);}} maxLength={60} style={{...inp,width:"100%"}}/></td>
-                          <td style={td}><input type="password"
-                            value={emp.pin.startsWith?.("pbkdf2:")?"":emp.pin}
-                            placeholder={emp.pin.startsWith?.("pbkdf2:")?"новый PIN":""}
-                            onChange={e=>{const l=[...employees];l[i]={...l[i],pin:_ascii(e.target.value,16)};setEmployees(l);}}
-                            onBlur={async e=>{const raw=e.target.value.trim();if(!raw||raw===emp.pin)return;const h=await _hashPin(raw);const l=[...employees];l[i]={...l[i],pin:h};saveEmployees(l);}}
-                            maxLength={16} style={{...inp,width:90,letterSpacing:3}}/></td>
+                          <td style={td}>
+                            <div style={{display:"flex",alignItems:"center",gap:4}}>
+                              <input type={showEmpPins[emp.id]?"text":"password"}
+                                value={emp.pin.startsWith?.("pbkdf2:")?"":emp.pin}
+                                placeholder={emp.pin.startsWith?.("pbkdf2:")?"новый PIN":"PIN не задан"}
+                                onChange={e=>{const l=[...employees];l[i]={...l[i],pin:_ascii(e.target.value,16)};setEmployees(l);}}
+                                onBlur={async e=>{const raw=e.target.value.trim();if(!raw||raw===emp.pin)return;const h=await _hashPin(raw);const l=[...employees];l[i]={...l[i],pin:h};saveEmployees(l);}}
+                                maxLength={16} style={{...inp,width:90,letterSpacing:3,borderColor:emp.pin===""?"#f59e0b":undefined}}/>
+                              <button type="button" onClick={()=>setShowEmpPins(p=>({...p,[emp.id]:!p[emp.id]}))} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#64748b",padding:"0 2px",lineHeight:1}} title={showEmpPins[emp.id]?"Скрыть":"Показать"}>{showEmpPins[emp.id]?"🙈":"👁"}</button>
+                            </div>
+                            {emp.pin===""&&<div style={{fontSize:10,color:"#d97706",marginTop:3}}>⚠ Войти невозможно</div>}
+                          </td>
                           <td style={{...td,fontSize:11}}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                               {Object.entries(TAB_LABELS).map(([id,label])=>(
@@ -2927,7 +3016,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             <input type="checkbox" checked={emp.viewOnly||false} onChange={e=>{const l=[...employees];l[i]={...l[i],viewOnly:e.target.checked};saveEmployees(l);}}/>
                           </td>
                           <td style={{...td,textAlign:"center"}}>
-                            <button onClick={()=>{if(window.confirm("Удалить сотрудника "+emp.name+"?"))saveEmployees(employees.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",cursor:"pointer",color:"#dc2626",fontSize:16}}>×</button>
+                            <button onClick={async()=>{if(await showConfirm("Удалить сотрудника "+emp.name+"?",{danger:true,confirmText:"Удалить"}))saveEmployees(employees.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",cursor:"pointer",color:"#dc2626",fontSize:16}}>×</button>
                           </td>
                         </tr>
                       );
@@ -3455,8 +3544,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             )}
 
             {/* Search */}
-            <div style={{marginBottom:8}}>
-              <input value={opSearch} onChange={e=>setOpSearch(e.target.value)} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 12px",boxSizing:"border-box"}}/>
+            <div style={{marginBottom:8,position:"relative"}}>
+              <input value={opSearch} onChange={e=>setOpSearch(e.target.value)} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 36px 7px 12px",boxSizing:"border-box"}}/>
+              {opSearch&&<button onClick={()=>setOpSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#9ca3af",lineHeight:1,padding:"0 4px"}} title="Очистить">×</button>}
             </div>
 
             {/* Date filters */}
@@ -3718,14 +3808,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             )}
 
             {/* Policy form modal */}
-            {opFormOpen&&(
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-                <div style={{background:"white",borderRadius:12,padding:24,width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-                  {(()=>{const paidLock=!!(opEditPol?.paid);const effectiveLock=paidLock&&!isAdmin;const amtLock=!!opEditPol&&!isAdmin;const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};return(<>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <h3 style={{margin:0,fontSize:16}}>{paidLock&&!isAdmin?"👁 Просмотр полиса":paidLock&&isAdmin?"⚠ Редактировать оплаченный полис":opEditPol?"✎ Редактировать полис":"➕ Новый полис"}</h3>
-                    {paidLock&&<span style={{background:"#dcfce7",color:"#166534",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>✓ Оплачен</span>}
-                  </div>
+            <DraggableModal open={opFormOpen} onClose={()=>setOpFormOpen(false)} title={opEditPol?.paid&&!isAdmin?"👁 Просмотр полиса":opEditPol?.paid&&isAdmin?"⚠ Редактировать оплаченный":opEditPol?"✎ Редактировать полис":"➕ Новый полис"} titleRight={opEditPol?.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>✓ Оплачен</span>:null}>
+              {(()=>{const paidLock=!!(opEditPol?.paid);const effectiveLock=paidLock&&!isAdmin;const amtLock=!!opEditPol&&!isAdmin;const lk=(lock)=>lock?{background:"#f1f5f9",color:"#1e293b",cursor:"not-allowed"}:{};const fe=(key)=>opFormErrors.includes(key)?{border:"2px solid #dc2626"}:{};return(<>
                   {paidLock&&isAdmin&&<div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#92400e"}}>⚠ Вы редактируете уже оплаченный полис. Изменения потребуют подтверждения.</div>}
                   {/* --- Тип продукта --- */}
                   <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"2px solid #e5e7eb",opacity:effectiveLock?0.6:1,pointerEvents:effectiveLock?"none":"auto"}}>
@@ -3741,15 +3825,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>ФИО страхователя{req}</div>
-                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(effectiveLock)}}/>
+                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(effectiveLock),...fe("insuredName")}}/>
                     </div>
                     <div>
                       <div style={flbl}>№ полиса{req}{(isLocked&&opEditPol||paidLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock)}}/>
+                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock),...fe("policyNum")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Телефон{req}</div>
-                      <input value={opFD.phone||""} onChange={e=>setOpFD(p=>({...p,phone:_ascii(e.target.value,60)}))} placeholder="+374..." maxLength={60} style={{...finp,width:"100%",boxSizing:"border-box"}}/>
+                      <input value={opFD.phone||""} onChange={e=>setOpFD(p=>({...p,phone:_ascii(e.target.value,60)}))} placeholder="+374..." maxLength={60} style={{...finp,width:"100%",boxSizing:"border-box",...fe("phone")}}/>
                     </div>
                   </div>
                   {/* === ОСАГО: Полис + Авто + Статус === */}
@@ -3765,14 +3849,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
                       {_isMreoEmployee?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
-                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("agentUid")}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
                       </select>)}
                     </div>
                     <div>
                       <div style={flbl}>Дата составления{req}</div>
-                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("date")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Срок{req}</div>
@@ -3787,11 +3871,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Дата вступления в силу{req}</div>
-                      <input type="date" value={opFD.dateStart||""} onChange={e=>setOpFD(p=>({...p,dateStart:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      <input type="date" value={opFD.dateStart||""} onChange={e=>setOpFD(p=>({...p,dateStart:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("dateStart")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Дата окончания{req}</div>
-                      <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("dateEnd")}}/>
                     </div>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Транспортное средство</div>
@@ -3802,7 +3886,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Рег. номер{req}</div>
-                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("carPlate")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Регион</div>
@@ -3813,7 +3897,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>БМ{req}</div>
-                      <select value={opFD.bm||""} onChange={e=>setOpFD(p=>({...p,bm:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
+                      <select value={opFD.bm||""} onChange={e=>setOpFD(p=>({...p,bm:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("bm")}}>
                         <option value="">— выбрать —</option>
                         {Array.from({length:25},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
@@ -3854,11 +3938,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Продукт <span style={{color:"#dc2626"}}>*</span></div>
                   <div style={{marginBottom:14}}>
                     {(volRates.rates||[]).length>0
-                      ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
+                      ?<select value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("productName")}}>
                           <option value="">— выбрать продукт —</option>
                           {(volRates.rates||[]).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
                         </select>
-                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("productName")}}/>
                     }
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Полис</div>
@@ -3872,14 +3956,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <div>
                       <div style={flbl}>Оператор (принял полис){req}</div>
                       {_isMreoEmployee?(()=>{const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;const mreoAg=mreoUid?agentDir[mreoUid]:null;return<input value={mreoAg?(mreoAg.name+" "+mreoAg.surname+(mreoAg.internalCode?" ("+mreoAg.internalCode+")":"")):(mreoConfig.name||"МРЭО")} readOnly style={{...finp,width:"100%",boxSizing:"border-box",background:"#f1f5f9",cursor:"not-allowed"}}/>;})():(
-                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
+                      <select value={opFD.agentUid||""} onChange={e=>setOpFD(p=>({...p,agentUid:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("agentUid")}}>
                         <option value="">— Не указан —</option>
                         {staffAgents.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+(a.internalCode?" ("+a.internalCode+")":"")}</option>)}
                       </select>)}
                     </div>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>Дата составления{req}</div>
-                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}/>
+                      <input type="date" value={opFD.date||""} onChange={e=>setOpFD(p=>({...p,date:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("date")}}/>
                     </div>
                   </div>
                   </>)}
@@ -3888,7 +3972,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Страховая премия (AMD){req}{(isLocked&&opEditPol||amtLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock||amtLock)}}/>
+                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock||amtLock),...fe("amount")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Скидка (AMD){req}</div>
@@ -3965,7 +4049,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <div style={{background:"#fff1f2",border:"1.5px solid #fca5a5",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
                       <div style={{fontWeight:700,fontSize:13,color:"#dc2626",marginBottom:4}}>⚠ Заполните обязательные поля:</div>
                       <ul style={{margin:0,paddingLeft:18}}>
-                        {opFormErrors.map(e=><li key={e} style={{fontSize:13,color:"#b91c1c",fontWeight:600}}>{e}</li>)}
+                        {opFormErrors.map(e=><li key={e} style={{fontSize:13,color:"#b91c1c",fontWeight:600}}>{OP_FIELD_LABELS[e]||e}</li>)}
                       </ul>
                     </div>
                   )}
@@ -3975,13 +4059,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                   )}
                   <div style={{display:"flex",gap:8}}>
-                    {(!paidLock||!isViewOnly)&&<button onClick={submitOpForm} style={{...btn("#2563eb"),flex:1,padding:"10px",fontSize:14}}>{paidLock?"Сохранить изменения":opEditPol?"Сохранить изменения":"Добавить полис"}</button>}
+                    {(!paidLock||!isViewOnly)&&<button onClick={submitOpForm} disabled={saveMonthLoading} style={{...btn("#2563eb"),flex:1,padding:"10px",fontSize:14,opacity:saveMonthLoading?0.7:1}}>{saveMonthLoading?"Сохраняю...":paidLock?"Сохранить изменения":opEditPol?"Сохранить изменения":"Добавить полис"}</button>}
                     <button onClick={()=>setOpFormOpen(false)} style={{...btn("#f3f4f6","#374151"),flex:paidLock&&isViewOnly?1:undefined,padding:"10px",fontSize:14}}>{paidLock&&isViewOnly?"Закрыть":"Отмена"}</button>
                   </div>
                   </>);})()}
-                </div>
-              </div>
-            )}
+            </DraggableModal>
 
             {/* Payment modal */}
             {opPayPol&&(
@@ -6305,7 +6387,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             style={{...inp,fontSize:12,padding:"6px 8px",width:"100%"}}/>
                         </div>
                       </div>
-                      <button onClick={()=>{addRnTask(pol,rnTaskForm.note,rnTaskForm.deadline,rnTaskForm.time);setRnTaskForm({note:"",deadline:"",time:""});alert("Напоминание добавлено в задачи");}}
+                      <button onClick={()=>{addRnTask(pol,rnTaskForm.note,rnTaskForm.deadline,rnTaskForm.time);setRnTaskForm({note:"",deadline:"",time:""});showToast("✓ Напоминание добавлено в задачи","success");}}
                         style={{...btn("#d97706",undefined,{fontSize:12,width:"100%"})}}>🔔 Добавить напоминание</button>
                     </div>
                   </div>
@@ -6675,7 +6757,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>{filtered.length} из {auditEntries.length} записей · лимит 1000</div>
                 </div>
                 <div style={{display:"flex",gap:8}}>
-                  {auditEntries.length>0&&<button onClick={()=>{if(window.confirm("Очистить весь журнал?")){{setAuditEntries([]);calcStorage.set("auditLog",JSON.stringify([])).catch(()=>{});}}}} style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11}}>Очистить</button>}
+                  {auditEntries.length>0&&<button onClick={async()=>{if(await showConfirm("Очистить весь журнал?",{danger:true,confirmText:"Очистить"})){setAuditEntries([]);calcStorage.set("auditLog",JSON.stringify([])).catch(()=>{});}}} style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11}}>Очистить</button>}
                   <button onClick={()=>setShowAudit(false)} style={{background:"#1e293b",border:"1px solid #334155",color:"#e2e8f0",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
                 </div>
               </div>
@@ -6869,6 +6951,37 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           </div>
         </>
       )}
+      {/* Toast notifications */}
+      {toasts.length>0&&(
+        <div style={{position:"fixed",top:20,right:20,zIndex:9000,display:"flex",flexDirection:"column",gap:10,maxWidth:380,width:"calc(100vw - 40px)",pointerEvents:"none"}}>
+          {toasts.map(t=>{
+            const bg=t.type==="success"?"#052e16":t.type==="warning"?"#1c1917":"#1c1917";
+            const border=t.type==="success"?"#16a34a":t.type==="warning"?"#d97706":"#dc2626";
+            const icon=t.type==="success"?"✅":t.type==="warning"?"⚠️":"❌";
+            return(
+              <div key={t.id} style={{background:"#1e293b",border:"2px solid "+border,borderRadius:12,padding:"14px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-start",gap:10,pointerEvents:"all",animation:"slideIn 0.2s ease"}}>
+                <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{icon}</span>
+                <div style={{flex:1,fontSize:13,color:"#f1f5f9",lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{t.msg}</div>
+                <button onClick={()=>setToasts(prev=>prev.filter(x=>x.id!==t.id))} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* Confirm modal */}
+      {confirmState&&(
+        <>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:8000}} onClick={()=>{confirmResolveRef.current&&confirmResolveRef.current(false);setConfirmState(null);}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:8001,background:"white",borderRadius:16,padding:"28px 28px 22px",width:400,maxWidth:"calc(100vw - 40px)",boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
+            <div style={{fontSize:15,color:"#0f172a",lineHeight:1.6,marginBottom:24,whiteSpace:"pre-wrap"}}>{confirmState.msg}</div>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+              <button onClick={()=>{confirmResolveRef.current&&confirmResolveRef.current(false);setConfirmState(null);}} style={{padding:"9px 20px",borderRadius:10,border:"1px solid #d1d5db",background:"#f9fafb",color:"#374151",cursor:"pointer",fontSize:14,fontWeight:600}}>Отмена</button>
+              <button onClick={()=>{confirmResolveRef.current&&confirmResolveRef.current(true);setConfirmState(null);}} style={{padding:"9px 20px",borderRadius:10,border:"none",background:confirmState.danger?"#dc2626":"#2563eb",color:"white",cursor:"pointer",fontSize:14,fontWeight:600}}>{confirmState.confirmText||"ОК"}</button>
+            </div>
+          </div>
+        </>
+      )}
+      <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}`}</style>
     </div>
   );
 }
