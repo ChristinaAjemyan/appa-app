@@ -39,6 +39,7 @@ const DEFAULT_MGR_RATES={
   tierThresholds:[0,500000,1000000,1500000,2000000,2500000],
   tierFixes:[0,20000,30000,40000,50000,70000],
   operatorUids:[],
+  operatorOverrides:{},
   managerStartDate:"",
 };
 const DEFAULT_EXPENSE_ROWS=[
@@ -329,10 +330,12 @@ const getMgrPolicyRate=(p,cfg)=>{
   if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
   return(cfg.managerRates&&cfg.managerRates[co])||0;
 };
-const getOpPolicyRate=(p,tier,cfg)=>{
+const getOpPolicyRate=(p,tier,cfg,opUid)=>{
+  const ov=(opUid&&cfg.operatorOverrides?.[opUid])||{};
+  const ec={...cfg,...ov};
   const co=detectCo(p.company)||p.company;
-  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort){const arr=Array.isArray(cfg.armeniaShortOperator)?cfg.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(cfg.armeniaOperator&&cfg.armeniaOperator[grp]&&cfg.armeniaOperator[grp][tier-1])||0;}
-  return(cfg.operatorRates&&cfg.operatorRates[co]&&cfg.operatorRates[co][tier-1])||0;
+  if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort){const arr=Array.isArray(ec.armeniaShortOperator)?ec.armeniaShortOperator:DEFAULT_MGR_RATES.armeniaShortOperator;return arr[tier-1]||0;}const grp=getArmGroup(p.bm);return(ec.armeniaOperator&&ec.armeniaOperator[grp]&&ec.armeniaOperator[grp][tier-1])||0;}
+  return(ec.operatorRates&&ec.operatorRates[co]&&ec.operatorRates[co][tier-1])||0;
 };
 const getAgentRate=(p,agentUid,rates)=>{
   const co=detectCo(p.company)||p.company;
@@ -639,6 +642,45 @@ function MgrRatesPanel({cfg,onSave}){
   );
 }
 
+function OpOverridePanel({uid,cfg,onSave,onRemove}){
+  const ov=(cfg.operatorOverrides||{})[uid]||{};
+  const baseOp=cfg.operatorRates||DEFAULT_MGR_RATES.operatorRates;
+  const[local,setLocal]=useState(()=>({
+    operatorRates:JSON.parse(JSON.stringify(ov.operatorRates||baseOp)),
+    armeniaOperator:JSON.parse(JSON.stringify(ov.armeniaOperator||cfg.armeniaOperator||DEFAULT_MGR_RATES.armeniaOperator)),
+    armeniaShortOperator:JSON.parse(JSON.stringify(ov.armeniaShortOperator||cfg.armeniaShortOperator||DEFAULT_MGR_RATES.armeniaShortOperator)),
+    noFix:ov.noFix!==undefined?ov.noFix:false,
+    tierFixes:JSON.parse(JSON.stringify(ov.tierFixes||cfg.tierFixes||DEFAULT_MGR_RATES.tierFixes)),
+  }));
+  const updArr=(arr,i,val,path)=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));const keys=path.split(".");let o=n;for(let k=0;k<keys.length;k++)o=o[keys[k]];o[i]=parseFloat(val)||0;return n;});
+  const ni=(v,cb,w)=><input type="number" value={v||0} onChange={e=>cb(e.target.value)} style={{...inp,width:w||55,textAlign:"center"}}/>;
+  const TIERS=["С1","С2","С3","С4","С5","С6"];
+  const save=()=>onSave({...local});
+  return(
+    <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:14,marginTop:8,fontSize:13}}>
+      <h4 style={{margin:"0 0 6px",color:"#15803d"}}>% оператора по ступеням (ОСАГО)</h4>
+      <div style={{overflowX:"auto",marginBottom:12}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{COMPANIES.map(c=><th key={c} style={th}>{c}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600,color:"#374151"}}>{t}</td>{COMPANIES.map(c=><td key={c} style={td}>{ni(((local.operatorRates||{})[c]||[])[i],v=>updArr(local.operatorRates[c]||[],i,v,"operatorRates."+c))}</td>)}</tr>)}</tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#15803d"}}>% оператора Armenia по ступеням</h4>
+      <div style={{overflowX:"auto",marginBottom:12}}><table style={{borderCollapse:"collapse"}}><thead><tr><th style={th}>Ступень</th>{ARM_GROUPS.map(g=><th key={g} style={th}>{"Арм."+g}</th>)}</tr></thead><tbody>{TIERS.map((t,i)=><tr key={t}><td style={{...td,fontWeight:600}}>{t}</td>{ARM_GROUPS.map(g=><td key={g} style={td}>{ni(((local.armeniaOperator||{})[g]||[])[i],v=>updArr((local.armeniaOperator||{})[g]||[],i,v,"armeniaOperator."+g))}</td>)}</tr>)}</tbody></table></div>
+      <h4 style={{margin:"0 0 4px",color:"#dc2626"}}>Armenia — короткий срок (до 87 дней) по ступеням</h4>
+      <div style={{overflowX:"auto",marginBottom:12}}><table style={{borderCollapse:"collapse"}}><thead><tr>{TIERS.map(t=><th key={t} style={th}>{"Оп."+t}</th>)}</tr></thead><tbody><tr>{(local.armeniaShortOperator||DEFAULT_MGR_RATES.armeniaShortOperator).map((v,i)=><td key={i} style={td}>{ni(v,val=>setLocal(p=>{const n=JSON.parse(JSON.stringify(p));if(!Array.isArray(n.armeniaShortOperator))n.armeniaShortOperator=[...DEFAULT_MGR_RATES.armeniaShortOperator];n.armeniaShortOperator[i]=parseFloat(val)||0;return n;}))}</td>)}</tr></tbody></table></div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:6,padding:"8px 12px"}}>
+        <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontWeight:600,color:"#92400e"}}>
+          <input type="checkbox" checked={!!local.noFix} onChange={e=>setLocal(p=>({...p,noFix:e.target.checked}))} style={{width:15,height:15}}/>
+          Нет фиксированной части (оклад = 0)
+        </label>
+      </div>
+      {!local.noFix&&(<>
+        <h4 style={{margin:"0 0 4px",color:"#d97706"}}>Фиксированная часть по ступеням (AMD)</h4>
+        <div style={{overflowX:"auto",marginBottom:12}}><table style={{borderCollapse:"collapse"}}><thead><tr>{TIERS.map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody><tr>{(local.tierFixes||[]).map((v,i)=><td key={i} style={td}>{ni(v,val=>{setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.tierFixes[i]=parseFloat(val)||0;return n;});},80)}</td>)}</tr></tbody></table></div>
+      </>)}
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={save} style={btn("#16a34a")}>💾 Сохранить</button>
+        <button onClick={onRemove} style={btn("#f3f4f6","#dc2626",{border:"1px solid #fca5a5"})}>✕ Удалить переопределение</button>
+      </div>
+    </div>
+  );
+}
 const valR=r=>{try{return r&&r.officeRates&&r.agentRates;}catch{return false;}};
 const valE=e=>{try{return Array.isArray(e)&&e.every(x=>x.id&&x.company&&typeof x.enabled==="boolean"&&Array.isArray(x.conditions));}catch{return false;}};
 const valD=d=>{try{return d&&typeof d==="object"&&!Array.isArray(d);}catch{return false;}};
@@ -827,6 +869,7 @@ export default function App(){
   const[mgrDetail,setMgrDetail]=useState(null);
   const[showMgrSettings,setShowMgrSettings]=useState(false);
   const[mgrNewOp,setMgrNewOp]=useState("");
+  const[mgrOpOverrideUid,setMgrOpOverrideUid]=useState(null);
   const[officeExpenses,setOfficeExpenses]=useState({});
   const[officeExpLoaded,setOfficeExpLoaded]=useState(false);
   const[expensesPending,setExpensesPending]=useState(false);
@@ -921,11 +964,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOfficeExpenses(prev=>{
       if(prev[selMonth])return prev;
       const months=Object.keys(prev).sort();
-      const lastMo=months[months.length-1];
-      const rows=lastMo
-        ?prev[lastMo].filter(r=>r.type==="static").map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
+      const _prevCal=(m)=>{const[y,mo]=m.split("-").map(Number);return mo===1?`${y-1}-12`:`${y}-${String(mo-1).padStart(2,"0")}`;};
+      const sourceMo=prev[_prevCal(selMonth)]?_prevCal(selMonth):(months.length?months[months.length-1]:null);
+      const rows=sourceMo
+        ?prev[sourceMo].map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
         :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
-      if(lastMo){setExpensesPending(true);setExpensesPendingFrom(lastMo);}
+      if(sourceMo){setExpensesPending(true);setExpensesPendingFrom(sourceMo);}
       return{...prev,[selMonth]:rows};
     });
   },[tab,selMonth,officeExpLoaded]);
@@ -2312,7 +2356,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       ac(ws,rw,0,"ЗАЧЁТНЫЕ ПОЛИСЫ ("+vp.length+")",sDark("166534","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
       VHDRS.forEach((h,c)=>ac(ws,rw,c,h,sLight("D1FAE5")));rw++;
       vp.forEach((p,i)=>{
-        const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg);
+        const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg,r.uid);
         const vals=showMgr
           ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr,Math.round(p.amount*mr/100),or,Math.round(p.amount*or/100),""]
           :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or,Math.round(p.amount*or/100),""];
@@ -2405,11 +2449,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
   const _computeOpR=(agentData,cfg)=>agentData.filter(a=>(cfg.operatorUids||[]).includes(a.uid)).map(op=>{
-    const thrs=cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
-    const fixes=cfg.tierFixes||DEFAULT_MGR_RATES.tierFixes;
+    const ov=(cfg.operatorOverrides||{})[op.uid]||{};
+    const thrs=ov.tierThresholds||cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
+    const fixes=ov.noFix?[0,0,0,0,0,0]:(ov.tierFixes||cfg.tierFixes||DEFAULT_MGR_RATES.tierFixes);
     const tier=getTierMgr(op.validSales,thrs);const fix=fixes[tier-1]||0;
     let mi=0,oi=0;
-    op.policies.filter(p=>!p.exception).forEach(p=>{mi+=Math.round(p.amount*getMgrPolicyRate(p,cfg)/100);oi+=Math.round(p.amount*getOpPolicyRate(p,tier,cfg)/100);});
+    op.policies.filter(p=>!p.exception).forEach(p=>{mi+=Math.round(p.amount*getMgrPolicyRate(p,cfg)/100);oi+=Math.round(p.amount*getOpPolicyRate(p,tier,cfg,op.uid)/100);});
     return{uid:op.uid,totalSales:op.totalSales,validSales:op.validSales,tier,fix,mi,oi,profit:mi-oi-fix,policies:op.policies};
   });
 
@@ -4631,16 +4676,27 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 {/* Operator selection */}
                 <div style={{marginBottom:16}}>
                   <div style={{fontWeight:600,fontSize:13,marginBottom:8,color:"#374151"}}>Операторы в команде</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-                    {(cfg.operatorUids||[]).map(uid=>{const a=agentDir[uid];const nm=a?(a.name+" "+a.surname).trim():uid;return(
-                      <span key={uid} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#ede9fe",border:"1px solid #c4b5fd",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#5b21b6",fontWeight:600}}>
-                        {nm}
-                        <button onClick={()=>saveManagerConfig({...cfg,operatorUids:(cfg.operatorUids||[]).filter(x=>x!==uid)})} style={{background:"none",border:"none",cursor:"pointer",color:"#6b7280",fontSize:14,padding:0,lineHeight:1}}>×</button>
-                      </span>
-                    );})}
-                    {(cfg.operatorUids||[]).length===0&&<span style={{color:"#9ca3af",fontSize:12}}>Нет операторов</span>}
-                  </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  {(cfg.operatorUids||[]).length===0&&<div style={{color:"#9ca3af",fontSize:12,marginBottom:8}}>Нет операторов</div>}
+                  {(cfg.operatorUids||[]).map(uid=>{
+                    const a=agentDir[uid];const nm=a?(a.name+" "+a.surname).trim():uid;
+                    const hasOv=!!(cfg.operatorOverrides||{})[uid];
+                    const isExpanded=mgrOpOverrideUid===uid;
+                    return(
+                      <div key={uid} style={{marginBottom:8}}>
+                        <div style={{display:"inline-flex",alignItems:"center",gap:5,background:"#ede9fe",border:"1px solid "+(hasOv?"#7c3aed":"#c4b5fd"),borderRadius:6,padding:"4px 10px",fontSize:12,color:"#5b21b6",fontWeight:600}}>
+                          {nm}
+                          {hasOv&&<span style={{background:"#7c3aed",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10}}>инд.</span>}
+                          <button onClick={()=>setMgrOpOverrideUid(isExpanded?null:uid)} style={{background:"none",border:"none",cursor:"pointer",color:isExpanded?"#7c3aed":"#9ca3af",fontSize:13,padding:0,lineHeight:1}} title="Индивидуальные ставки">⚙</button>
+                          <button onClick={()=>{saveManagerConfig({...cfg,operatorUids:(cfg.operatorUids||[]).filter(x=>x!==uid)});if(mgrOpOverrideUid===uid)setMgrOpOverrideUid(null);}} style={{background:"none",border:"none",cursor:"pointer",color:"#6b7280",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                        </div>
+                        {isExpanded&&<OpOverridePanel uid={uid} cfg={cfg}
+                          onSave={ovData=>saveManagerConfig({...cfg,operatorOverrides:{...(cfg.operatorOverrides||{}),[uid]:ovData}})}
+                          onRemove={()=>{const ov={...(cfg.operatorOverrides||{})};delete ov[uid];saveManagerConfig({...cfg,operatorOverrides:ov});setMgrOpOverrideUid(null);}}
+                        />}
+                      </div>
+                    );
+                  })}
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
                     <select value={mgrNewOp} onChange={e=>setMgrNewOp(e.target.value)} style={{...inp,padding:"4px 8px",fontSize:12,minWidth:220}}>
                       <option value="">Выберите агента...</option>
                       {agentsNotOp.map(([id,a])=><option key={id} value={id}>{a.name+" "+a.surname+" ("+(a.internalCode||id)+")"}</option>)}
@@ -4728,7 +4784,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             )}
             {/* Detail view */}
             {detailResult&&detailOp&&(()=>{
-              const thrs=cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
+              const _dov=(cfg.operatorOverrides||{})[detailOp.uid]||{};
+              const thrs=_dov.tierThresholds||cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
               const tier=detailResult.tier;
               return(
                 <div style={{border:"1px solid #d8b4fe",borderRadius:8,marginBottom:16,overflow:"hidden"}}>
@@ -4747,7 +4804,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead><tr style={{background:"#f0fdf4"}}>{["№ полиса","Компания","Страхователь","Марка","Рег.номер","Регион","БМ","Мощ-ть","Срок","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер."].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
                       <tbody>{detailOp.policies.filter(p=>!p.exception).map((p,i)=>{
-                        const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,tier,cfg);
+                        const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,tier,cfg,detailOp.uid);
                         const mc=Math.round(p.amount*mr/100);const oc=Math.round(p.amount*or/100);
                         return(
                           <tr key={i} style={{background:i%2===0?"white":"#f0fdf4",borderBottom:"1px solid #d1fae5"}}>
