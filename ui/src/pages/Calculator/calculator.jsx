@@ -980,26 +980,24 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   useEffect(()=>{
     if(tab!=="income"||!officeExpLoaded)return;
     setExpensesPending(false);
-    setOfficeExpenses(prev=>{
-      if(prev[selMonth])return prev;
-      const months=Object.keys(prev).sort();
-      const _prevCal=(m)=>{const[y,mo]=m.split("-").map(Number);return mo===1?`${y-1}-12`:`${y}-${String(mo-1).padStart(2,"0")}`;};
-      const sourceMo=prev[_prevCal(selMonth)]?_prevCal(selMonth):(months.length?months[months.length-1]:null);
-      const rows=sourceMo
-        ?prev[sourceMo].map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
-        :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
-      if(sourceMo){setExpensesPending(true);setExpensesPendingFrom(sourceMo);}
-      return{...prev,[selMonth]:rows};
-    });
+    if(officeExpenses[selMonth])return;
+    const months=Object.keys(officeExpenses).sort();
+    const _prevCal=(m)=>{const[y,mo]=m.split("-").map(Number);return mo===1?`${y-1}-12`:`${y}-${String(mo-1).padStart(2,"0")}`;};
+    const sourceMo=officeExpenses[_prevCal(selMonth)]?_prevCal(selMonth):(months.length?months[months.length-1]:null);
+    const rows=sourceMo
+      ?officeExpenses[sourceMo].map(r=>({...r,id:"ex"+Math.random().toString(36).slice(2)}))
+      :DEFAULT_EXPENSE_ROWS.map(r=>({...r}));
+    if(sourceMo){setExpensesPending(true);setExpensesPendingFrom(sourceMo);}
+    saveOfficeExpenses({...officeExpenses,[selMonth]:rows});
   },[tab,selMonth,officeExpLoaded]);
   const saveDir=d=>{setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{alert("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
   const _saveErr=(what)=>(err)=>alert("⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+err.message);
-  const saveOfficeCodes=codes=>{setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(_saveErr("коды офиса"));};
+  const saveOfficeCodes=codes=>{const prev=officeCodes;setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(err=>{setOfficeCodes(prev);_saveErr("коды офиса")(err);});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
-  const saveRates=r=>{setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(_saveErr("ставки комиссий"));};
-  const saveVR=r=>{setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(_saveErr("ставки добровольных"));};
-  const saveExcs=e=>{setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(_saveErr("исключения"));};
+  const saveRates=r=>{const prev=rates;setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(err=>{setRates(prev);_saveErr("ставки комиссий")(err);});};
+  const saveVR=r=>{const prev=volRates;setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(err=>{setVolRates(prev);_saveErr("ставки добровольных")(err);});};
+  const saveExcs=e=>{const prev=exceptions;setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(err=>{setExceptions(prev);_saveErr("исключения")(err);});};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
   const mreoAgentUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
@@ -1181,10 +1179,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const saveOfficeStaff=(list)=>{setOfficeStaff(list);saveAppSettings({officeStaff:list});};
   const saveReminders=(list)=>{setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>console.error("reminders save failed:",err));};
-  const saveEmployees=(list)=>{setEmployees(list);saveAppSettings({employees:list});logAction("settings","Изменён список сотрудников","—");};
-  const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация менеджера"));logAction("settings","Изменена конфигурация менеджера","—");};
-  const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(_saveErr("расходы офиса"));};
-  const saveMreoConfig=cfg=>{setMreoConfig(cfg);calcStorage.set("mreoConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация МРЭО"));logAction("settings","Изменена конфигурация МРЭО","—");};
+  const saveEmployees=(list)=>{const prev=employees;setEmployees(list);const s={adminPin,employees:list,officeStaff};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{setEmployees(prev);_saveErr("сотрудники")(err);});logAction("settings","Изменён список сотрудников","—");};
+  const saveManagerConfig=cfg=>{const prev=managerConfig;setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(err=>{setManagerConfig(prev);_saveErr("конфигурация менеджера")(err);});logAction("settings","Изменена конфигурация менеджера","—");};
+  const saveOfficeExpenses=data=>{const prev=officeExpenses;setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(err=>{setOfficeExpenses(prev);_saveErr("расходы офиса")(err);});};
+  const saveMreoConfig=cfg=>{const prev=mreoConfig;setMreoConfig(cfg);calcStorage.set("mreoConfig",JSON.stringify(cfg)).catch(err=>{setMreoConfig(prev);_saveErr("конфигурация МРЭО")(err);});logAction("settings","Изменена конфигурация МРЭО","—");};
   const changePin=async()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
@@ -1702,7 +1700,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
   };
 
-  const saveOpMonth=(pols)=>{setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(_saveErr("полисы офиса"));};
+  const saveOpMonth=(pols)=>{const prev=opCurrentMonth;setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(err=>{setOpCurrentMonth(prev);_saveErr("полисы офиса")(err);});};
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true,passportNum:"",bankAccount:"",email:""});
   const addOfficePol=(fd)=>{
@@ -2263,6 +2261,80 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     a.href=url;a.download="Доходы_"+month+".xlsx";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   };
 
+  const exportUnifiedXlsx=()=>{
+    const month=selMonth;
+    const expRows=officeExpenses[month]||[];
+    const opPols=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР")&&!isMreoPol(p));
+    const mgrActive=!managerConfig.managerStartDate||selMonth>=managerConfig.managerStartDate;
+    const opR=mgrActive?_computeOpR(agentData,managerConfig):[];
+    const opUids=mgrActive?new Set(managerConfig.operatorUids||[]):new Set();
+    const totMgr=opR.reduce((s,r)=>s+r.mi,0);
+    const totOp=opR.reduce((s,r)=>s+r.oi,0);
+    const totFix=opR.reduce((s,r)=>s+r.fix,0);
+    const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
+    const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
+    const offDirO=opPols.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;return s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0));},0);
+    const offDirV=opPols.filter(p=>p.polType==="voluntary").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);return s+Math.max(0,Math.round(p.amount*(vr?vr.officeRate:0)/100)-(p.discount||0));},0);
+    const osagoGross=osagoAgentIncome+offDirO;
+    const volGross=volAgentIncome+offDirV;
+    const totalGross=osagoGross+volGross;
+    const agentCommsTotal=agentData.filter(a=>!opUids.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0)+effVol.reduce((s,v)=>s+v.agentComm,0);
+    const totalExp=expRows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+    const netProfit=totalGross-agentCommsTotal-totMgr-totalExp;
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sT=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:12,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center"}});
+    const sH=rgb=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}});
+    const sC=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
+    const sN=(bg,bold,col)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold,color:col?{rgb:col}:undefined},border:borders,alignment:{horizontal:"right"}});
+    const ac=(ws,r,c,v,s)=>{ws[XLSXStyle.utils.encode_cell({r,c})]={v,t:typeof v==="number"?"n":"s",s};};
+    const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
+    const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+    const wb=XLSXStyle.utils.book_new();
+    // ── Sheet 1: Financial summary ──
+    const ws1={};let rw=0;const mg1=[];
+    ac(ws1,rw,0,"Финансовая сводка — "+fmtMonth(month),sT("1E3A5F"));mg1.push({s:{r:rw,c:0},e:{r:rw,c:1}});rw+=2;
+    ["Показатель","Сумма (AMD)"].forEach((h,c)=>ac(ws1,rw,c,h,sH("DBEAFE")));rw++;
+    [["Валовый доход ОСАГО",osagoGross,"F0F9FF"],["Валовый доход Добровольные",volGross,"F0F9FF"],["Итого валовый доход",totalGross,"DBEAFE"]].forEach(([l,v,bg])=>{ac(ws1,rw,0,l,sC(bg,l.startsWith("Итого")));ac(ws1,rw,1,v,sN(bg,l.startsWith("Итого")));rw++;});
+    rw++;
+    [["Выплачено агентам",agentCommsTotal,"FFF7ED"],["Выплачено менеджеру",totMgr,"FFF7ED"],["Расходы офиса",totalExp,"FEE2E2"]].forEach(([l,v,bg])=>{ac(ws1,rw,0,l,sC(bg));ac(ws1,rw,1,v,sN(bg));rw++;});
+    rw++;
+    const nCol=netProfit>=0?"DCFCE7":"FEE2E2";const nTxt=netProfit>=0?"166534":"DC2626";
+    ac(ws1,rw,0,"Чистая прибыль",sC(nCol,true));ac(ws1,rw,1,netProfit,sN(nCol,true,nTxt));rw++;
+    ws1["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:1}});
+    ws1["!cols"]=[{wch:35},{wch:18}];ws1["!merges"]=mg1;
+    XLSXStyle.utils.book_append_sheet(wb,ws1,"Сводка");
+    // ── Sheet 2: Agent payroll ──
+    const pRows=buildAllPayrollRows(agentData.filter(a=>!opUids.has(a.uid)),effVol,agentDir,officeCodes);
+    const ws2={};rw=0;const mg2=[];
+    ac(ws2,rw,0,"Начисления агентам — "+fmtMonth(month),sT("166534"));mg2.push({s:{r:rw,c:0},e:{r:rw,c:5}});rw+=2;
+    ["Агент","768-код","Полисов","Начислено (AMD)","Долг доброволь.","К выплате (AMD)"].forEach((h,c)=>ac(ws2,rw,c,h,sH("D1FAE5")));rw++;
+    pRows.forEach((r,i)=>{const bg=i%2===0?"FFFFFF":"F0FDF4";[r.name,r.ic,r.polCount,r.accrued,r.volDebt>0?r.volDebt:0,r.net].forEach((v,c)=>ac(ws2,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;});
+    ["ИТОГО","",pRows.reduce((s,r)=>s+r.polCount,0),pRows.reduce((s,r)=>s+r.accrued,0),"",pRows.reduce((s,r)=>s+r.net,0)].forEach((v,c)=>ac(ws2,rw,c,v,typeof v==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw++;
+    ws2["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:5}});
+    ws2["!cols"]=[{wch:28},{wch:12},{wch:10},{wch:18},{wch:18},{wch:18}];ws2["!merges"]=mg2;
+    XLSXStyle.utils.book_append_sheet(wb,ws2,"Агенты");
+    // ── Sheet 3: Operators ──
+    if(opR.length>0){
+      const ws3={};rw=0;const mg3=[];
+      ac(ws3,rw,0,"Операторы (канал менеджера) — "+fmtMonth(month),sT("4C1D95"));mg3.push({s:{r:rw,c:0},e:{r:rw,c:7}});rw+=2;
+      ["Оператор","Код","Всего продаж","Зачётные","Ступень","Фикс (AMD)","Начислено (AMD)","К выплате (AMD)"].forEach((h,c)=>ac(ws3,rw,c,h,sH("EDE9FE")));rw++;
+      opR.forEach((r,i)=>{const bg=i%2===0?"FFFFFF":"FAF5FF";[gn(r.uid),gc(r.uid),r.totalSales,r.validSales,"С"+r.tier,r.fix,r.oi,r.oi+r.fix].forEach((v,c)=>ac(ws3,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;});
+      ["ИТОГО","",opR.reduce((s,r)=>s+r.totalSales,0),opR.reduce((s,r)=>s+r.validSales,0),"",totFix,totOp,totOp+totFix].forEach((v,c)=>ac(ws3,rw,c,v,typeof v==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw++;
+      ws3["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:7}});
+      ws3["!cols"]=[{wch:28},{wch:12},{wch:16},{wch:16},{wch:10},{wch:14},{wch:16},{wch:16}];ws3["!merges"]=mg3;
+      XLSXStyle.utils.book_append_sheet(wb,ws3,"Операторы");
+    }
+    // ── Sheet 4: Expenses ──
+    const ws4={};rw=0;const mg4=[];
+    ac(ws4,rw,0,"Расходы офиса — "+fmtMonth(month),sT("B45309"));mg4.push({s:{r:rw,c:0},e:{r:rw,c:2}});rw+=2;
+    ["Категория","Название","Сумма (AMD)"].forEach((h,c)=>ac(ws4,rw,c,h,sH("FEF3C7")));rw++;
+    expRows.forEach((r,i)=>{const bg=i%2===0?"FFFFFF":"FFFBEB";[r.cat||"",r.name||"",Number(r.amount)||0].forEach((v,c)=>ac(ws4,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;});
+    ["ИТОГО","",totalExp].forEach((v,c)=>ac(ws4,rw,c,v,typeof v==="number"?sN("FDE68A",true):sC("FDE68A",true)));rw++;
+    ws4["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:2}});
+    ws4["!cols"]=[{wch:20},{wch:30},{wch:16}];ws4["!merges"]=mg4;
+    XLSXStyle.utils.book_append_sheet(wb,ws4,"Расходы");
+    _dlXlsx(wb,"Отчёт_"+month+".xlsx");
+  };
   const agName=a=>{const n=getName(a.uid);if(n)return n;if(a.uid.startsWith("__raw__"))return a.uid.replace("__raw__","")+" (нет в справочнике)";return a.uid;};
 
 
@@ -4921,12 +4993,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const salesGross=osagoGross+volGross;
         const osagoPayTotal=osagoAgentPay+totMgr;
         const agentPayTotal=osagoPayTotal+volAgentPay;
-        const salesNet=salesGross-agentPayTotal;
-        const agentSalesGross=osagoAgentIncome+volAgentIncome;
-        const officeSalesGross=officeDirectOsago+officeDirectVol;
-        const agentSalesNet=agentSalesGross-agentPayTotal;
-        const totalExpenses=expensesPending?0:rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
-        const netProfit=salesNet-totalExpenses;
+        const totalExpenses=rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
         // ── per-company breakdowns ──
         const _accCo=(map,co,f)=>{if(!map[co])map[co]={};Object.entries(f).forEach(([k,v])=>{map[co][k]=(map[co][k]||0)+(v||0);});};
         const _sumCo=(map,key)=>Object.values(map).reduce((s,v)=>s+(v[key]||0),0);
@@ -4969,7 +5036,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           divLine:{flex:1,height:1,background:"#e5e7eb"},
           divLbl:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",color:"#9ca3af"},
         };
-        const _setExp=d=>expensesPending?setOfficeExpenses(d):saveOfficeExpenses(d);
+        const _setExp=d=>saveOfficeExpenses(d);
         const updRow=(id,key,val)=>{const nr=rows.map(r=>r.id===id?{...r,[key]:val}:r);_setExp({...officeExpenses,[selMonth]:nr});};
         const delRow=id=>_setExp({...officeExpenses,[selMonth]:rows.filter(r=>r.id!==id)});
         const STATIC_CATS=["Зарплаты","Коммунальные","Связь","Налоги","Прочее"];
@@ -5087,16 +5154,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                 <div style={{fontSize:13,color:"#92400e"}}>
                   <strong>📋 Расходы скопированы из {fmtMonth(expensesPendingFrom)}</strong>
-                  <span style={{marginLeft:8,opacity:0.8}}>— проверьте суммы. Они не сохранены и не участвуют в расчёте прибыли.</span>
+                  <span style={{marginLeft:8,opacity:0.8}}>— проверьте и при необходимости скорректируйте суммы. Расходы уже участвуют в расчёте прибыли.</span>
                 </div>
                 <button onClick={()=>{saveOfficeExpenses({...officeExpenses,[selMonth]:rows});setExpensesPending(false);}} style={btn("#d97706",undefined,{fontSize:13,fontWeight:700,padding:"7px 18px"})}>
-                  ✓ Подтвердить расходы
+                  ✓ Проверено
                 </button>
               </div>
             )}
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}}>
               <button onClick={exportDetailedIncomeXlsx} style={btn("#0f766e",undefined,{fontSize:12})}>⬇ Подробный Excel (по полисам)</button>
               <button onClick={exportIncomeExcel} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>
+              <button onClick={exportUnifiedXlsx} style={btn("#1d4ed8",undefined,{fontSize:12})}>⬇ Единый отчёт</button>
             </div>
             {ChartBlock}
             {(()=>{
