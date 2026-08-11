@@ -1743,10 +1743,21 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const cancelOpPayment=async(pol)=>{
     const pd=pol.paidDate?pol.paidDate.slice(0,10):null;
-    const _closedDays=isMreoPol(pol)?mreoCashDays:cashDays;
-    if(pd&&_closedDays[pd]?.closed){
-      window.alert("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.");
-      return;
+    if(pd){
+      try{
+        const _isMreo=isMreoPol(pol);
+        const _cbKey=_isMreo?"cashBook_mro:":"cashBook:";
+        const cashMo=pd.slice(0,7);
+        const cbRaw=cashMo===selMonth?{value:JSON.stringify(_isMreo?mreoCashDays:cashDays)}:await calcStorage.get(_cbKey+cashMo);
+        const cb=cbRaw?.value?JSON.parse(cbRaw.value):{};
+        if(cb[pd]?.closed){
+          window.alert("⛔ Касса за "+new Date(pd+"T00:00:00").toLocaleDateString("ru-RU")+" уже закрыта.\n\nСначала откройте кассу за этот день, затем отменяйте оплату.");
+          return;
+        }
+      }catch{
+        alert("⛔ Ошибка чтения кассового журнала.\n\nОтмена заблокирована для безопасности. Перезагрузите страницу и повторите попытку.");
+        return;
+      }
     }
     if(!window.confirm("Отменить оплату для «"+(pol.insuredName||"—")+"» / "+(pol.policyNum||"б/н")+"?\n\nПолис вернётся в статус «Не оплачен»."))return;
     const updated={...pol,paid:false,paidAt:null,paidAmount:null,paymentType:null,paidDate:null};
