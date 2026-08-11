@@ -491,6 +491,24 @@ const th={padding:"7px 10px",fontWeight:600,fontSize:12,whiteSpace:"nowrap",colo
 const td={padding:"7px 10px",fontSize:13,borderBottom:"1px solid #e2e8f0",color:"#1e293b"};
 const inp={border:"1.5px solid #94a3b8",borderRadius:8,padding:"4px 8px",fontSize:13,boxSizing:"border-box",color:"#1e293b",background:"#f8fafc"};
 const btn=(bg,col,ex)=>({padding:"5px 12px",background:bg||"#2563eb",color:col||"#fff",border:"1.5px solid rgba(0,0,0,0.25)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,...(ex||{})});
+
+const _hashPin=async(pin)=>{
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,hash:"SHA-256",iterations:100000},km,256);
+  return"pbkdf2:"+btoa(String.fromCharCode(...salt))+":"+btoa(String.fromCharCode(...new Uint8Array(bits)));
+};
+const _verifyPin=async(pin,stored)=>{
+  if(!stored||!stored.startsWith("pbkdf2:")){return stored===pin;}
+  const[,sb,hb]=stored.split(":");
+  const salt=Uint8Array.from(atob(sb),c=>c.charCodeAt(0));
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,hash:"SHA-256",iterations:100000},km,256);
+  const hb2=btoa(String.fromCharCode(...new Uint8Array(bits)));
+  if(hb.length!==hb2.length)return false;
+  let d=0;for(let i=0;i<hb.length;i++)d|=hb.charCodeAt(i)^hb2.charCodeAt(i);
+  return d===0;
+};
 const fmt=n=>Number(n).toLocaleString("ru-RU")+" ֏";
 const genUid=()=>Math.random().toString(36).slice(2,8);
 
@@ -866,6 +884,7 @@ export default function App(){
   const[reminders,setReminders]=useState([]);
   const[newReminder,setNewReminder]=useState("");
   const[managerConfig,setManagerConfig]=useState(DEFAULT_MGR_RATES);
+  const[loginLoading,setLoginLoading]=useState(false);
   const[mgrDetail,setMgrDetail]=useState(null);
   const[showMgrSettings,setShowMgrSettings]=useState(false);
   const[mgrNewOp,setMgrNewOp]=useState("");
@@ -991,17 +1010,25 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const s={adminPin,employees,officeStaff,...updates};
     calcStorage.set("appSettings",JSON.stringify(s)).catch(_saveErr("настройки приложения"));
   };
-  const tryLogin=()=>{
+  const tryLogin=async()=>{
     const p=loginPin.trim();
     if(!p){setLoginError("Введите PIN");return;}
-    if(p===adminPin){setRole("admin");setCurrentEmployee(null);setLoginPin("");setLoginError("");logAction("login","Вход в систему","—","Администратор");return;}
-    const emp=employees.find(e=>e.pin===p);
-    if(emp){
-      setRole("employee");setCurrentEmployee(emp);setLoginPin("");setLoginError("");
-      logAction("login","Вход в систему","—",emp.name);
-      return;
-    }
-    setLoginError("Неверный PIN");
+    setLoginLoading(true);
+    try{
+      if(await _verifyPin(p,adminPin)){
+        if(!adminPin.startsWith("pbkdf2:")){const h=await _hashPin(p);setAdminPin(h);saveAppSettings({adminPin:h});}
+        setRole("admin");setCurrentEmployee(null);setLoginPin("");setLoginError("");
+        logAction("login","Вход в систему","—","Администратор");return;
+      }
+      for(const emp of employees){
+        if(await _verifyPin(p,emp.pin)){
+          if(!emp.pin.startsWith("pbkdf2:")){const h=await _hashPin(p);saveEmployees(employees.map(e=>e.id===emp.id?{...e,pin:h}:e));}
+          setRole("employee");setCurrentEmployee(emp);setLoginPin("");setLoginError("");
+          logAction("login","Вход в систему","—",emp.name);return;
+        }
+      }
+      setLoginError("Неверный PIN");
+    }finally{setLoginLoading(false);}
   };
   useEffect(()=>{calcStorage.get("auditLog").then(r=>{if(r?.value)setAuditEntries(JSON.parse(r.value));}).catch(()=>{});},[]);
   useEffect(()=>{calcStorage.get("reminders").then(r=>{if(r?.value)setReminders(JSON.parse(r.value));}).catch(()=>{});},[]);
@@ -1158,11 +1185,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveManagerConfig=cfg=>{setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация менеджера"));logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(_saveErr("расходы офиса"));};
   const saveMreoConfig=cfg=>{setMreoConfig(cfg);calcStorage.set("mreoConfig",JSON.stringify(cfg)).catch(_saveErr("конфигурация МРЭО"));logAction("settings","Изменена конфигурация МРЭО","—");};
-  const changePin=()=>{
+  const changePin=async()=>{
     if(!newPinA.trim()){setPinChangeMsg("Введите новый PIN");return;}
     if(newPinA!==newPinB){setPinChangeMsg("PIN не совпадают");return;}
-    const np=newPinA.trim();
-    setAdminPin(np);saveAppSettings({adminPin:np});
+    const h=await _hashPin(newPinA.trim());
+    setAdminPin(h);saveAppSettings({adminPin:h});
     setNewPinA("");setNewPinB("");
     setPinChangeMsg("✓ PIN изменён");setTimeout(()=>setPinChangeMsg(""),3000);
   };
@@ -1749,7 +1776,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           alert("⛔ Касса за "+new Date(pol.paidDate+"T00:00:00").toLocaleDateString("ru-RU")+" закрыта.\n\nОткройте кассу перед удалением оплаченного полиса.");
           return;
         }
-      }catch{}
+      }catch{alert("⛔ Ошибка чтения кассового журнала.\n\nУдаление заблокировано для безопасности. Перезагрузите страницу и повторите попытку.");return;}
     }
     if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
     else{
@@ -2649,14 +2676,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             type="password"
             value={loginPin}
             onChange={e=>setLoginPin(_ascii(e.target.value,16))}
-            onKeyDown={e=>e.key==="Enter"&&tryLogin()}
+            onKeyDown={e=>e.key==="Enter"&&!loginLoading&&tryLogin()}
             placeholder="••••••"
             maxLength={16}
-            style={{...inp,width:"100%",fontSize:22,textAlign:"center",letterSpacing:6,padding:"10px 16px",marginBottom:12,boxSizing:"border-box"}}
+            disabled={loginLoading}
+            style={{...inp,width:"100%",fontSize:22,textAlign:"center",letterSpacing:6,padding:"10px 16px",marginBottom:12,boxSizing:"border-box",opacity:loginLoading?0.6:1}}
             autoFocus
           />
           {loginError&&<div style={{color:"#dc2626",fontSize:13,marginBottom:10,fontWeight:600}}>{loginError}</div>}
-          <button onClick={tryLogin} style={{...btn("#1d4ed8"),width:"100%",fontSize:15,padding:"10px 0"}}>Войти</button>
+          <button onClick={tryLogin} disabled={loginLoading} style={{...btn("#1d4ed8"),width:"100%",fontSize:15,padding:"10px 0",opacity:loginLoading?0.7:1}}>{loginLoading?"Проверка...":"Войти"}</button>
         </div>
       </div>
     );
@@ -2784,7 +2812,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       return(
                         <tr key={emp.id}>
                           <td style={td}><input value={emp.name} onChange={e=>{const l=[...employees];l[i]={...l[i],name:e.target.value.slice(0,60)};saveEmployees(l);}} maxLength={60} style={{...inp,width:"100%"}}/></td>
-                          <td style={td}><input type="password" value={emp.pin} onChange={e=>{const l=[...employees];l[i]={...l[i],pin:_ascii(e.target.value,16)};saveEmployees(l);}} maxLength={16} style={{...inp,width:90,letterSpacing:3}}/></td>
+                          <td style={td}><input type="password"
+                            value={emp.pin.startsWith?.("pbkdf2:")?"":emp.pin}
+                            placeholder={emp.pin.startsWith?.("pbkdf2:")?"новый PIN":""}
+                            onChange={e=>{const l=[...employees];l[i]={...l[i],pin:_ascii(e.target.value,16)};setEmployees(l);}}
+                            onBlur={async e=>{const raw=e.target.value.trim();if(!raw||raw===emp.pin)return;const h=await _hashPin(raw);const l=[...employees];l[i]={...l[i],pin:h};saveEmployees(l);}}
+                            maxLength={16} style={{...inp,width:90,letterSpacing:3}}/></td>
                           <td style={{...td,fontSize:11}}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                               {Object.entries(TAB_LABELS).map(([id,label])=>(
@@ -2806,7 +2839,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     })}
                   </tbody>
                 </table>
-                <button onClick={()=>saveEmployees([...employees,{id:"emp"+Date.now(),name:"Новый сотрудник",pin:"000000",tabs:["policydb","officesales"],viewOnly:false}])} style={btn("#2563eb",undefined,{fontSize:12})}>+ Добавить сотрудника</button>
+                <button onClick={async()=>{const h=await _hashPin("000000");saveEmployees([...employees,{id:"emp"+Date.now(),name:"Новый сотрудник",pin:h,tabs:["policydb","officesales"],viewOnly:false}]);}} style={btn("#2563eb",undefined,{fontSize:12})}>+ Добавить сотрудника</button>
               </div>
               {/* МРЭО Config */}
               <div style={{borderTop:"1px solid #e5e7eb",paddingTop:16,marginBottom:16}}>
