@@ -539,7 +539,7 @@ function RatesPanel({rates,onSave,agentDir}){
         </div>
       );})}
       {agWithout.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}><select value={selAg} onChange={e=>setSelAg(e.target.value)} style={{...inp,padding:"4px 8px",fontSize:12}}><option value="">Выберите агента...</option>{[...agWithout].sort(([,a],[,b])=>{const na=parseInt((a.internalCode||"").replace(/\D/g,""))||0;const nb=parseInt((b.internalCode||"").replace(/\D/g,""))||0;return na-nb;}).map(([id,a])=><option key={id} value={id}>{(a.internalCode?a.internalCode+" — ":"")+a.name+" "+a.surname}</option>)}</select><button onClick={()=>{addOv(selAg);setSelAg("");}} style={btn("#7c3aed")} disabled={!selAg}>+ Добавить</button></div>}
-      <div style={{display:"flex",gap:8}}><button onClick={()=>onSave(local)} style={btn("#16a34a")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_RATES)))} style={btn("#f3f4f6","#374151")}>Сбросить</button></div>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_RATES)))} style={btn("#d97706")} title="Сбросить все ставки к значениям по умолчанию">⚠ Сбросить</button></div>
     </div>
   );
 }
@@ -560,7 +560,7 @@ function VolRatesPanel({volRates,onSave}){
           <button onClick={()=>rm(r.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button>
         </div>
       ))}
-      <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={add} style={btn("#6366f1")}>+ Добавить</button><button onClick={()=>onSave(local)} style={btn("#16a34a")}>💾 Сохранить</button></div>
+      <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={add} style={btn("#6366f1")}>+ Добавить</button><button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button></div>
     </div>
   );
 }
@@ -619,7 +619,7 @@ function ExceptionsPanel({exceptions,onSave,agentDir}){
           )}
         </div>
       ))}
-      <div style={{display:"flex",gap:8,marginTop:12}}><button onClick={addExc} style={btn("#6366f1")}>+ Новое исключение</button><button onClick={()=>onSave(local)} style={btn("#16a34a")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_EXCEPTIONS)))} style={btn("#f3f4f6","#374151")}>Сбросить</button></div>
+      <div style={{display:"flex",gap:8,marginTop:12}}><button onClick={addExc} style={btn("#6366f1")}>+ Новое исключение</button><button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_EXCEPTIONS)))} style={btn("#d97706")} title="Сбросить все исключения к значениям по умолчанию">⚠ Сбросить</button></div>
     </div>
   );
 }
@@ -653,7 +653,7 @@ function MgrRatesPanel({cfg,onSave}){
         <span style={{fontSize:12,color:"#6b7280"}}>До этой даты расчёты менеджера не применяются</span>
         {local.managerStartDate&&<button onClick={()=>setLocal(p=>({...p,managerStartDate:""}))} style={{...btn("#f1f5f9","#374151",{fontSize:11,padding:"3px 8px"}),border:"1px solid #d1d5db"}}>✕ Очистить</button>}
       </div>
-      <div style={{display:"flex",gap:8}}><button onClick={()=>onSave(local)} style={btn("#16a34a")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_MGR_RATES)))} style={btn("#f3f4f6","#374151")}>Сбросить</button></div>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button><button onClick={()=>setLocal(JSON.parse(JSON.stringify(DEFAULT_MGR_RATES)))} style={btn("#d97706")} title="Сбросить все ставки менеджера к значениям по умолчанию">⚠ Сбросить</button></div>
     </div>
   );
 }
@@ -691,8 +691,8 @@ function OpOverridePanel({uid,cfg,onSave,onRemove}){
         <div style={{overflowX:"auto",marginBottom:12}}><table style={{borderCollapse:"collapse"}}><thead><tr>{TIERS.map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody><tr>{(local.tierFixes||[]).map((v,i)=><td key={i} style={td}>{ni(v,val=>{setLocal(p=>{const n=JSON.parse(JSON.stringify(p));n.tierFixes[i]=parseFloat(val)||0;return n;});},80)}</td>)}</tr></tbody></table></div>
       </>)}
       <div style={{display:"flex",gap:8}}>
-        <button onClick={save} style={btn("#16a34a")}>💾 Сохранить</button>
-        <button onClick={onRemove} style={btn("#f3f4f6","#dc2626",{border:"1px solid #fca5a5"})}>✕ Удалить переопределение</button>
+        <button onClick={save} style={btn("#1d4ed8")}>💾 Сохранить</button>
+        <button onClick={onRemove} style={btn("#dc2626")}>✕ Удалить переопределение</button>
       </div>
     </div>
   );
@@ -2836,7 +2836,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   if(role===null){
     return(
-      <div style={{minHeight:"100vh",background:"#dde3ed",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,sans-serif"}}>
+      <div style={{minHeight:"100vh",background:"#dde3ed",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"}}>
         <div style={{background:"white",borderRadius:16,padding:"40px 48px",boxShadow:"0 8px 32px rgba(0,0,0,0.12)",minWidth:320,textAlign:"center"}}>
           <div style={{fontSize:32,marginBottom:8}}>🏢</div>
           <h2 style={{margin:"0 0 4px",fontSize:22,color:"#1e293b"}}>INSURANCE MANAGER</h2>
@@ -2863,7 +2863,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   }
 
   return(
-    <div style={{fontFamily:"system-ui,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#1e293b",background:"#dde3ed",minHeight:"100vh"}}>
+    <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#1e293b",background:"#dde3ed",minHeight:"100vh"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <h2 style={{margin:0,fontSize:20}}>Калькулятор комиссий</h2>
@@ -2937,7 +2937,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <td style={td}><input defaultValue={surname} id={"s-"+aUid} maxLength={20} style={{...inp,width:100,padding:"3px 7px"}}/></td>
                       {ALL_COMPANIES.map(c=><td key={c} style={td}><input defaultValue={cd[c]||""} id={"c-"+aUid+"-"+c} onInput={e=>{e.target.value=_ascii(e.target.value,20);}} maxLength={20} style={{...inp,width:75,padding:"3px 6px",fontSize:12}}/></td>)}
                       <td style={td}>
-                        <button onClick={()=>{saveDir({...agentDir,[aUid]:{internalCode:document.getElementById("ic-"+aUid).value,name:document.getElementById("n-"+aUid).value,surname:document.getElementById("s-"+aUid).value,codes:Object.fromEntries(ALL_COMPANIES.map(c=>[c,document.getElementById("c-"+aUid+"-"+c).value]))}});setEditUid(null);}} style={{...btn("#16a34a"),marginRight:6}}>✓</button>
+                        <button onClick={()=>{saveDir({...agentDir,[aUid]:{internalCode:document.getElementById("ic-"+aUid).value,name:document.getElementById("n-"+aUid).value,surname:document.getElementById("s-"+aUid).value,codes:Object.fromEntries(ALL_COMPANIES.map(c=>[c,document.getElementById("c-"+aUid+"-"+c).value]))}});setEditUid(null);}} style={{...btn("#1d4ed8"),marginRight:6}}>✓</button>
                         <button onClick={()=>setEditUid(null)} style={btn("#f3f4f6","#374151")}>✕</button>
                       </td>
                     </>:<>
@@ -6981,7 +6981,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           </div>
         </>
       )}
-      <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}`}</style>
+      <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #2563eb;outline-offset:1px;}button:focus-visible{outline:2px solid #2563eb;outline-offset:2px;}`}</style>
     </div>
   );
 }
