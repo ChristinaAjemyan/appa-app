@@ -509,6 +509,7 @@ const _verifyPin=async(pin,stored)=>{
 };
 const fmt=n=>Number(n).toLocaleString("ru-RU")+" ֏";
 const genUid=()=>Math.random().toString(36).slice(2,8);
+const escHtml=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 function RatesPanel({rates,onSave,agentDir}){
   const[local,setLocal]=useState(()=>JSON.parse(JSON.stringify(rates)));
@@ -804,7 +805,7 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
 }
 
 const OP_FIELD_LABELS={insuredName:"ФИО страхователя",policyNum:"№ полиса",phone:"Телефон",agentUid:"Оператор (принял полис)",date:"Дата составления",amount:"Страховая премия (AMD)",dateStart:"Дата вступления в силу",dateEnd:"Дата окончания",carPlate:"Рег. номер",bm:"БМ",productName:"Тип продукта"};
-const _OSAGO_DATE_WINDOWS=[[88,95],[116,128],[146,159],[177,190],[207,221],[238,252],[268,281],[299,312],[329,342],[363,367]];
+const _OSAGO_DATE_WINDOWS=[[88,95],[116,128],[146,159],[177,190],[207,221],[238,252],[268,281],[299,312],[329,342],[363,366]];
 const checkOsagoDates=(dateStart,dateEnd,term)=>{
   if(!dateStart||!dateEnd)return null;
   const s=new Date(dateStart+"T00:00:00"),e=new Date(dateEnd+"T00:00:00");
@@ -1020,6 +1021,7 @@ export default function App(){
   const[showLoginPin,setShowLoginPin]=useState(false);
   const[showEmpPins,setShowEmpPins]=useState({});
   const[saveMonthLoading,setSaveMonthLoading]=useState(false);
+  const _savingRef=useRef(false);
 
   useEffect(()=>{(async()=>{
     try{const r=await calcStorage.get("agentDirectory").catch(()=>"__err__");if(r&&r!=="__err__"&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}else if(!r||r===null){setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}else{setAgentDir(SEED_AGENTS);}}catch{setAgentDir(SEED_AGENTS);}
@@ -1289,7 +1291,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const{month,subTab,period}=tab;
       const[ry,rm]=month.split("-").map(Number);
       const pStart=new Date(ry,rm-1,period==="d2"?11:period==="d3"?21:1);
-      const pEnd=new Date(ry,rm-1,period==="d1"?10:period==="d2"?20:31,23,59,59);
+      const pEnd=period==="d1"?new Date(ry,rm-1,10,23,59,59):period==="d2"?new Date(ry,rm-1,20,23,59,59):new Date(ry,rm,0,23,59,59);
       const scanMonths=[];
       for(let i=0;i<=12;i++){let sm=rm-i,sy=ry;while(sm<1){sm+=12;sy--;}scanMonths.push(`${sy}-${String(sm).padStart(2,"0")}`);}
       let expiring=[];
@@ -1940,7 +1942,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOpPayPol(pol);setOpPayData({paidAmount:String(pol.amount-(pol.discount||0)),paymentType:"cash",paidDate:today});
   };
   const submitOpForm=async()=>{
-    if(saveMonthLoading)return;
+    if(_savingRef.current)return;
+    _savingRef.current=true;
     setSaveMonthLoading(true);
     try{
       const editingPaid=!!(opEditPol?.paid)&&isAdmin;
@@ -2001,7 +2004,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       if(opEditPol?.paid&&opFD.paymentType)data.paymentType=opFD.paymentType;
       if(opEditPol)saveEditPol(opEditPol,data);else addOfficePol(data);
       setOpFormOpen(false);
-    }finally{setSaveMonthLoading(false);}
+    }finally{_savingRef.current=false;setSaveMonthLoading(false);}
   };
 
   const filteredDB=useMemo(()=>{
@@ -3970,7 +3973,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <option value="">— выбрать продукт —</option>
                           {(volRates.rates||[]).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
                         </select>
-                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value}))} placeholder="Название продукта" disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("productName")}}/>
+                      :<input value={opFD.productName||""} onChange={e=>setOpFD(p=>({...p,productName:e.target.value.slice(0,50)}))} placeholder="Название продукта" maxLength={50} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("productName")}}/>
                     }
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Полис</div>
@@ -4237,7 +4240,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           const isClosed=_cashDays[date]&&_cashDays[date].closed;
           const fmtAmd=v=>(v||0).toLocaleString("ru-RU")+" AMD";
           const pTypeLabel=p=>p.polType==="voluntary"?(p.productName||"Добровольный"):"ОСАГО";
-          const rows=pols.map(p=>`<tr><td>${p.insuredName||"—"}</td><td>${pTypeLabel(p)}</td><td>${p.company||"—"}</td><td>${p.policyNum||"—"}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"}[p.paymentType]||"—"}</td><td>${p.comment||"—"}</td></tr>`).join("");
+          const rows=pols.map(p=>`<tr><td>${escHtml(p.insuredName||"—")}</td><td>${escHtml(pTypeLabel(p))}</td><td>${escHtml(p.company||"—")}</td><td>${escHtml(p.policyNum||"—")}</td><td>${fmtPolDate2(p.date)}</td><td style="text-align:right">${fmtAmd(p.amount)}</td><td style="text-align:right">${(p.discount||0)>0?fmtAmd(p.discount):"—"}</td><td style="text-align:right;font-weight:700">${fmtAmd(p.paidAmount)}</td><td>${{cash:"Наличные",acba:"ACBA",ineco:"INECO",bank:"Банк. перевод"}[p.paymentType]||"—"}</td><td>${escHtml(p.comment||"—")}</td></tr>`).join("");
           const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Касса ${fmtDay(date)}</title><style>@page{size:landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;font-weight:600;padding:16px;color:#111}h1.title{margin:0 0 4px;font-size:24px;font-weight:800;color:#111}p.sub{margin:0 0 16px;color:#555;font-size:12px;font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left;font-weight:600}th{background:#e8edf2;font-size:11px;font-weight:700}td{font-size:12px}.totals{border:2px solid #374151;border-radius:4px;padding:12px 16px;max-width:340px;page-break-inside:avoid;break-inside:avoid}.totals .row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;font-weight:600}.totals .grand{font-size:16px;font-weight:800;border-top:2px solid #374151;margin-top:6px;padding-top:8px}.footer{margin-top:16px;font-size:10px;color:#999;font-weight:400}@media print{.no-print{display:none}}</style></head><body><h1 class="title">Касса — ${fmtDay(date)}</h1><p class="sub">${isClosed?"✓ Касса закрыта · "+fmtDatetime(_cashDays[date].closedAt):"⏳ Открыта"}</p><table><thead><tr><th>Страхователь</th><th>Тип</th><th>Компания</th><th>№ полиса</th><th>Дата заключения</th><th>Сумма</th><th>Скидка</th><th>К оплате</th><th>Способ</th><th>Заметка</th></tr></thead><tbody>${rows||"<tr><td colspan='10' style='text-align:center;color:#999;padding:12px'>Нет записей</td></tr>"}</tbody></table><div class="totals"><div class="row"><span>💵 Наличные</span><span>${fmtAmd(t.cash)}</span></div><div class="row"><span>🏦 ACBA</span><span>${fmtAmd(t.acba)}</span></div><div class="row"><span>🏦 INECO</span><span>${fmtAmd(t.ineco)}</span></div><div class="row"><span>💳 Банк. перевод</span><span>${fmtAmd(t.bank||0)}</span></div><div class="row grand"><span>Итого</span><span>${fmtAmd(t.total||t.cash+t.acba+t.ineco+(t.bank||0))}</span></div></div><p class="footer">Распечатано: ${new Date().toLocaleString("ru-RU")}</p><script>window.onload=function(){window.print();}<\/script></body></html>`;
           const w=window.open("","_blank","width=900,height=650");
           if(w){w.document.write(html);w.document.close();}
@@ -4764,8 +4767,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 const bg=i%2===0?"#fff":"#f5f7fa";
                 const netColor=r.net>=0?"#1d4ed8":"#dc2626";
                 return`<tr style="background:${bg}">
-                  <td style="${P}font-weight:600;">${r.name}</td>
-                  <td style="${P}text-align:center;color:#4f46e5;font-weight:600;">${r.ic||"—"}</td>
+                  <td style="${P}font-weight:600;">${escHtml(r.name)}</td>
+                  <td style="${P}text-align:center;color:#4f46e5;font-weight:600;">${escHtml(r.ic||"—")}</td>
                   <td style="${P}text-align:center;">${r.polCount}</td>
                   <td style="${P}text-align:right;background:#dcfce7;color:#16a34a;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${r.accrued.toLocaleString("ru-RU")} ֏</td>
                   <td style="${P}text-align:right;background:#fee2e2;color:${r.volDebt>0?"#dc2626":"#6b7280"};-webkit-print-color-adjust:exact;print-color-adjust:exact;">${r.volDebt>0?r.volDebt.toLocaleString("ru-RU")+" ֏":"0 ֏"}</td>
@@ -5797,7 +5800,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {bkmFormOpen&&(
               <div style={{background:"white",border:"2px solid #fed7aa",borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 2px 12px rgba(180,83,9,0.1)"}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#92400e"}}>Новая закладка {bkmFormData.policyRef&&<span style={{background:"#fef3c7",borderRadius:6,padding:"2px 8px",fontSize:11,marginLeft:6}}>📋 {bkmFormData.policyRef.insuredName||bkmFormData.policyRef.policyNum}</span>}</div>
-                <textarea value={bkmFormData.text} onChange={e=>setBkmFormData(p=>({...p,text:e.target.value}))} placeholder="Текст заметки..." rows={3} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:10}}/>
+                <textarea value={bkmFormData.text} onChange={e=>setBkmFormData(p=>({...p,text:e.target.value.slice(0,500)}))} placeholder="Текст заметки..." rows={3} maxLength={500} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:10}}/>
                 <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                     <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>⏰ Напоминание:</span>
@@ -5951,7 +5954,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{background:"white",border:"2px solid #fbcfe8",borderRadius:12,padding:16,marginBottom:14}}>
                   <div style={{fontWeight:700,fontSize:13,color:"#9d174d",marginBottom:12}}>Новая задача</div>
                   <input value={taskFormData.title} onChange={e=>setTaskFormData(p=>({...p,title:e.target.value.slice(0,60)}))} placeholder="Заголовок задачи *" maxLength={60} style={{...inp,width:"100%",boxSizing:"border-box",marginBottom:8,fontSize:13}}/>
-                  <textarea value={taskFormData.description} onChange={e=>setTaskFormData(p=>({...p,description:e.target.value}))} placeholder="Описание (необязательно)" rows={2} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:8}}/>
+                  <textarea value={taskFormData.description} onChange={e=>setTaskFormData(p=>({...p,description:e.target.value.slice(0,500)}))} placeholder="Описание (необязательно)" rows={2} maxLength={500} style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid #d1d5db",padding:"8px 10px",fontSize:13,fontFamily:"inherit",resize:"vertical",marginBottom:8}}/>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
                     <select value={taskFormData.assignedTo} onChange={e=>setTaskFormData(p=>({...p,assignedTo:e.target.value}))} style={{...inp,padding:"6px 8px",fontSize:12}}>
                       <option value="">Выбрать исполнителя *</option>
@@ -6021,7 +6024,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                   {showRevInput&&sel.status==="done"&&(
                     <div style={{background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:8,padding:10,marginBottom:12}}>
-                      <textarea value={taskRevComment} onChange={e=>setTaskRevComment(e.target.value)} placeholder="Комментарий к корректировке..." rows={2} style={{width:"100%",boxSizing:"border-box",border:"1px solid #fca5a5",borderRadius:6,padding:"6px 8px",fontSize:12,fontFamily:"inherit",resize:"none",marginBottom:6}}/>
+                      <textarea value={taskRevComment} onChange={e=>setTaskRevComment(e.target.value.slice(0,500))} placeholder="Комментарий к корректировке..." rows={2} maxLength={500} style={{width:"100%",boxSizing:"border-box",border:"1px solid #fca5a5",borderRadius:6,padding:"6px 8px",fontSize:12,fontFamily:"inherit",resize:"none",marginBottom:6}}/>
                       <button onClick={()=>sendRevision(sel)} disabled={!(taskRevComment||"").trim()} style={btn("#dc2626",undefined,{fontSize:12})}>Отправить</button>
                     </div>
                   )}
