@@ -811,15 +811,17 @@ const checkOsagoDates=(dateStart,dateEnd,term)=>{
   if(isNaN(s)||isNaN(e))return null;
   const days=Math.round((e-s)/86400000);
   if(days<=0)return{type:"error",msg:"Дата окончания раньше даты начала."};
-  if(days>366)return{type:"warning",msg:`Срок ${days} дн. превышает год (>366). Проверьте даты.`};
   if(term==="SH"){
-    if(days<88)return{type:"warning",msg:`Краткосрочный: ${days} дн. — меньше минимума (88 дн.).`};
-    if(days>92)return{type:"warning",msg:`Краткосрочный: ${days} дн. — больше 92. Нужен тип «L»?`};
+    if(days<10)return{type:"error",msg:`Краткосрочный: ${days} дн. — меньше минимума (10 дн.).`};
+    if(days>=88)return{type:"error",msg:`Краткосрочный: ${days} дн. — превышает максимум (87 дн.). Выберите тип «L» или исправьте даты.`};
+    if(days>=80)return{type:"warning",msg:`Краткосрочный: ${days} дн. — граничный срок (80–87). Подтвердите что полис действительно краткосрочный.`};
     return null;
   }
-  if(days<88)return{type:"error",msg:`Долгосрочный: ${days} дн. — слишком мало. Выберите «SH» или исправьте даты.`};
+  // L
+  if(days<88)return{type:"error",msg:`Долгосрочный: ${days} дн. — меньше минимума (88 дн. ≈ 3 мес.). Выберите «SH» или исправьте даты.`};
+  if(days>366)return{type:"error",msg:`Долгосрочный: ${days} дн. — превышает год (максимум 366 дн.). Проверьте даты.`};
   const ok=_OSAGO_DATE_WINDOWS.some(([a,b])=>days>=a&&days<=b);
-  if(!ok)return{type:"warning",msg:`Нестандартный срок: ${days} дн. Стандартные сроки: 3, 4, 5, 6, 7, 8, 9, 10, 11 или 12 полных месяцев.`};
+  if(!ok)return{type:"warning",msg:`Нестандартный срок: ${days} дн. Стандартные сроки — целое число месяцев: 3, 4, 5, 6, 7, 8, 9, 10, 11 или 12.`};
   return null;
 };
 const _DRAG_KEY="opFormDrag";
