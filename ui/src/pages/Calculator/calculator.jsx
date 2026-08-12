@@ -834,7 +834,7 @@ function DraggableModal({open,onClose,title,titleRight,children}){
   if(!open)return null;
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000}}>
-      <div ref={boxRef} style={{position:"absolute",top:"4vh",left:"50%",transform:"translateX(-50%)",background:"white",borderRadius:12,width:590,minWidth:340,minHeight:220,maxWidth:"96vw",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",overflow:"hidden",resize:"both"}}>
+      <div ref={boxRef} style={{position:"absolute",top:"4vh",left:"50%",transform:"translateX(-50%)",background:"white",borderRadius:12,width:590,minWidth:340,minHeight:220,maxWidth:"96vw",maxHeight:"92vh",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",overflow:"hidden",resize:"both"}}>
         <div onMouseDown={onHdrDown} style={{padding:"11px 16px 9px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"grab",background:"#f8fafc",borderRadius:"12px 12px 0 0",userSelect:"none",flexShrink:0}}>
           <div style={{fontWeight:700,fontSize:15,color:"#1e293b",pointerEvents:"none"}}>{title}</div>
           <div style={{display:"flex",alignItems:"center",gap:8}} onMouseDown={e=>e.stopPropagation()}>
