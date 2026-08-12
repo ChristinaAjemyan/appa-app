@@ -804,6 +804,24 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
 }
 
 const OP_FIELD_LABELS={insuredName:"ФИО страхователя",policyNum:"№ полиса",phone:"Телефон",agentUid:"Оператор (принял полис)",date:"Дата составления",amount:"Страховая премия (AMD)",dateStart:"Дата вступления в силу",dateEnd:"Дата окончания",carPlate:"Рег. номер",bm:"БМ",productName:"Тип продукта"};
+const _OSAGO_DATE_WINDOWS=[[88,95],[116,128],[146,159],[177,190],[207,221],[238,252],[268,281],[299,312],[329,342],[363,367]];
+const checkOsagoDates=(dateStart,dateEnd,term)=>{
+  if(!dateStart||!dateEnd)return null;
+  const s=new Date(dateStart+"T00:00:00"),e=new Date(dateEnd+"T00:00:00");
+  if(isNaN(s)||isNaN(e))return null;
+  const days=Math.round((e-s)/86400000);
+  if(days<=0)return{type:"error",msg:"Дата окончания раньше даты начала."};
+  if(days>366)return{type:"warning",msg:`Срок ${days} дн. превышает год (>366). Проверьте даты.`};
+  if(term==="SH"){
+    if(days<88)return{type:"warning",msg:`Краткосрочный: ${days} дн. — меньше минимума (88 дн.).`};
+    if(days>92)return{type:"warning",msg:`Краткосрочный: ${days} дн. — больше 92. Нужен тип «L»?`};
+    return null;
+  }
+  if(days<88)return{type:"error",msg:`Долгосрочный: ${days} дн. — слишком мало. Выберите «SH» или исправьте даты.`};
+  const ok=_OSAGO_DATE_WINDOWS.some(([a,b])=>days>=a&&days<=b);
+  if(!ok)return{type:"warning",msg:`Нестандартный срок: ${days} дн. Стандартные сроки: 3, 4, 5, 6, 7, 8, 9, 10, 11 или 12 полных месяцев.`};
+  return null;
+};
 const _DRAG_KEY="opFormDrag";
 function DraggableModal({open,onClose,title,titleRight,children}){
   const boxRef=useRef(null);
@@ -1950,6 +1968,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const _disc=parseFloat(opFD.discount)||0;
       if(_amt>80000&&!await showConfirm("Страховая премия "+_amt.toLocaleString()+" AMD выше обычного значения (>80 000). Сохранить полис?",{confirmText:"Сохранить"}))return;
       if(_disc>0&&_amt>0&&_disc>_amt*0.1&&!await showConfirm("Скидка "+_disc.toLocaleString()+" AMD превышает 10% от страховой премии. Сохранить полис?",{confirmText:"Сохранить"}))return;
+      if(opFD.polType==="osago"&&!editingPaid){
+        const _dw=checkOsagoDates(opFD.dateStart,opFD.dateEnd,opFD.term);
+        if(_dw){
+          if(_dw.type==="error"){showToast("⛔ "+_dw.msg,"error");return;}
+          if(!await showConfirm("⚠ "+_dw.msg+"\n\nВсё равно сохранить полис?",{confirmText:"Сохранить"}))return;
+        }
+      }
       const today=new Date().toISOString().slice(0,10);
       if(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType){
         try{
@@ -3878,6 +3903,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <input type="date" value={opFD.dateEnd||""} onChange={e=>setOpFD(p=>({...p,dateEnd:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("dateEnd")}}/>
                     </div>
                   </div>
+                  {(()=>{if(effectiveLock)return null;const w=checkOsagoDates(opFD.dateStart,opFD.dateEnd,opFD.term);if(!w)return null;const isErr=w.type==="error";return(<div style={{background:isErr?"#fff1f2":"#fffbeb",border:"1.5px solid "+(isErr?"#fca5a5":"#fcd34d"),borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:isErr?"#b91c1c":"#92400e",display:"flex",alignItems:"flex-start",gap:6}}><span style={{flexShrink:0}}>{isErr?"⛔":"⚠️"}</span><span>{w.msg}</span></div>);})()}
                   <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Транспортное средство</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
