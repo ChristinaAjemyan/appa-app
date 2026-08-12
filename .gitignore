@@ -2,3 +2,4 @@ node_modules/
 database.db
 .env.local
 .DS_Store
+ui/src/pages/Calculator/agents_seed.js

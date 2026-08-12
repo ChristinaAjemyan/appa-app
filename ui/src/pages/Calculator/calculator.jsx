@@ -3,6 +3,7 @@ import{calcStorage}from"./calcStorage";
 import * as XLSX from "xlsx";
 import XLSXStyle from "xlsx-js-style";
 import JSZip from "jszip";
+import {SEED_AGENTS} from './agents_seed.js';
 
 const COMPANIES=["Nairi","Ingo","Liga","Sil","Rego"];
 const ALL_COMPANIES=["Nairi","Ingo","Liga","Sil","Rego","Armenia"];
@@ -85,66 +86,8 @@ const OPS_STR=[{key:"eq",label:"="},{key:"neq",label:"≠"},{key:"contains",labe
 
 const POL_STATUSES=[{k:"",l:"Обычный"},{k:"taxi",l:"🚕 Такси"},{k:"ot",l:"ОТ"},{k:"ok",l:"ОК"},{k:"yr_kt",l:"YR-KT"},{k:"restricted",l:"С ограничением"}];
 const fmtPolStatus=k=>(POL_STATUSES.find(s=>s.k===k)||POL_STATUSES[0]).l;
-
-const SEED_AGENTS=(()=>{
-  const d=[
-    ["768-01","Հակոբ","Վխկրյան","1606-01","","","","",""],
-    ["768-05","Լուսինե","Մոսոյան (12+66)","1606-05","541-01","","","",""],
-    ["768-07","Մկրտիչ","Բաղդասարյան","1606-07","","310-71-10","797-25","",""],
-    ["768-19","Գրիգոր","Հովհաննիսյան (Նաթելլա)","1606-168","","","","",""],
-    ["768-24","Մանվել","Նահապետյան","1606-24","","","","",""],
-    ["768-27","Գագիկ","Վանոյան","1606-27","","","","",""],
-    ["768-40","Լեվոն","Վարդանյան","1606-40","3671-07","310-71-11","797-26","A50-M3-40-G12","13021-09"],
-    ["768-74","Արմեն","Խանոյան","1606-74","","310-71-09","797-23","A50-M3-40-G9","13021-07"],
-    ["768-101","Նելլի","Հարությունյան","1606-101","3671-01","310-71-01","797-16","A50-M3-40-G5","13021-01"],
-    ["768-105","Վիկտորյա","Վխկրյան","1606-105","3671-05","310-71-02","797-17","A50-M3-40-G3","13021-02"],
-    ["768-106","Գայանե","Ալեքսանյան","1606-106","3671-02","310-71-03","797-18","A50-M3-40-G111","13021-04"],
-    ["768-116","Աղունիկ","Պետրոսյան","1606-116","","","","",""],
-    ["768-118","Հովհաննես","Թորոսյան","1606-118","","","","",""],
-    ["768-122","Հովհաննես","Ջանոյան","1606-122","","","","",""],
-    ["768-125","Նարինե","Արզումանյան","1606-125","101-1","101-1","101-1","A50-M3-40-G4","101-1"],
-    ["768-127","Արմեն","Սիմոնյան","1606-127","","","","",""],
-    ["768-128","ԳՈՒՐԳԵՆ","ԱՐևԻԿՅԱՆ","1606-128","","310-71-08","797-22","A50-M3-40-G8","13021-06"],
-    ["768-130","ՌԻՏԱ","ԳՐԻԳՈՐՅԱՆ","1606-130","","","","",""],
-    ["768-131","ՀՌԻՓՍԻՄԵ","ԹՈՐՈՍՅԱՆ","1606-131","","","","",""],
-    ["768-132","Ժաննա","Գասպարյան","1606-189","","","797-27","","13021-12"],
-    ["768-133","Ռոմիկ","Նազարեթյան (+145+164)","1606-133","","310-71-07","797-21","","13021-10"],
-    ["768-138","Զարզանդ","Բրսոյան","1606-138","","","","",""],
-    ["768-139","Աղասի","Սահակյան (Արտակ)","1606-139","","","","",""],
-    ["768-144","Վռամ","Այվազյան","1606-144","","","","",""],
-    ["768-146","Սարգիս","Համազասպյան","1606-146","","","797-24","A50-M3-40-G10",""],
-    ["768-147","Անուշիկ","Սարգսյան","1606-147","","","","",""],
-    ["768-149","Վարդուհի","Թադևոսյան","1606-149","","","","",""],
-    ["768-154","ՍՈՒՍԱՆՆԱ","ԳՐԻԳՈՐՅԱՆ","1606-154","","","","",""],
-    ["768-157","ԱՐԿԱԴԻ","ԹԱԴևՈՍՅԱՆ","1606-157","","","","",""],
-    ["768-159","ՎԱՀԱՆ","ԱՂԱԲԱԲՅԱՆ","1606-159","","310-71-13","","",""],
-    ["768-160","Հովհաննես","Հովհաննիսյան","1606-160","","","","",""],
-    ["768-161","ՄԱՐՈՒՍՅԱ","ԳՐԻԳՈՐՅԱՆ","1606-161","","","","",""],
-    ["768-164","Գրիգոր","Գասպարյան-Ռոման","1606-164","","","","",""],
-    ["768-170","ԱՐՄԵՆՈՒՀԻ","ՄՂԴԵՍՅԱՆ","1606-170","","","","",""],
-    ["768-171","ՏԱԹԵՎԻԿ","ԽԱՉԱՏՐՅԱՆ (Նարինե)","1606-171","","","","",""],
-    ["768-173","Անդրանիկ","Հովհաննիսյան","1606-173","","","","",""],
-    ["768-175","Աշխեն","Գալոյան","1606-175","","","","",""],
-    ["768-176","Ռուստամ","Կարապետյան (Նելլի Ռեսո)","1606-176","","","","",""],
-    ["768-177","Աղավնի","Ստեփանյան(Ելենա)","1606-177","","","","",""],
-    ["1606-178","Սմբատ","Ներսիսյան","1606-178","","","","",""],
-    ["768-178","Մկրտիչ","Աբաջյան","1606-178-01","","","","",""],
-    ["768-179","Հովհաննես","Գևորգյան (Վանաձոր)","1606-179","","","","",""],
-    ["768-180","Վահան","Մանուկյան","1606-180","","","","",""],
-    ["768-181","Նաիռա","Թովմասյան","1606-181","","310-71-04","797-04","A50-M3-40-G1",""],
-    ["768-183","Տիգրան","Մանուկյան","1606-183","","","","",""],
-    ["768-184","Գևորգ","Հարությունյան Շիրո","1606-184","","","","",""],
-    ["768-185","Կարլեն","Հարությունյան","1606-185","","","","",""],
-    ["768-186","Նելլի","Նիկոյան-Մագա","1606-186","3671-03","310-71-05","797-19","A50-M3-40-G2","13021-03"],
-    ["768-187","ԱՆԻԱ","ԻԳԻԹՅԱՆ","1606-187","3671-111","310-71-06","797-20","A50-M3-40-G13","13021-111"],
-    ["768-188","Հովհաննես","Հովհաննիսյան JB","1606-188","","","","",""],
-    ["768-189","","","1606-189","","","","",""],
-    ["768-190","Նարինե","Արզումանյան","1606-190","3671-10","310-71-15","797-28","A50-M3-40-G14","13021-13"],
-    ["768-191","Թագուհի","Գևորգյան","1606-191","","310-71-14","797-29","A50-M3-40-G15",""],
-    ["768-192","Սուսաննա","Հարությունյան (Ռոզիկ)","1606-192","","","797-30","",""],
-  ];
-  return Object.fromEntries(d.map(([ic,nm,sr,n,i,s,r,l,a])=>[`ag-${ic}`,{name:nm,surname:sr,internalCode:ic,codes:{Nairi:n,Ingo:i,Sil:s,Rego:r,Liga:l,Armenia:a}}]));
-})();
+const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"},"sold":{label:"💸 Продано",color:"#9a3412",bg:"#fff7ed"}};
+const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
 
 function parseDate(raw){
   if(raw==null||raw==="")return null;
@@ -535,7 +478,7 @@ function RatesPanel({rates,onSave,agentDir}){
       <h4 style={{margin:"0 0 6px",color:"#7c3aed"}}>% агента — индивидуальные</h4>
       {Object.entries(local.agentOverrides).map(([id,r])=>{const a=agentDir[id];const nm=a?(a.name+" "+a.surname).trim():id;return(
         <div key={id} style={{border:"1px solid #e5e7eb",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
-          <div style={{background:"#f5f3ff",padding:"6px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600,color:"#6d28d9",fontSize:13}}>{"👤 "+nm}</span><button onClick={()=>rmOv(id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5",fontSize:11})}>✕</button></div>
+          <div style={{background:"#f5f3ff",padding:"6px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600,color:"#6d28d9",fontSize:13}}>{"👤 "+nm}</span><button aria-label="Удалить переопределение" onClick={()=>rmOv(id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5",fontSize:11})}>✕</button></div>
           <div style={{padding:"8px 12px",overflowX:"auto"}}><table style={{borderCollapse:"collapse"}}><thead><tr>{ALL_COMPANIES.map(c=><th key={c} style={{...th,background:"white"}}>{c}</th>)}</tr></thead><tbody><tr>{ALL_COMPANIES.map(c=><td key={c} style={td}><input type="number" value={r[c]||0} onChange={e=>setOv(id,c,e.target.value)} style={{...inp,width:62,textAlign:"center"}}/></td>)}</tr></tbody></table></div>
         </div>
       );})}
@@ -558,7 +501,7 @@ function VolRatesPanel({volRates,onSave}){
           <input value={r.name} onChange={e=>upd(r.id,"name",_ld(e.target.value,20))} placeholder="Название продукта" maxLength={20} style={{...inp,width:200,padding:"4px 8px"}}/>
           <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:"#6b7280"}}>Офис %<input type="text" value={r.officeRate} onChange={e=>upd(r.id,"officeRate",parseFloat(_dig(e.target.value,3))||0)} maxLength={3} style={{...inp,width:60,textAlign:"center",marginLeft:4}}/></label>
           <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:"#6b7280"}}>Агент %<input type="text" value={r.agentRate} onChange={e=>upd(r.id,"agentRate",parseFloat(_dig(e.target.value,3))||0)} maxLength={3} style={{...inp,width:60,textAlign:"center",marginLeft:4}}/></label>
-          <button onClick={()=>rm(r.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button>
+          <button aria-label="Удалить строку" onClick={()=>rm(r.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button>
         </div>
       ))}
       <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={add} style={btn("#6366f1")}>+ Добавить</button><button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button></div>
@@ -598,7 +541,7 @@ function ExceptionsPanel({exceptions,onSave,agentDir}){
             {(exc.excludedAgents||[]).length>0&&<span style={{fontSize:11,color:"#16a34a",background:"#f0fdf4",padding:"2px 8px",borderRadius:12}}>{"✓ Белый список: "+exc.excludedAgents.length}</span>}
             <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
               <button onClick={()=>setExpanded(expanded===exc.id?null:exc.id)} style={btn("#f3f4f6","#374151")}>{expanded===exc.id?"Скрыть":"✎ Изменить"}</button>
-              <button onClick={()=>rmExc(exc.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button>
+              <button aria-label="Удалить исключение" onClick={()=>rmExc(exc.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button>
             </div>
           </div>
           {expanded===exc.id&&(
@@ -744,7 +687,7 @@ function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
               {p.policyNum&&<span>· № {p.policyNum}</span>}
             </div>
           </div>
-          <button onClick={onClose} style={{background:"#334155",border:"1px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1,fontWeight:300}}>×</button>
+          <button aria-label="Закрыть" onClick={onClose} style={{background:"#334155",border:"1px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:18,lineHeight:1,fontWeight:300}}>×</button>
         </div>
 
         {/* Renewal status badge */}
@@ -860,7 +803,7 @@ function DraggableModal({open,onClose,title,titleRight,children}){
           <div style={{fontWeight:700,fontSize:15,color:"#1e293b",pointerEvents:"none"}}>{title}</div>
           <div style={{display:"flex",alignItems:"center",gap:8}} onMouseDown={e=>e.stopPropagation()}>
             {titleRight}
-            <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af",lineHeight:1,padding:"0 4px",pointerEvents:"auto"}}>×</button>
+            <button aria-label="Закрыть" onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af",lineHeight:1,padding:"0 4px",pointerEvents:"auto"}}>×</button>
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>{children}</div>
@@ -1065,7 +1008,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const showToast=(msg,type="error")=>{const id=++toastIdRef.current;setToasts(prev=>[...prev,{id,msg,type}]);};
   const showConfirm=(msg,opts={})=>new Promise(resolve=>{confirmResolveRef.current=resolve;setConfirmState({msg,...opts});});
   const saveDir=d=>{const prev=agentDir;setAgentDir(d);dirSaveQueue.current=dirSaveQueue.current.then(()=>calcStorage.set("agentDirectory",JSON.stringify(d))).catch(err=>{setAgentDir(prev);showToast("Ошибка сохранения справочника агентов. Проверьте соединение.\n"+(err?.message||""));});logAction("dir_change","Обновлён справочник агентов ("+Object.keys(d).length+" записей)","—");};
-  const _saveErr=(what)=>(err)=>showToast("⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+err.message);
+  const _saveErr=(what)=>(err)=>{const isQuota=err?.name==="QuotaExceededError"||err?.message?.includes("quota");showToast(isQuota?"⚠ Хранилище браузера переполнено ("+what+").\nОчистите старые данные или освободите место на диске.":"⚠ Ошибка сохранения ("+what+").\nПроверьте соединение и повторите действие.\n\n"+(err?.message||""));}
   const saveOfficeCodes=codes=>{const prev=officeCodes;setOfficeCodes(codes);calcStorage.set("officeCodes:"+selMonth,JSON.stringify(codes)).catch(err=>{setOfficeCodes(prev);_saveErr("коды офиса")(err);});};
   const addOfficeCode=()=>{const v=newOfficeCode.trim();if(!v)return;saveOfficeCodes([...officeCodes,v]);setNewOfficeCode("");};
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
@@ -1388,7 +1331,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     saveDir({...agentDir,[id]:{name:newName.trim(),surname:newSur.trim(),internalCode:newIC.trim(),codes:{...newCodes}}});
     setNewName("");setNewSur("");setNewIC("");setNewCodes(Object.fromEntries(ALL_COMPANIES.map(c=>[c,""])));
   };
-  const rmAgent=id=>{const d={...agentDir};delete d[id];saveDir(d);};
+  const rmAgent=async(id)=>{const a=agentDir[id];const name=a?(a.name+" "+a.surname).trim()||id:id;if(!await showConfirm("Удалить агента «"+name+"»?\nЭто действие необратимо.",{danger:true,confirmText:"Удалить"}))return;if(!await showConfirm("Вы уверены? Агент «"+name+"» будет удалён безвозвратно.",{danger:true,confirmText:"Да, удалить"}))return;const d={...agentDir};delete d[id];saveDir(d);};
 
   const isLocked=lockedMonths[selMonth]===true;
   const effRates=isLocked&&monthSnapshot?monthSnapshot.rates:rates;
@@ -1970,6 +1913,21 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           if(!await showConfirm("⚠ "+_dw.msg+"\n\nВсё равно сохранить полис?",{confirmText:"Сохранить"}))return;
         }
       }
+      if(!opEditPol){
+        const _cutoff=new Date(Date.now()-30*24*60*60*1000).toISOString().slice(0,10);
+        const _recent=[...opCurrentMonth,...(opPrevAll||[])].filter(p=>(p.date||"")>=_cutoff);
+        const _dupeWarns=[];
+        if(opFD.polType==="osago"){
+          const _np=normPlate((opFD.carPlate||"").trim());
+          if(_np){const _pm=_recent.find(p=>normPlate(p.carPlate||"")===_np);if(_pm)_dupeWarns.push("Рег. номер «"+(opFD.carPlate||"").trim()+"» уже есть за последние 30 дней\n  → "+(_pm.insuredName||"—")+" / "+(_pm.policyNum||"б/н")+" / "+(_pm.date||"—"));}
+          const _pn=(opFD.policyNum||"").trim();
+          if(_pn){const _pm=_recent.find(p=>(p.policyNum||"").trim()===_pn);if(_pm)_dupeWarns.push("№ полиса «"+_pn+"» уже есть за последние 30 дней\n  → "+(_pm.insuredName||"—")+" / "+(_pm.date||"—"));}
+        }else if(opFD.polType==="voluntary"){
+          const _pn=(opFD.policyNum||"").trim();
+          if(_pn){const _pm=_recent.find(p=>(p.policyNum||"").trim()===_pn);if(_pm&&(opFD.insuredName||"").trim().toLowerCase()===(_pm.insuredName||"").trim().toLowerCase())_dupeWarns.push("Добровольный полис с таким номером и страхователем уже есть за последние 30 дней\n  → "+(_pm.insuredName||"—")+" / "+(_pm.policyNum||"б/н")+" / "+(_pm.date||"—"));}
+        }
+        if(_dupeWarns.length>0&&!await showConfirm("⚠ Возможный дубль:\n\n"+_dupeWarns.map(w=>"• "+w).join("\n\n")+"\n\nВсё равно сохранить полис?",{confirmText:"Сохранить"}))return;
+      }
       const today=new Date().toISOString().slice(0,10);
       if(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType){
         try{
@@ -1986,7 +1944,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const base={polType:opFD.polType||"osago",insuredName:opFD.insuredName.trim(),phone:(opFD.phone||"").trim(),company:opFD.company,policyNum:(opFD.policyNum||"").trim(),amount:parseFloat(opFD.amount)||0,discount:parseFloat(opFD.discount)||0,date:opFD.date,agentUid:opFD.agentUid||null,comment:(opFD.comment||"").trim(),paid_from_amex:opFD.polType==="osago"?(opFD.paid_from_amex||false):false,passportNum:(opFD.passportNum||"").trim()||null,bankAccount:(opFD.bankAccount||"").trim()||null,email:(opFD.email||"").trim()||null};
       const typeData=opFD.polType==="voluntary"
         ?{productName:(opFD.productName||"").trim()}
-        :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:(opFD.carPlate||"").trim(),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
+        :{dateStart:opFD.dateStart,dateEnd:opFD.dateEnd,car:(opFD.car||"").trim(),carPlate:normPlate((opFD.carPlate||"").trim()),bm:opFD.bm,region:opFD.region,power:opFD.power,term:opFD.term,polStatus:opFD.polStatus};
       const payData=(opFD.polType==="voluntary"&&opFD.payNow&&opFD.paymentType)
         ?{paid:true,paidAt:new Date().toISOString(),paidAmount:parseFloat(opFD.amount||0)-(parseFloat(opFD.discount)||0),paymentType:opFD.paymentType,paidDate:today}
         :{};
@@ -2911,9 +2869,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         </div>
       </div>
 
-      <div style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
+      <div role="tablist" aria-label="Разделы приложения" style={{display:"flex",marginBottom:16,gap:6,flexWrap:"wrap"}}>
         {[["commissions","💰 Комиссии","#1d4ed8","#dbeafe"],["policydb","📋 База полисов","#0f766e","#ccfbf1"],["officesales","🏢 Продажи офиса","#7c3aed","#ede9fe"],["cashbook","📒 Касса","#b45309","#fef3c7"],["payroll","📝 Начисления","#0369a1","#e0f2fe"],["manager","👔 Менеджер","#be185d","#fce7f3"],["income","📊 Доходы офиса","#15803d","#dcfce7"],["search","🔍 Поиск","#0f172a","#e2e8f0"],["bookmarks","🔖 Закладки","#b45309","#fef3c7"],["tasks","📋 Задачи","#be185d","#fce7f3"],["renewals","🔄 Продления","#0f766e","#ccfbf1"],["renewals_mreo","📋 Прод. МРЭО","#047857","#d1fae5"],["amex","💳 Amex","#1d4ed8","#dbeafe"]].filter(([id])=>allowedTabs.includes(id)).map(([id,label,activeCol,activeBg])=>(
-          <button key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();if(id==="renewals"||id==="renewals_mreo"){const aid=rnActiveId;setTimeout(()=>loadRnTabCache(aid),0);}}}
+          <button role="tab" aria-selected={tab===id} key={id} onClick={()=>{setTab(id);if(id==="policydb")loadDB();if(id==="tasks")loadTasks();if(id==="amex")loadAmexData();if(id==="renewals"||id==="renewals_mreo"){const aid=rnActiveId;setTimeout(()=>loadRnTabCache(aid),0);}}}
             style={{padding:"8px 18px",background:tab===id?activeBg:"#e2e8f0",color:"#0f172a",border:tab===id?"2px solid "+activeCol:"2px solid #94a3b8",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",position:"relative"}}>
             {label}
             {id==="tasks"&&taskUnread.length>0&&<span style={{position:"absolute",top:-7,right:-7,background:"#dc2626",color:"#fff",borderRadius:"50%",minWidth:18,height:18,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1}}>{taskUnread.length}</span>}
@@ -2957,14 +2915,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       <td style={td}><input defaultValue={surname} id={"s-"+aUid} maxLength={20} style={{...inp,width:100,padding:"3px 7px"}}/></td>
                       {ALL_COMPANIES.map(c=><td key={c} style={td}><input defaultValue={cd[c]||""} id={"c-"+aUid+"-"+c} onInput={e=>{e.target.value=_ascii(e.target.value,20);}} maxLength={20} style={{...inp,width:75,padding:"3px 6px",fontSize:12}}/></td>)}
                       <td style={td}>
-                        <button onClick={()=>{saveDir({...agentDir,[aUid]:{internalCode:document.getElementById("ic-"+aUid).value,name:document.getElementById("n-"+aUid).value,surname:document.getElementById("s-"+aUid).value,codes:Object.fromEntries(ALL_COMPANIES.map(c=>[c,document.getElementById("c-"+aUid+"-"+c).value]))}});setEditUid(null);}} style={{...btn("#1d4ed8"),marginRight:6}}>✓</button>
-                        <button onClick={()=>setEditUid(null)} style={btn("#f3f4f6","#374151")}>✕</button>
+                        <button aria-label="Сохранить изменения" onClick={()=>{saveDir({...agentDir,[aUid]:{internalCode:document.getElementById("ic-"+aUid).value,name:document.getElementById("n-"+aUid).value,surname:document.getElementById("s-"+aUid).value,codes:Object.fromEntries(ALL_COMPANIES.map(c=>[c,document.getElementById("c-"+aUid+"-"+c).value]))}});setEditUid(null);}} style={{...btn("#1d4ed8"),marginRight:6}}>✓</button>
+                        <button aria-label="Отмена" onClick={()=>setEditUid(null)} style={btn("#f3f4f6","#374151")}>✕</button>
                       </td>
                     </>:<>
                       <td style={{...td,fontWeight:700,color:ic?"#6366f1":"#d1d5db"}}>{ic||"—"}</td>
                       <td style={td}>{name}</td><td style={td}>{surname}</td>
                       {ALL_COMPANIES.map(c=><td key={c} style={{...td,color:cd[c]?"#111":"#d1d5db",fontSize:12}}>{cd[c]||"—"}</td>)}
-                      <td style={td}><button onClick={()=>setEditUid(aUid)} style={{...btn("#f3f4f6","#374151"),marginRight:6}}>✎</button><button onClick={()=>rmAgent(aUid)} style={{...btn("#fff1f2","#dc2626"),border:"1px solid #fca5a5"}}>✕</button></td>
+                      <td style={td}><button aria-label="Изменить агента" onClick={()=>setEditUid(aUid)} style={{...btn("#f3f4f6","#374151"),marginRight:6}}>✎</button><button aria-label="Удалить агента" onClick={()=>rmAgent(aUid)} style={{...btn("#fff1f2","#dc2626"),border:"1px solid #fca5a5"}}>✕</button></td>
                     </>}</tr>);
                   })}</tbody>
                 </table></div>}
@@ -3845,15 +3803,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div style={{gridColumn:"1/-1"}}>
                       <div style={flbl}>ФИО страхователя{req}</div>
-                      <input value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(effectiveLock),...fe("insuredName")}}/>
+                      <input aria-label="ФИО страхователя" value={opFD.insuredName||""} onChange={e=>setOpFD(p=>({...p,insuredName:e.target.value.slice(0,60)}))} placeholder="Имя Фамилия" maxLength={60} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",fontSize:14,...lk(effectiveLock),...fe("insuredName")}}/>
                     </div>
                     <div>
                       <div style={flbl}>№ полиса{req}{(isLocked&&opEditPol||paidLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock),...fe("policyNum")}}/>
+                      <input aria-label="Номер полиса" value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock),...fe("policyNum")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Телефон{req}</div>
-                      <input value={opFD.phone||""} onChange={e=>setOpFD(p=>({...p,phone:_ascii(e.target.value,60)}))} placeholder="+374..." maxLength={60} style={{...finp,width:"100%",boxSizing:"border-box",...fe("phone")}}/>
+                      <input aria-label="Телефон" value={opFD.phone||""} onChange={e=>setOpFD(p=>({...p,phone:_ascii(e.target.value,60)}))} placeholder="+374..." maxLength={60} style={{...finp,width:"100%",boxSizing:"border-box",...fe("phone")}}/>
                     </div>
                   </div>
                   {/* === ОСАГО: Полис + Авто + Статус === */}
@@ -3907,7 +3865,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>Рег. номер{req}</div>
-                      <input value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("carPlate")}}/>
+                      <input aria-label="Регистрационный номер автомобиля" value={opFD.carPlate||""} onChange={e=>setOpFD(p=>({...p,carPlate:_ld(e.target.value,20)}))} placeholder="00 AA 000" maxLength={20} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock),...fe("carPlate")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Регион</div>
@@ -3993,7 +3951,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Страховая премия (AMD){req}{(isLocked&&opEditPol||amtLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock||amtLock),...fe("amount")}}/>
+                      <input aria-label="Страховая премия в AMD" type="text" value={opFD.amount||""} onChange={e=>setOpFD(p=>({...p,amount:_dig(e.target.value,7)}))} placeholder="0" maxLength={7} disabled={isLocked&&!!opEditPol||effectiveLock||amtLock} style={{...finp,width:"100%",boxSizing:"border-box",textAlign:"right",...lk(isLocked&&!!opEditPol||effectiveLock||amtLock),...fe("amount")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Скидка (AMD){req}</div>
@@ -5585,7 +5543,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           <div style={{background:"white",borderRadius:10,padding:20,marginBottom:16,border:"1px solid #e2e8f0"}}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:14,color:"#1e293b"}}>🔍 Глобальный поиск по всем месяцам</div>
             <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value.slice(0,60))} onKeyDown={e=>e.key==="Enter"&&runSearch()} placeholder="Имя, рег. номер, номер полиса, телефон..." maxLength={60} style={{...inp,flex:1,minWidth:260,padding:"9px 14px",fontSize:14}} autoFocus/>
+              <input aria-label="Поиск по имени, рег. номеру, номеру полиса или телефону" value={searchQuery} onChange={e=>setSearchQuery(e.target.value.slice(0,60))} onKeyDown={e=>e.key==="Enter"&&runSearch()} placeholder="Имя, рег. номер, номер полиса, телефон..." maxLength={60} style={{...inp,flex:1,minWidth:260,padding:"9px 14px",fontSize:14}} autoFocus/>
               <button onClick={runSearch} disabled={searchLoading||searchQuery.trim().length<2} style={{...btn("#1d4ed8"),padding:"9px 22px",fontSize:14,opacity:searchQuery.trim().length<2?0.5:1}}>{searchLoading?"Поиск...":"Найти"}</button>
               {searchResults!==null&&<button onClick={()=>{setSearchResults(null);setSearchQuery("");}} style={btn("#64748b",undefined,{fontSize:12})}>✕ Очистить</button>}
             </div>
@@ -5837,7 +5795,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           {due&&<button onClick={()=>dismissReminder(b.id)} title="Скрыть напоминание" style={{...btn("#fef3c7","#92400e",{fontSize:11,border:"1px solid #fcd34d"})}}>🔕</button>}
                           <button onClick={()=>markDone(b.id)} title="Выполнено" style={{...btn("#f0fdf4","#15803d",{fontSize:11,border:"1px solid #86efac"})}}>✓ Готово</button>
-                          <button onClick={()=>deleteBkm(b.id)} title="Удалить" style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
+                          <button aria-label="Удалить закладку" onClick={()=>deleteBkm(b.id)} title="Удалить" style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
                         </div>
                       </div>
                     </div>
@@ -5861,7 +5819,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             {b.policyRef&&<div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>📋 {b.policyRef.insuredName||b.policyRef.policyNum}</div>}
                             <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>Выполнено: {b.doneAt?new Date(b.doneAt).toLocaleDateString("ru-RU"):""}</div>
                           </div>
-                          <button onClick={()=>deleteBkm(b.id)} style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
+                          <button aria-label="Удалить закладку" onClick={()=>deleteBkm(b.id)} style={{...btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5"})}}>✕</button>
                         </div>
                       </div>
                     ))}
@@ -6058,8 +6016,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
       {tab==="renewals"&&(()=>{
         const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
-        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"},"sold":{label:"💸 Продано",color:"#9a3412",bg:"#fff7ed"}};
-        const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
         const rnCanEdit=!isAdmin;
         const rnCanCheck=!isAdmin;
         const rntab=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
@@ -6362,7 +6318,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                         <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{pol.carPlate||"—"} · {pol.company||"—"} · истекает {endDate}</div>
                         {pol.phone&&<div style={{fontSize:13,fontWeight:600,color:"#0f766e",marginTop:4}}>📞 {pol.phone}</div>}
                       </div>
-                      <button onClick={()=>setRnCallModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af",marginLeft:8}}>✕</button>
+                      <button aria-label="Закрыть" onClick={()=>setRnCallModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af",marginLeft:8}}>✕</button>
                     </div>
                     {calls.length===0&&<div style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:"12px 0",marginBottom:12}}>Звонков пока нет</div>}
                     {calls.length>0&&(
@@ -6422,8 +6378,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       {tab==="renewals_mreo"&&(()=>{
         const linkedUid=mreoConfig.linkedAgentCode?Object.keys(agentDir).find(uid=>(agentDir[uid]?.internalCode||"")===mreoConfig.linkedAgentCode)||null:null;
         const isoToDisp=s=>{if(!s)return"";const d=parseAnyDate(s);if(!d)return s;return d.toLocaleDateString("ru-RU");};
-        const OP_STATUS={"":{ label:"🔵 Не обработан",color:"#3b82f6",bg:"#eff6ff"},"no_answer":{label:"📵 Нет ответа",color:"#6b7280",bg:"#f9fafb"},"callback":{label:"🔄 Перезвонить",color:"#d97706",bg:"#fffbeb"},"promised":{label:"🤝 Обещал продлить",color:"#7c3aed",bg:"#f5f3ff"},"renewed_manual":{label:"✅ Продлил",color:"#15803d",bg:"#dcfce7"},"refused":{label:"❌ Отказ",color:"#dc2626",bg:"#fff1f2"},"sold":{label:"💸 Продано",color:"#9a3412",bg:"#fff7ed"}};
-        const CALL_RESULTS=[["no_answer","📵 Нет ответа"],["busy","📞 Занято / недоступен"],["callback","🔄 Просил перезвонить"],["promised","🤝 Обещал продлить"],["refused","❌ Отказался"],["info","ℹ️ Другое"]];
         const rnCanEdit=!isAdmin;const rnCanCheck=!isAdmin;
         const rntab=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
         const tid=rntab.id;
@@ -6637,7 +6591,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             <td style={{padding:"8px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
                             <td style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
                             <td style={{padding:"8px 12px",color:"#6b7280"}}>{t.comment||"—"}</td>
-                            <td style={{padding:"4px 6px"}}>{isAdmin&&<button onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
+                            <td style={{padding:"4px 6px"}}>{isAdmin&&<button aria-label="Удалить пополнение" onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -6690,7 +6644,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                                     <td style={{padding:"7px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
                                     <td style={{padding:"7px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
                                     <td style={{padding:"7px 12px",color:"#6b7280"}}>{t.comment||"—"}</td>
-                                    <td style={{padding:"4px 6px"}}>{isAdmin&&<button onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
+                                    <td style={{padding:"4px 6px"}}>{isAdmin&&<button aria-label="Удалить пополнение" onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
                                   </tr>
                                 ))}
                               </tbody>
