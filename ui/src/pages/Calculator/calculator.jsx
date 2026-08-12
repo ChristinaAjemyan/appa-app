@@ -1127,11 +1127,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const in7=new Date(today.getTime()+7*24*60*60*1000);
       const parseD=s=>{if(!s)return null;const[d,m,y]=s.split(".");if(!d||!m||!y)return null;return new Date(+y,+m-1,+d);};
       const all=[];
-      for(const key of(mk.keys||[])){
-        const r=await calcStorage.get(key).catch(()=>null);
-        if(!r?.value)continue;
+      const _bkeys=mk.keys||[];
+      const _brecs=await Promise.all(_bkeys.map(key=>calcStorage.get(key).catch(()=>null)));
+      _brecs.forEach((r,i)=>{
+        if(!r?.value)return;
         const pols=JSON.parse(r.value);
-        const month=key.replace("officePol:","");
+        const month=_bkeys[i].replace("officePol:","");
         for(const p of pols){
           if(!p.insuredName||p.insuredName.includes("ПРИМЕР"))continue;
           if(isMreoPol(p))continue;
@@ -1147,7 +1148,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             }
           }
         }
-      }
+      });
       setNotifs([...all].sort((a,b)=>new Date(a.date)-new Date(b.date)));
     }catch{setNotifs([]);}
   };
@@ -1516,22 +1517,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const match=p=>[p.insuredName,p.carPlate,p.policyNum,p.phone].some(v=>norm(v).includes(qn));
     const _isMreoEmp=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
     try{
-      const mk1=await calcStorage.list("month:").catch(()=>({keys:[]}));
-      for(const key of(mk1.keys||[])){
-        const r=await calcStorage.get(key).catch(()=>null);
-        if(!r?.value)continue;
-        const d=JSON.parse(r.value);
-        const mk=key.replace("month:","");
-        [...(d.policies||[]),...(d.voluntary||[])].forEach(p=>{if(match(p))results.push({...p,_source:"agent",_monthKey:mk});});
-      }
-      const mk2=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
-      for(const key of(mk2.keys||[])){
-        const r=await calcStorage.get(key).catch(()=>null);
-        if(!r?.value)continue;
-        const pols=JSON.parse(r.value);
-        const mk=key.replace("officePol:","");
-        pols.forEach(p=>{if(match(p))results.push({...p,_source:"office",_monthKey:mk});});
-      }
+      const[mk1,mk2]=await Promise.all([calcStorage.list("month:").catch(()=>({keys:[]})),calcStorage.list("officePol:").catch(()=>({keys:[]}))]);
+      const keys1=mk1.keys||[],keys2=mk2.keys||[];
+      const[recs1,recs2]=await Promise.all([Promise.all(keys1.map(k=>calcStorage.get(k).catch(()=>null))),Promise.all(keys2.map(k=>calcStorage.get(k).catch(()=>null)))]);
+      keys1.forEach((key,i)=>{const r=recs1[i];if(!r?.value)return;const d=JSON.parse(r.value);const mk=key.replace("month:","");[...(d.policies||[]),...(d.voluntary||[])].forEach(p=>{if(match(p))results.push({...p,_source:"agent",_monthKey:mk});});});
+      keys2.forEach((key,i)=>{const r=recs2[i];if(!r?.value)return;const pols=JSON.parse(r.value);const mk=key.replace("officePol:","");pols.forEach(p=>{if(match(p))results.push({...p,_source:"office",_monthKey:mk});});});
       results.sort((a,b)=>b._monthKey.localeCompare(a._monthKey));
       const filtered=isAdmin?results:results.filter(p=>_isMreoEmp?isMreoPol(p):!isMreoPol(p));
       setSearchResults(filtered);
