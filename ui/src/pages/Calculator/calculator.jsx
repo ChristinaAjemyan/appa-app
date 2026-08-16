@@ -5083,8 +5083,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const _sumCo=(map,key)=>Object.values(map).reduce((s,v)=>s+(v[key]||0),0);
         const offCoMap={};
         opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(checkExc(p,effExceptions,p.agentUid))return;const comm=Math.round(p.amount*getOfficeRate(p,effRates)/100);_accCo(offCoMap,p.company||"Прочие",{sales:p.amount,comm,disc:p.discount||0});});
+        const staffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
         const agCoMap={};
-        agentData.filter(a=>!opUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{_accCo(agCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:p.agentComm});});});
+        agentData.filter(a=>!opUids.has(a.uid)&&!staffUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{_accCo(agCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:p.agentComm});});});
         const mgrCoMap={};
         agentData.filter(a=>opUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{const mr=getMgrPolicyRate(p,managerConfig);_accCo(mgrCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:Math.round(p.amount*mr/100)});});});
         const volCoMap={};
