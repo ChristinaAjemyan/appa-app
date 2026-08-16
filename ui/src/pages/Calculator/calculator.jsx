@@ -2064,8 +2064,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     };
     const operatorUids=new Set(managerConfig?.operatorUids||[]);
-    const exportStaffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
     const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР')&&!isMreoPol(p));
+    const exportStaffUids=new Set(opReal.map(p=>p.agentUid).filter(Boolean));
     const gName=uid=>{const a=effAgentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
     const gCode=uid=>effAgentDir[uid]?.internalCode||uid||'';
 
@@ -5066,12 +5066,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const totOp=opR.reduce((s,r)=>s+r.oi,0);
         const totFix=opR.reduce((s,r)=>s+r.fix,0);
         const totMgrPersonal=totMgr-totOp-totFix;
-        const staffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
+        const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
+        const staffUids=new Set(opReal.map(p=>p.agentUid).filter(Boolean));
         const osagoAgentIncome=agentData.filter(a=>!staffUids.has(a.uid)).reduce((s,a)=>s+a.totalOffice,0);
         const osagoAgentPay=agentData.filter(a=>!opUids.has(a.uid)&&!staffUids.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0);
         const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
         const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
-        const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
         const officeDirectOsago=opReal.filter(p=>(p.polType||"osago")==="osago").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;return s+Math.max(0,Math.round(p.amount*getOfficeRate(p,effRates)/100)-(p.discount||0));},0);
         const officeDirectVol=opReal.filter(p=>p.polType==="voluntary").reduce((s,p)=>{if(checkExc(p,effExceptions,p.agentUid))return s;const vr=(effVolRates.rates||[]).find(r=>r.name===p.productName);const oR=vr?vr.officeRate:0;return s+Math.max(0,Math.round(p.amount*oR/100)-(p.discount||0));},0);
         const osagoGross=osagoAgentIncome+officeDirectOsago;
