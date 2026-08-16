@@ -2064,6 +2064,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       }
     };
     const operatorUids=new Set(managerConfig?.operatorUids||[]);
+    const exportStaffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
     const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes('ПРИМЕР')&&!isMreoPol(p));
     const gName=uid=>{const a=effAgentDir[uid];return a?`${a.name||''} ${a.surname||''}`.trim():'';};
     const gCode=uid=>effAgentDir[uid]?.internalCode||uid||'';
@@ -2231,7 +2232,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       return ws;
     };
 
-    const agentRows=agentData.filter(a=>!operatorUids.has(a.uid)).map(a=>({uid:a.uid,policies:a.policies}));
+    const agentRows=agentData.filter(a=>!operatorUids.has(a.uid)&&!exportStaffUids.has(a.uid)).map(a=>({uid:a.uid,policies:a.policies}));
     const mgrRows=agentData.filter(a=>operatorUids.has(a.uid)).map(a=>({uid:a.uid,policies:a.policies}));
 
     if(opReal.filter(p=>(p.polType||'osago')==='osago').length)XLSXStyle.utils.book_append_sheet(wb,mkOfficeOsagoSheet(),'Офис — ОСАГО');
@@ -5065,8 +5066,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const totOp=opR.reduce((s,r)=>s+r.oi,0);
         const totFix=opR.reduce((s,r)=>s+r.fix,0);
         const totMgrPersonal=totMgr-totOp-totFix;
-        const osagoAgentIncome=agentData.reduce((s,a)=>s+a.totalOffice,0);
-        const osagoAgentPay=agentData.filter(a=>!opUids.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0);
+        const staffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
+        const osagoAgentIncome=agentData.filter(a=>!staffUids.has(a.uid)).reduce((s,a)=>s+a.totalOffice,0);
+        const osagoAgentPay=agentData.filter(a=>!opUids.has(a.uid)&&!staffUids.has(a.uid)).reduce((s,a)=>s+a.totalAgent,0);
         const volAgentIncome=effVol.reduce((s,v)=>s+v.officeComm,0);
         const volAgentPay=effVol.reduce((s,v)=>s+v.agentComm,0);
         const opReal=opCurrentMonth.filter(p=>!p.insuredName?.includes("ПРИМЕР"));
@@ -5083,7 +5085,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const _sumCo=(map,key)=>Object.values(map).reduce((s,v)=>s+(v[key]||0),0);
         const offCoMap={};
         opReal.filter(p=>(p.polType||"osago")==="osago").forEach(p=>{if(checkExc(p,effExceptions,p.agentUid))return;const comm=Math.round(p.amount*getOfficeRate(p,effRates)/100);_accCo(offCoMap,p.company||"Прочие",{sales:p.amount,comm,disc:p.discount||0});});
-        const staffUids=new Set(Object.entries(agentDir).filter(([,a])=>officeCodes.map(c=>c.trim().toLowerCase()).includes((a.internalCode||"").trim().toLowerCase())).map(([uid])=>uid));
         const agCoMap={};
         agentData.filter(a=>!opUids.has(a.uid)&&!staffUids.has(a.uid)).forEach(a=>{a.policies.filter(p=>!p.exception).forEach(p=>{_accCo(agCoMap,p.company||"Прочие",{sales:p.amount,comm:p.officeComm,paid:p.agentComm});});});
         const mgrCoMap={};
