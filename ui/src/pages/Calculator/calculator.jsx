@@ -451,7 +451,7 @@ const _verifyPin=async(pin,stored)=>{
   return d===0;
 };
 const fmt=n=>Number(n).toLocaleString("ru-RU")+" ֏";
-const genUid=()=>Math.random().toString(36).slice(2,8);
+const genUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const escHtml=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 function RatesPanel({rates,onSave,agentDir}){
@@ -1208,8 +1208,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setPinChangeMsg("✓ PIN изменён");setTimeout(()=>setPinChangeMsg(""),3000);
   };
   const getName=id=>{const a=agentDir[id];return a?(a.name+" "+a.surname).trim():"";};
-  const normPlate=s=>{if(!s)return"";const m={"А":"A","В":"B","Е":"E","К":"K","М":"M","Н":"H","О":"O","Р":"P","С":"C","Т":"T","У":"Y","Х":"X"};return s.toUpperCase().replace(/\s+/g,"").split("").map(c=>m[c]||c).join("");};
-  const parseAnyDate=s=>{if(!s)return null;try{if(typeof s==="string"){if(s.includes("T"))return new Date(s);if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[y,mo,d]=s.split("-");return new Date(+y,+mo-1,+d);}if(/^\d{2}\.\d{2}\.\d{4}$/.test(s)){const[d,mo,y]=s.split(".");return new Date(+y,+mo-1,+d);}}const d=new Date(s);return isNaN(d)?null:d;}catch{return null;}};
+  const normPlate=s=>{if(!s)return"";const m={"А":"A","В":"B","Е":"E","К":"K","М":"M","Н":"H","О":"O","Р":"P","С":"C","Т":"T","У":"Y","Х":"X"};return s.toUpperCase().replace(/[\s\-\.]+/g,"").split("").map(c=>m[c]||c).join("");};
+  const parseAnyDate=s=>{if(s==null||s==="")return null;try{if(typeof s==="number"){if(s>10000&&s<60000){const d=new Date(Date.UTC(1899,11,30)+s*86400000);return isNaN(d.getTime())?null:d;}const d=new Date(s);return isNaN(d)?null:d;}if(typeof s==="string"){if(s.includes("T"))return new Date(s);if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[y,mo,d]=s.split("-");return new Date(+y,+mo-1,+d);}if(/^\d{2}\.\d{2}\.\d{4}$/.test(s)){const[d,mo,y]=s.split(".");return new Date(+y,+mo-1,+d);}const num=Number(s);if(!isNaN(num)&&num>10000&&num<60000&&/^\d+(\.\d+)?$/.test(s.trim())){const d=new Date(Date.UTC(1899,11,30)+Math.floor(num)*86400000);return isNaN(d.getTime())?null:d;}}const d=new Date(s);return isNaN(d)?null:d;}catch{return null;}};
   const rnUpdateTab=(id,upd)=>setRnTabs(ts=>ts.map(t=>t.id===id?{...t,...upd}:t));
   const rnAddTab=()=>{const nid="t"+Date.now();setRnTabs(ts=>[...ts,{id:nid,month:getThisMonth(),subTab:"office",period:"all",agentFilter:"",results:null,work:{},cands:[],checking:{},checkedAt:null,renewedOpen:false,refusedOpen:false,soldOpen:false,loading:false}]);setRnActiveId(nid);};
   const rnCloseTab=(id)=>{if(rnTabs.length===1)return;const rest=rnTabs.filter(t=>t.id!==id);setRnTabs(rest);if(rnActiveId===id)setRnActiveId(rest[0].id);};
@@ -1705,7 +1705,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
   };
 
-  const saveOpMonth=(pols)=>{const prev=opCurrentMonth;setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(err=>{setOpCurrentMonth(prev);_saveErr("полисы офиса")(err);});};
+  const saveOpMonth=(pols)=>{const prev=opCurrentMonth;setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(err=>{setOpCurrentMonth(prev);_saveErr("полисы офиса")(err);});setRnTabs(ts=>ts.map(t=>t.month===selMonth?{...t,results:null,cands:[]}:t));calcStorage.set(`renewalResult:office:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});calcStorage.set(`renewalResult:agents:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});};
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true,passportNum:"",bankAccount:"",email:""});
   const addOfficePol=(fd)=>{
