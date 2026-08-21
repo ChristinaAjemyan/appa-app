@@ -1068,7 +1068,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const today=new Date();today.setHours(0,0,0,0);
       const in30=new Date(today.getTime()+30*24*60*60*1000);
       const in7=new Date(today.getTime()+7*24*60*60*1000);
-      const parseD=s=>{if(!s)return null;const[d,m,y]=s.split(".");if(!d||!m||!y)return null;return new Date(+y,+m-1,+d);};
       const all=[];
       const _bkeys=mk.keys||[];
       const _brecs=await Promise.all(_bkeys.map(key=>calcStorage.get(key).catch(()=>null)));
@@ -1083,7 +1082,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             all.push({...p,_monthKey:month,_source:"office",_ntype:"unpaid"});
           }
           if((ntype==="expiring7"||ntype==="expiring30"||ntype==="all")&&p.polType==="osago"&&p.dateEnd){
-            const end=parseD(p.dateEnd);
+            const end=parseAnyDate(p.dateEnd);
             const limit=ntype==="expiring7"?in7:in30;
             if(end&&end>=today&&end<=limit){
               const days=Math.ceil((end-today)/(24*60*60*1000));
