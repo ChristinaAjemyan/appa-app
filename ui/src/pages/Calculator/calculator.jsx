@@ -871,8 +871,9 @@ export default function App(){
   const[opStatusFilter,setOpStatusFilter]=useState("all");
   const[opUnpaidPage,setOpUnpaidPage]=useState(0);
   const[opOsagoPage,setOpOsagoPage]=useState(0);
-  const[opDateFrom,setOpDateFrom]=useState("");
-  const[opDateTo,setOpDateTo]=useState("");
+  const _today=new Date().toISOString().slice(0,10);
+  const[opDateFrom,setOpDateFrom]=useState(_today);
+  const[opDateTo,setOpDateTo]=useState(_today);
   const[opEndFrom,setOpEndFrom]=useState("");
   const[opEndTo,setOpEndTo]=useState("");
   const[opCompanyFilter,setOpCompanyFilter]=useState("all");
@@ -1566,24 +1567,37 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       for(const key of Object.keys(buckets))await calcStorage.set(key,JSON.stringify(buckets[key])).catch(()=>{});
     }catch{}
   };
+  const[opHistLoading,setOpHistLoading]=useState(false);
+  const[opHistLoaded,setOpHistLoaded]=useState(false);
   const loadOfficeSales=async()=>{
     await migrateOfficePols();
     setOpLoaded(false);
+    setOpPrevUnpaid([]);setOpPrevAll([]);setOpHistLoaded(false);setOpHistLoading(false);
     const mk=selMonth;
     try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
+    setOpLoaded(true);
+    // load unpaid from previous months in background (lightweight: only unpaid)
+    calcStorage.list("officePol:").catch(()=>({keys:[]})).then(async res=>{
+      const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
+      if(!otherKeys.length)return;
+      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const m=key.replace("officePol:","");return JSON.parse(r.value).filter(p=>!p.paid&&!p.insuredName?.includes("ПРИМЕР")).map(p=>({...p,_monthKey:p._monthKey||m}));}return[];}catch{return[];}}));
+      setOpPrevUnpaid(results.flat().sort((a,b)=>new Date(a.date)-new Date(b.date)));
+    });
+  };
+  const loadOpHistory=async(fromKey,toKey)=>{
+    setOpHistLoading(true);
     try{
       const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
-      const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
-      if(!otherKeys.length){setOpPrevUnpaid([]);setOpLoaded(true);return;}
-      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const mk=key.replace("officePol:","");return JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk}));}return[];}catch{return[];}}));
-      const allPrev=results.flat().filter(p=>!p.insuredName?.includes("ПРИМЕР"));
-      setOpPrevUnpaid(allPrev.filter(p=>!p.paid).sort((a,b)=>new Date(a.date)-new Date(b.date)));
-      setOpPrevAll(allPrev);
-    }catch{setOpPrevUnpaid([]);}
-    setOpLoaded(true);
+      const keys=(res.keys||[]).filter(k=>{const m=k.replace("officePol:","");return m>=fromKey&&m<=toKey;});
+      const results=await Promise.all(keys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const m=key.replace("officePol:","");return JSON.parse(r.value).filter(p=>!p.insuredName?.includes("ПРИМЕР")).map(p=>({...p,_monthKey:p._monthKey||m}));}return[];}catch{return[];}}));
+      setOpPrevAll(results.flat());
+      setOpHistLoaded(true);
+    }catch{}
+    setOpHistLoading(false);
   };
   useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
   useEffect(()=>{setOpOsagoPage(0);setOpUnpaidPage(0);},[opSearch,opStatusFilter,opDateFrom,opDateTo,opEndFrom,opEndTo,opCompanyFilter,opAgentFilter]);
+  useEffect(()=>{if(tab==="officesales"&&opLoaded&&opSearch.trim()&&!opHistLoaded&&!opHistLoading){loadOpHistory(MIN_MONTH,selMonth);}},[opSearch,opLoaded]);
   useEffect(()=>{const uid=currentEmployee?.id||"admin";try{const s=localStorage.getItem("opSortPref:"+uid);if(s){const{col,dir}=JSON.parse(s);if(col)setTableSortCol(col);if(dir)setTableSortDir(dir);}}catch{}},[currentEmployee?.id]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
@@ -3502,10 +3516,23 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
         const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all";
-        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");};
+        const resetFilters=()=>{const t=new Date().toISOString().slice(0,10);setOpSearch("");setOpStatusFilter("all");setOpDateFrom(t);setOpDateTo(t);setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");};
+        // determine if filter spans months other than current
+        const _curMo=selMonth;
+        const _filterNeedsHistory=hasDateFilter&&((opDateFrom&&opDateFrom.slice(0,7)<_curMo)||(opDateTo&&opDateTo.slice(0,7)<_curMo)||(opEndFrom&&opEndFrom.slice(0,7)<_curMo)||(opEndTo&&opEndTo.slice(0,7)<_curMo));
+        const _histFromKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a<b?a:b):_curMo;})();
+        const _histToKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a>b?a:b):_curMo;})();
+        if(_filterNeedsHistory&&!opHistLoaded&&!opHistLoading){loadOpHistory(_histFromKey,_histToKey);}
         const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
-        const basePols=(()=>{if(!hasDateFilter)return _opCurr;const seen=new Set();return[..._opPrevAll,..._opCurr].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});})();
+        const basePols=(()=>{
+          if(!hasDateFilter)return _opCurr;
+          if(_filterNeedsHistory){
+            if(opHistLoading)return _opCurr;
+            const seen=new Set();return[..._opPrevAll,..._opCurr].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
+          }
+          return _opCurr;
+        })();
         const normPolType=t=>{const v=(t||"").toLowerCase().trim();return v==="voluntary"?"voluntary":"osago";};
         const osagoList=basePols.filter(p=>normPolType(p.polType)==="osago");
         const volList=basePols.filter(p=>normPolType(p.polType)==="voluntary");
@@ -3645,10 +3672,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </div>
 
             {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
+            {opLoaded&&opHistLoading&&<div style={{padding:"8px 14px",background:"#eff6ff",borderRadius:6,marginBottom:10,fontSize:12,color:"#1d4ed8"}}>⏳ Загружаются данные за выбранный период...</div>}
 
 
             {/* Unified search results — shown instead of sections when search is active */}
             {opLoaded&&opSrch&&(()=>{
+              if(opHistLoading)return<div style={{padding:32,textAlign:"center",color:"#1d4ed8",fontSize:13}}>⏳ Загружаются данные для поиска...</div>;
               const allPols=[...opPrevAll,...opCurrentMonth.map(p=>({...p,_monthKey:p._monthKey||selMonth}))];
               const seen=new Set();const unique=allPols.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
               const results=unique.filter(filterPol).sort((a,b)=>new Date(b.date)-new Date(a.date));
