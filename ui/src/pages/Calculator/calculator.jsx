@@ -303,27 +303,119 @@ const getOfficeRate=(p,rates)=>{
 };
 
 function exportToExcel(agentData,effVol,agentDir,totals,excepts){
-  const wb=XLSX.utils.book_new();
+  const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
   const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
-  const s1=[["Агент","768-код","Всего","Зачётные","Доход офиса","Выплачено агенту","Прибыль офиса"],
-    ...agentData.map(a=>[a.uid,agentDir[a.uid]&&agentDir[a.uid].internalCode||"",a.totalSales,a.validSales,a.totalOffice,a.totalAgent,a.profit]),
-    [],["ИТОГО","",agentData.reduce((s,a)=>s+a.totalSales,0),agentData.reduce((s,a)=>s+a.validSales,0),totals.office,totals.agent,totals.profit]];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),"Сводка");
-  const s2=[["Агент","768-код","№ полиса","Компания","Марка","Рег.номер","Страхователь","Телефон","Начало","Окончание","Дней","Срок","Сумма","Регион","БМ","Мощность","Статус","% Агент","Ком. Агент"]];
-  agentData.forEach(a=>{
-    const ic=(agentDir[a.uid]&&agentDir[a.uid].internalCode)||"";
-    a.policies.forEach(p=>s2.push([gn(a.uid),ic,p.policyNum,p.company,p.car,p.carPlate,p.insuredName,p.phone,p.startDateFmt,p.endDateFmt,p.days!=null?p.days:"",p.term,p.amount,p.region,p.bm,p.power,p.exception?"Исключение":"Зачёт",(p.agentRate||0)+"%",p.agentComm]));
-  });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),"Полисы");
-  const s3=[["Агент","№ полиса","Компания","Марка","Сумма","Регион","БМ","Причина"]];
-  agentData.forEach(a=>a.policies.filter(p=>p.exception).forEach(p=>s3.push([gn(a.uid),p.policyNum,p.company,p.car,p.amount,p.region,p.bm,excReason(p,excepts,a.uid)])));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s3),"Исключения");
-  if(effVol.length>0){
-    const s4=[["Агент","Продукт","Компания","Страхователь","Сумма","% О","Ком.О","% А","Ком.А"]];
-    effVol.forEach(v=>s4.push([gn(v.agentUid),v.productName,v.company,v.insuredName,v.amount,(v.officeRate||0)+"%",v.officeComm,(v.agentRate||0)+"%",v.agentComm]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s4),"Добровольные");
+  const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
+  const mkHdr=(rgb)=>({fill:{patternType:"solid",fgColor:{rgb}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}});
+  const sC=(bold)=>({fill:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
+  const sN=(bold)=>({fill:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}});
+  const sTot=(rgb)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"DBEAFE"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"right"}});
+  const sTotL=(rgb)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"DBEAFE"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"left"}});
+  const ac=(ws,r,c,v,s,f)=>{const cell={s,t:typeof v==="number"?"n":"s"};if(f){cell.f=f;cell.v=v;cell.t="n";}else cell.v=v??'';ws[XLSXStyle.utils.encode_cell({r,c})]=cell;};
+  const wb=XLSXStyle.utils.book_new();
+
+  // ── Лист 1: Сводка ──────────────────────────────────────────────────────────
+  // Cols: A=Агент, B=768-код, C=Всего, D=Зачётные, E=Доход офиса, F=Выплачено, G=Прибыль
+  {
+    const ws={};const hdr=mkHdr("1D4ED8");
+    ["Агент","768-код","Всего","Зачётные","Доход офиса","Выплачено агенту","Прибыль офиса"].forEach((h,c)=>ac(ws,0,c,h,hdr));
+    agentData.forEach((a,i)=>{
+      const er=i+2;
+      ac(ws,i+1,0,gn(a.uid),sC());ac(ws,i+1,1,gc(a.uid),sC());
+      ac(ws,i+1,2,a.totalSales,sN());ac(ws,i+1,3,a.validSales,sN());
+      ac(ws,i+1,4,a.totalOffice,sN());ac(ws,i+1,5,a.totalAgent,sN());
+      ac(ws,i+1,6,a.profit,sN(),`E${er}-F${er}`);
+    });
+    const tr=agentData.length+2;
+    ac(ws,tr-1,0,"ИТОГО",sTotL());ac(ws,tr-1,1,"",sTotL());
+    ac(ws,tr-1,2,agentData.reduce((s,a)=>s+a.totalSales,0),sTot(),`SUM(C2:C${tr-1})`);
+    ac(ws,tr-1,3,agentData.reduce((s,a)=>s+a.validSales,0),sTot(),`SUM(D2:D${tr-1})`);
+    ac(ws,tr-1,4,totals.office,sTot(),`SUM(E2:E${tr-1})`);
+    ac(ws,tr-1,5,totals.agent,sTot(),`SUM(F2:F${tr-1})`);
+    ac(ws,tr-1,6,totals.profit,sTot(),`SUM(G2:G${tr-1})`);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tr-1,c:6}});
+    ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:12},{wch:16},{wch:18},{wch:16}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Сводка");
   }
-  XLSX.writeFile(wb,"Комиссии.xlsx");
+
+  // ── Лист 2: Полисы ──────────────────────────────────────────────────────────
+  // Cols: A..Q=текст, R=% Агент (число), S=Ком. Агент (формула M*R/100)
+  {
+    const ws={};const hdr=mkHdr("1D4ED8");
+    const hdrs=["Агент","768-код","№ полиса","Компания","Марка","Рег.номер","Страхователь","Телефон","Начало","Окончание","Дней","Срок","Сумма","Регион","БМ","Мощность","Статус","% Агент","Ком. Агент"];
+    hdrs.forEach((h,c)=>ac(ws,0,c,h,hdr));
+    let row=1;
+    agentData.forEach(a=>{
+      const ic=gc(a.uid);
+      a.policies.forEach(p=>{
+        const er=row+1;
+        ac(ws,row,0,gn(a.uid),sC());ac(ws,row,1,ic,sC());ac(ws,row,2,p.policyNum||"",sC());
+        ac(ws,row,3,p.company||"",sC());ac(ws,row,4,p.car||"",sC());ac(ws,row,5,p.carPlate||"",sC());
+        ac(ws,row,6,p.insuredName||"",sC());ac(ws,row,7,p.phone||"",sC());
+        ac(ws,row,8,p.startDateFmt||"",sC());ac(ws,row,9,p.endDateFmt||"",sC());
+        ac(ws,row,10,p.days!=null?p.days:"",sN());ac(ws,row,11,p.term||"",sC());
+        ac(ws,row,12,p.amount||0,sN());ac(ws,row,13,p.region||"",sC());
+        ac(ws,row,14,p.bm||"",sC());ac(ws,row,15,p.power||"",sC());
+        ac(ws,row,16,p.exception?"Исключение":"Зачёт",sC());
+        ac(ws,row,17,p.agentRate||0,sN());
+        ac(ws,row,18,p.agentComm||0,sN(),`M${er}*R${er}/100`);
+        row++;
+      });
+    });
+    const tr=row+1;
+    ac(ws,row,0,"ИТОГО",sTotL());for(let c=1;c<=16;c++)ac(ws,row,c,"",sTotL());
+    ac(ws,row,17,"",sTotL());
+    ac(ws,row,18,agentData.reduce((s,a)=>s+a.policies.reduce((ss,p)=>ss+(p.agentComm||0),0),0),sTot(),`SUM(S2:S${tr-1})`);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:row,c:18}});
+    ws["!cols"]=[{wch:24},{wch:10},{wch:14},{wch:14},{wch:14},{wch:12},{wch:20},{wch:14},{wch:12},{wch:12},{wch:8},{wch:8},{wch:12},{wch:8},{wch:6},{wch:8},{wch:12},{wch:10},{wch:14}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Полисы");
+  }
+
+  // ── Лист 3: Исключения ──────────────────────────────────────────────────────
+  {
+    const ws={};const hdr=mkHdr("B91C1C");
+    ["Агент","№ полиса","Компания","Марка","Сумма","Регион","БМ","Причина"].forEach((h,c)=>ac(ws,0,c,h,hdr));
+    let row=1;
+    agentData.forEach(a=>a.policies.filter(p=>p.exception).forEach(p=>{
+      ac(ws,row,0,gn(a.uid),sC());ac(ws,row,1,p.policyNum||"",sC());
+      ac(ws,row,2,p.company||"",sC());ac(ws,row,3,p.car||"",sC());
+      ac(ws,row,4,p.amount||0,sN());ac(ws,row,5,p.region||"",sC());
+      ac(ws,row,6,p.bm||"",sC());ac(ws,row,7,excReason(p,excepts,a.uid),sC());
+      row++;
+    }));
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(row,1),c:7}});
+    ws["!cols"]=[{wch:24},{wch:14},{wch:14},{wch:14},{wch:12},{wch:8},{wch:6},{wch:30}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Исключения");
+  }
+
+  // ── Лист 4: Добровольные ────────────────────────────────────────────────────
+  // Cols: A=Агент, B=Продукт, C=Компания, D=Страхователь, E=Сумма, F=% О, G=Ком.О, H=% А, I=Ком.А
+  if(effVol.length>0){
+    const ws={};const hdr=mkHdr("1D4ED8");
+    ["Агент","Продукт","Компания","Страхователь","Сумма","% О","Ком. О","% А","Ком. А"].forEach((h,c)=>ac(ws,0,c,h,hdr));
+    effVol.forEach((v,i)=>{
+      const er=i+2;
+      ac(ws,i+1,0,gn(v.agentUid),sC());ac(ws,i+1,1,v.productName||"",sC());
+      ac(ws,i+1,2,v.company||"",sC());ac(ws,i+1,3,v.insuredName||"",sC());
+      ac(ws,i+1,4,v.amount||0,sN());
+      ac(ws,i+1,5,v.officeRate||0,sN());
+      ac(ws,i+1,6,v.officeComm||0,sN(),`E${er}*F${er}/100`);
+      ac(ws,i+1,7,v.agentRate||0,sN());
+      ac(ws,i+1,8,v.agentComm||0,sN(),`E${er}*H${er}/100`);
+    });
+    const tr=effVol.length+2;
+    ac(ws,tr-1,0,"ИТОГО",sTotL());for(let c=1;c<=3;c++)ac(ws,tr-1,c,"",sTotL());
+    ac(ws,tr-1,4,effVol.reduce((s,v)=>s+(v.amount||0),0),sTot(),`SUM(E2:E${tr-1})`);
+    ac(ws,tr-1,5,"",sTotL());
+    ac(ws,tr-1,6,effVol.reduce((s,v)=>s+(v.officeComm||0),0),sTot(),`SUM(G2:G${tr-1})`);
+    ac(ws,tr-1,7,"",sTotL());
+    ac(ws,tr-1,8,effVol.reduce((s,v)=>s+(v.agentComm||0),0),sTot(),`SUM(I2:I${tr-1})`);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tr-1,c:8}});
+    ws["!cols"]=[{wch:24},{wch:16},{wch:14},{wch:20},{wch:12},{wch:8},{wch:12},{wch:8},{wch:12}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Добровольные");
+  }
+
+  XLSXStyle.writeFile(wb,"Комиссии.xlsx");
 }
 
 // ─── Office template download ────────────────────────────────────────────────
@@ -1270,11 +1362,25 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const exportRenewalsResult=(tab)=>{
     if(!tab?.results?.length)return;
-    const wb=XLSX.utils.book_new();
-    const rows=[["№ полиса","Компания","Страхователь","Телефон","Госномер","Дата окончания","Статус","Компания продления","№ полиса продления","Агент/Оператор","Паспорт","Банк. счёт","Email"]];
-    tab.results.forEach(p=>{const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";const endDate=tab.subTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");rows.push([p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||"",p.passportNum||"",p.bankAccount||"",p.email||""]);});
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Продления");
-    XLSX.writeFile(wb,`Продления_${tab.month}${tab.period!=="all"?"_"+tab.period:""}.xlsx`);
+    const wb=XLSXStyle.utils.book_new();
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sHdr={fill:{patternType:"solid",fgColor:{rgb:"1D4ED8"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}};
+    const sRenewed={fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}},font:{sz:10},border:borders};
+    const sMissed={fill:{patternType:"solid",fgColor:{rgb:"FFF1F2"}},font:{sz:10},border:borders};
+    const sNoPlate={fill:{patternType:"solid",fgColor:{rgb:"FEF9C3"}},font:{sz:10},border:borders};
+    const HEADERS=["№ полиса","Компания","Страхователь","Телефон","Госномер","Дата окончания","Статус","Компания продления","№ полиса продления","Агент/Оператор","Паспорт","Банк. счёт","Email"];
+    const ws={};
+    HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:sHdr});
+    tab.results.forEach((p,ri)=>{
+      const status=p._status==="renewed"?"Продлён":p._status==="missed"?"Пропущен":"Нет госномера";
+      const sc=p._status==="renewed"?sRenewed:p._status==="missed"?sMissed:sNoPlate;
+      const endDate=tab.subTab==="office"?(p.dateEnd||""):(p.endDateFmt||"");
+      [p.policyNum||"",p.company||"",p.insuredName||"",p.phone||"",p.carPlate||"",endDate,status,p._rnCo||"",p._rnPol||"",p._rnAgent||"",p.passportNum||"",p.bankAccount||"",p.email||""].forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:"s",s:sc});
+    });
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tab.results.length,c:HEADERS.length-1}});
+    ws["!cols"]=[{wch:16},{wch:10},{wch:26},{wch:15},{wch:13},{wch:14},{wch:12},{wch:14},{wch:16},{wch:22},{wch:16},{wch:22},{wch:28}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Продления");
+    _dlXlsx(wb,`Продления_${tab.month}${tab.period!=="all"?"_"+tab.period:""}.xlsx`);
   };
   const updateRnStatus=async(tid,polKey,status)=>{const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;const w={...tab.work,[polKey]:{...(tab.work[polKey]||{}),operatorStatus:status}};rnUpdateTab(tid,{work:w});await saveRenewalWork(w,tab.month);};
   const addRnCall=async(tid,polKey,call)=>{const tab=rnTabs.find(t=>t.id===tid);if(!tab)return;const ex=tab.work[polKey]||{};const now=new Date();const calls=[...(ex.calls||[]),{...call,date:now.toISOString().slice(0,10),time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}];const w={...tab.work,[polKey]:{...ex,calls}};rnUpdateTab(tid,{work:w});await saveRenewalWork(w,tab.month);};
@@ -2427,35 +2533,76 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const agName=a=>{const n=getName(a.uid);if(n)return n;if(a.uid.startsWith("__raw__"))return a.uid.replace("__raw__","")+" (нет в справочнике)";return a.uid;};
 
 
-  const polCols=["№ полиса","Компания","Страхователь","Марка","Рег.номер","Телефон","Начало","Окончание","Регион","БМ","Сумма","Ставка %","Начислено"];
-  const polRow=p=>[p.policyNum,p.company,p.insuredName,p.car,p.carPlate,p.phone,p.startDateFmt,p.endDateFmt,p.region,p.bm,p.amount,p.exception?0:(p.agentRate||0),p.exception?0:p.agentComm];
+  const _agXlsxStyles=()=>{const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};return{sHdr:(bg)=>({fill:{patternType:"solid",fgColor:{rgb:bg||"1E3A5F"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}}),sC:(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}}),sN:(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}}),sT:(bg)=>({fill:{patternType:"solid",fgColor:{rgb:bg||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"center"}}),sTN:(bg)=>({fill:{patternType:"solid",fgColor:{rgb:bg||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"right"}}),borders};};
+  const _agCell=(ws,r,c,v,s,f)=>{const cell={s,t:typeof v==="number"?"n":"s"};if(f){cell.f=f;cell.v=v;cell.t="n";}else cell.v=v??'';ws[XLSXStyle.utils.encode_cell({r,c})]=cell;};
 
   const exportAgentValid=(uid,pols,month)=>{
-    const wb=XLSX.utils.book_new();
-    const rows=[polCols,...pols.map(polRow)];
-    rows.push(["ИТОГО","","","","","","","","","",pols.reduce((s,p)=>s+p.amount,0),"",pols.reduce((s,p)=>s+p.agentComm,0)]);
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Зачётные");
+    const wb=XLSXStyle.utils.book_new();const {sHdr,sC,sN,sT,sTN}=_agXlsxStyles();
     const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
-    XLSX.writeFile(wb,"Зачётные_"+ic+"_"+month+".xlsx");
+    const COLS=["№ полиса","Компания","Страхователь","Марка","Рег.номер","Телефон","Начало","Окончание","Регион","БМ","Сумма (֏)","Ставка %","Начислено (֏)"];
+    const ws={};
+    COLS.forEach((h,c)=>_agCell(ws,0,c,h,sHdr("166534")));
+    pols.forEach((p,i)=>{const r=i+1;const er=r+1;const bg=i%2===0?"FFFFFF":"F0FDF4";
+      [p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.phone||"",p.startDateFmt||"",p.endDateFmt||"",p.region||"",p.bm||""].forEach((v,c)=>_agCell(ws,r,c,v,sC(bg)));
+      _agCell(ws,r,10,p.amount||0,sN(bg));
+      _agCell(ws,r,11,p.exception?0:(p.agentRate||0),sN(bg));
+      _agCell(ws,r,12,p.exception?0:(p.agentComm||0),sN(bg),p.exception?undefined:`K${er}*L${er}/100`);
+    });
+    const tot=pols.length+1;
+    ["ИТОГО","","","","","","","","",""].forEach((v,c)=>_agCell(ws,tot,c,v,sT("BBF7D0")));
+    _agCell(ws,tot,10,pols.reduce((s,p)=>s+p.amount,0),sTN("BBF7D0"),pols.length?`SUM(K2:K${tot})`:undefined);
+    _agCell(ws,tot,11,"",sT("BBF7D0"));
+    _agCell(ws,tot,12,pols.reduce((s,p)=>s+(p.agentComm||0),0),sTN("86EFAC"),pols.length?`SUM(M2:M${tot})`:undefined);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tot,c:12}});
+    ws["!cols"]=[{wch:16},{wch:10},{wch:26},{wch:16},{wch:12},{wch:14},{wch:11},{wch:11},{wch:8},{wch:6},{wch:14},{wch:10},{wch:14}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Зачётные");
+    _dlXlsx(wb,"Зачётные_"+ic+"_"+month+".xlsx");
   };
 
   const exportAgentExc=(uid,pols,month)=>{
-    const wb=XLSX.utils.book_new();
-    const rows=[polCols,...pols.map(polRow)];
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Незачётные");
+    const wb=XLSXStyle.utils.book_new();const {sHdr,sC,sN,sT,sTN}=_agXlsxStyles();
     const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
-    XLSX.writeFile(wb,"Незачётные_"+ic+"_"+month+".xlsx");
+    const COLS=["№ полиса","Компания","Страхователь","Марка","Рег.номер","Телефон","Начало","Окончание","Регион","БМ","Сумма (֏)","Причина"];
+    const ws={};
+    COLS.forEach((h,c)=>_agCell(ws,0,c,h,sHdr("B91C1C")));
+    pols.forEach((p,i)=>{const r=i+1;const bg=i%2===0?"FFFFFF":"FFF5F5";
+      [p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.phone||"",p.startDateFmt||"",p.endDateFmt||"",p.region||"",p.bm||""].forEach((v,c)=>_agCell(ws,r,c,v,sC(bg)));
+      _agCell(ws,r,10,p.amount||0,sN(bg));
+      _agCell(ws,r,11,excReason(p,effExceptions,uid)||"Исключён",sC(bg));
+    });
+    const tot=pols.length+1;
+    ["ИТОГО","","","","","","","","",""].forEach((v,c)=>_agCell(ws,tot,c,v,sT("FCA5A5")));
+    _agCell(ws,tot,10,pols.reduce((s,p)=>s+(p.amount||0),0),sTN("FCA5A5"),pols.length?`SUM(K2:K${tot})`:undefined);
+    _agCell(ws,tot,11,"",sT("FCA5A5"));
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tot,c:11}});
+    ws["!cols"]=[{wch:16},{wch:10},{wch:26},{wch:16},{wch:12},{wch:14},{wch:11},{wch:11},{wch:8},{wch:6},{wch:14},{wch:35}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Незачётные");
+    _dlXlsx(wb,"Незачётные_"+ic+"_"+month+".xlsx");
   };
 
   const exportAgentVol=(uid,volPols,month)=>{
-    const wb=XLSX.utils.book_new();
-    const volCols=["№ полиса","Продукт","Компания","Страхователь","Сумма","% А","Ком. агента","К оплате офису"];
-    const volRow=v=>[v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0,(v.agentRate||0)+"%",v.agentComm||0,v.amount-(v.agentComm||0)];
-    const rows=[volCols,...volPols.map(volRow)];
-    rows.push(["ИТОГО","","","",volPols.reduce((s,v)=>s+v.amount,0),"",volPols.reduce((s,v)=>s+v.agentComm,0),volPols.reduce((s,v)=>s+(v.amount-v.agentComm),0)]);
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Добровольные");
+    const wb=XLSXStyle.utils.book_new();const {sHdr,sC,sN,sT,sTN}=_agXlsxStyles();
     const ic=(agentDir[uid]&&agentDir[uid].internalCode)||uid;
-    XLSX.writeFile(wb,"Добровольные_"+ic+"_"+month+".xlsx");
+    const COLS=["№ полиса","Продукт","Компания","Страхователь","Сумма (֏)","% А","Ком. агента (֏)","К оплате офису (֏)"];
+    const ws={};
+    COLS.forEach((h,c)=>_agCell(ws,0,c,h,sHdr("1D4ED8")));
+    volPols.forEach((p,i)=>{const r=i+1;const er=r+1;const bg=i%2===0?"FFFFFF":"EFF6FF";
+      [p.policyNum||"",p.productName||"",p.company||"",p.insuredName||""].forEach((v,c)=>_agCell(ws,r,c,v,sC(bg)));
+      _agCell(ws,r,4,p.amount||0,sN(bg));
+      _agCell(ws,r,5,p.agentRate||0,sN(bg));
+      _agCell(ws,r,6,p.agentComm||0,sN(bg),`E${er}*F${er}/100`);
+      _agCell(ws,r,7,(p.amount||0)-(p.agentComm||0),sN(bg),`E${er}-G${er}`);
+    });
+    const tot=volPols.length+1;
+    ["ИТОГО","","",""].forEach((v,c)=>_agCell(ws,tot,c,v,sT("BFDBFE")));
+    _agCell(ws,tot,4,volPols.reduce((s,v)=>s+(v.amount||0),0),sTN("BFDBFE"),volPols.length?`SUM(E2:E${tot})`:undefined);
+    _agCell(ws,tot,5,"",sT("BFDBFE"));
+    _agCell(ws,tot,6,volPols.reduce((s,v)=>s+(v.agentComm||0),0),sTN("93C5FD"),volPols.length?`SUM(G2:G${tot})`:undefined);
+    _agCell(ws,tot,7,volPols.reduce((s,v)=>s+(v.amount||0)-(v.agentComm||0),0),sTN("BFDBFE"),volPols.length?`SUM(H2:H${tot})`:undefined);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tot,c:7}});
+    ws["!cols"]=[{wch:16},{wch:18},{wch:12},{wch:26},{wch:14},{wch:8},{wch:16},{wch:18}];
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Добровольные");
+    _dlXlsx(wb,"Добровольные_"+ic+"_"+month+".xlsx");
   };
 
   const exportAgentAll=(uid,validPols,excPols,volPols,month)=>{
@@ -2581,18 +2728,49 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const exportAllPayrollXlsx=(agentData,effVol,agentDir,month)=>{
     const _opUids=new Set(managerConfig?.operatorUids||[]);
     const rows=buildAllPayrollRows(agentData.filter(a=>!_opUids.has(a.uid)),effVol,agentDir,officeCodes);
-    const wb=XLSX.utils.book_new();
-    const header=["Имя агента","768-код","Кол-во полисов","Начислено (ОСАГО)","К оплате офису (доброволь.)","К выплате","Примечание","Подпись"];
-    const data=[header,...rows.map(r=>[r.name,r.ic,r.polCount,r.accrued,r.volDebt>0?r.volDebt:"",r.net,"",""])];
+    const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
+    const sHdr={fill:{patternType:"solid",fgColor:{rgb:"166534"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:"center",wrapText:true}};
+    const sC=(bold)=>({fill:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
+    const sN=(bold)=>({fill:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}});
+    const sTot={fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"right"}};
+    const sTotL={fill:{patternType:"solid",fgColor:{rgb:"DCFCE7"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:"left"}};
+    const ac=(ws,r,c,v,s,f)=>{const cell={s,t:typeof v==="number"?"n":"s"};if(f){cell.f=f;cell.v=v;cell.t="n";}else cell.v=v??'';ws[XLSXStyle.utils.encode_cell({r,c})]=cell;};
+    const hdrs=["Имя агента","768-код","Кол-во полисов","Начислено (ОСАГО)","К оплате офису (доброволь.)","К выплате","Примечание","Подпись"];
+    const ws={};const mg=[];
+    // Header
+    hdrs.forEach((h,c)=>ac(ws,0,c,h,sHdr));
+    // Data rows: A=0,B=1,C=2,D=3,E=4,F=5,G=6,H=7
+    rows.forEach((r,i)=>{
+      const er=i+2;// Excel row (1-indexed header = row 1, so data starts at 2)
+      ac(ws,i+1,0,r.name,sC());
+      ac(ws,i+1,1,r.ic,sC());
+      ac(ws,i+1,2,r.polCount,sN());
+      ac(ws,i+1,3,r.accrued,sN());
+      ac(ws,i+1,4,r.volDebt>0?r.volDebt:0,sN());
+      // К выплате = Начислено (D) − К оплате офису (E)
+      ac(ws,i+1,5,r.net,sN(),`D${er}-E${er}`);
+      ac(ws,i+1,6,"",sC());
+      ac(ws,i+1,7,"",sC());
+    });
+    // ИТОГО row
+    const tr=rows.length+2;
     const totPols=rows.reduce((s,r)=>s+r.polCount,0);
     const totAcc=rows.reduce((s,r)=>s+r.accrued,0);
     const totVol=rows.reduce((s,r)=>s+r.volDebt,0);
     const totNet=rows.reduce((s,r)=>s+r.net,0);
-    data.push(["ИТОГО","",totPols,totAcc,totVol>0?totVol:"",totNet,"",""]);
-    const ws=XLSX.utils.aoa_to_sheet(data);
+    ac(ws,tr-1,0,"ИТОГО",sTotL);
+    ac(ws,tr-1,1,"",sTotL);
+    ac(ws,tr-1,2,totPols,sTot,`SUM(C2:C${tr-1})`);
+    ac(ws,tr-1,3,totAcc,sTot,`SUM(D2:D${tr-1})`);
+    ac(ws,tr-1,4,totVol>0?totVol:0,sTot,`SUM(E2:E${tr-1})`);
+    ac(ws,tr-1,5,totNet,sTot,`SUM(F2:F${tr-1})`);
+    ac(ws,tr-1,6,"",sTotL);
+    ac(ws,tr-1,7,"",sTotL);
+    ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:tr-1,c:7}});
     ws["!cols"]=[{wch:28},{wch:12},{wch:14},{wch:18},{wch:24},{wch:16},{wch:20},{wch:18}];
-    XLSX.utils.book_append_sheet(wb,ws,"Начисления "+fmtMonth(month));
-    XLSX.writeFile(wb,"Все_начисления_"+month+".xlsx");
+    const wb=XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb,ws,"Начисления "+fmtMonth(month));
+    _dlXlsx(wb,"Все_начисления_"+month+".xlsx");
   };
 
   // Shared helper: build one operator worksheet. showMgr=true includes manager income columns.
@@ -2602,7 +2780,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const sLight=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:al||"center",wrapText:true}});
     const sC=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"left"}});
     const sN=(bg,bold)=>({fill:bg?{patternType:"solid",fgColor:{rgb:bg}}:{},font:{sz:10,bold:!!bold},border:borders,alignment:{horizontal:"right"}});
-    const ac=(ws,row,c,v,s)=>{ws[XLSXStyle.utils.encode_cell({r:row,c})]={v,t:typeof v==="number"?"n":"s",s};};
+    const ac=(ws,row,c,v,s,f)=>{const cell={s,t:typeof v==="number"?"n":"s"};if(f){cell.f=f;cell.v=v;cell.t="n";}else{cell.v=v;}ws[XLSXStyle.utils.encode_cell({r:row,c})]=cell;};
     const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
     const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
     const ws={};let rw=0;const mg=[];
@@ -2622,16 +2800,40 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(vp.length>0){
       ac(ws,rw,0,"ЗАЧЁТНЫЕ ПОЛИСЫ ("+vp.length+")",sDark("166534","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
       VHDRS.forEach((h,c)=>ac(ws,rw,c,h,sLight("D1FAE5")));rw++;
+      const vpDataStart=rw+1;
       vp.forEach((p,i)=>{
-        const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg,r.uid);
-        const vals=showMgr
-          ?[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr,Math.round(p.amount*mr/100),or,Math.round(p.amount*or/100),""]
-          :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or,Math.round(p.amount*or/100),""];
-        vals.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;
+        const bg=i%2===0?"FFFFFF":"F0FDF4";const mr=getMgrPolicyRate(p,cfg);const or=getOpPolicyRate(p,r.tier,cfg,r.uid);const er=rw+1;
+        if(showMgr){
+          [p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,mr].forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));
+          ac(ws,rw,11,Math.round(p.amount*mr/100),sN(bg),`J${er}*K${er}/100`);
+          ac(ws,rw,12,or,sN(bg));
+          ac(ws,rw,13,Math.round(p.amount*or/100),sN(bg),`J${er}*M${er}/100`);
+          ac(ws,rw,14,"",sC(bg));
+        }else{
+          [p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,or].forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));
+          ac(ws,rw,11,Math.round(p.amount*or/100),sN(bg),`J${er}*K${er}/100`);
+          ac(ws,rw,12,"",sC(bg));
+        }
+        rw++;
       });
+      const vpDataEnd=rw;
       const totAmt=vp.reduce((s,p)=>s+p.amount,0);
-      const totRow=showMgr?["ИТОГО","","","","","","","","",totAmt,"",r.mi,"",r.oi,r.oi+r.fix]:["ИТОГО","","","","","","","","",totAmt,"",r.oi,r.oi+r.fix];
-      totRow.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw+=2;
+      if(showMgr){
+        ["ИТОГО","","","","","","","",""].forEach((v,c)=>ac(ws,rw,c,v,sC("E5E7EB",true)));
+        ac(ws,rw,9,totAmt,sN("E5E7EB",true),vpDataEnd>vpDataStart?`SUM(J${vpDataStart}:J${vpDataEnd})`:undefined);
+        ac(ws,rw,10,"",sC("E5E7EB",true));
+        ac(ws,rw,11,r.mi,sN("E5E7EB",true),vpDataEnd>vpDataStart?`SUM(L${vpDataStart}:L${vpDataEnd})`:undefined);
+        ac(ws,rw,12,"",sC("E5E7EB",true));
+        ac(ws,rw,13,r.oi,sN("E5E7EB",true),vpDataEnd>vpDataStart?`SUM(N${vpDataStart}:N${vpDataEnd})`:undefined);
+        ac(ws,rw,14,r.oi+r.fix,sN("E5E7EB",true));
+      }else{
+        ["ИТОГО","","","","","","","",""].forEach((v,c)=>ac(ws,rw,c,v,sC("E5E7EB",true)));
+        ac(ws,rw,9,totAmt,sN("E5E7EB",true),vpDataEnd>vpDataStart?`SUM(J${vpDataStart}:J${vpDataEnd})`:undefined);
+        ac(ws,rw,10,"",sC("E5E7EB",true));
+        ac(ws,rw,11,r.oi,sN("E5E7EB",true),vpDataEnd>vpDataStart?`SUM(L${vpDataStart}:L${vpDataEnd})`:undefined);
+        ac(ws,rw,12,r.oi+r.fix,sN("E5E7EB",true));
+      }
+      rw+=2;
     }
     if(ep.length>0){
       ac(ws,rw,0,"НЕЗАЧЁТНЫЕ ПОЛИСЫ ("+ep.length+")",sDark("991B1B","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
@@ -2820,23 +3022,30 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const PHONE_COL=1;
     const ws={};
     HEADERS.forEach((h,c)=>ws[XLSXStyle.utils.encode_cell({r:0,c})]={v:h,t:"s",s:c===PHONE_COL?sHdrPhone:sHdr});
+    const sTotN={...sTot,alignment:{horizontal:"right"}};
     pols.forEach((p,ri)=>{
+      const er=ri+2;
       const isPaid=!!p.paid;
       const sc=isPaid?sCellPaid:sCellUnpaid;
       const sp=isPaid?sPhonePaid:sPhoneUnpaid;
+      const scR={...sc,alignment:{horizontal:"right"}};
       const vals=[
         p.insuredName||"",p.phone||"",p.company||"",p.car||"",p.carPlate||"",p.policyNum||"",
         p.polType==="voluntary"?"Добровольный":"ОСАГО",
         p.productName||"",
-        p.amount||0,p.discount||0,(p.amount||0)-(p.discount||0),
+        p.amount||0,p.discount||0,null,
         isoToDisplay(p.date),
         p.comment||"",p.passportNum||"",p.bankAccount||"",p.email||""
       ];
-      vals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:sc});
+      vals.forEach((v,c)=>{if(v===null)return;ws[XLSXStyle.utils.encode_cell({r:ri+1,c})]={v,t:typeof v==="number"?"n":"s",s:c===PHONE_COL?sp:(c>=8&&c<=10?scR:sc)};});
+      ws[XLSXStyle.utils.encode_cell({r:ri+1,c:10})]={f:`I${er}-J${er}`,v:(p.amount||0)-(p.discount||0),t:"n",s:scR};
     });
     const totRow=pols.length+1;
-    const totVals=["ИТОГО","","","","","",`${pols.length} полисов`,"",pols.reduce((s,p)=>s+(p.amount||0),0),pols.reduce((s,p)=>s+(p.discount||0),0),pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,"","","",""];
-    totVals.forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:typeof v==="number"?"n":"s",s:sTot});
+    const tr=totRow+1;
+    ["ИТОГО","","","","","",`${pols.length} полисов`,"","","","",`Оплачено: ${pols.filter(p=>p.paid).length} / Не оплачено: ${pols.filter(p=>!p.paid).length}`,"","","",""].forEach((v,c)=>ws[XLSXStyle.utils.encode_cell({r:totRow,c})]={v,t:"s",s:sTot});
+    ws[XLSXStyle.utils.encode_cell({r:totRow,c:8})]={f:`SUM(I2:I${tr-1})`,v:pols.reduce((s,p)=>s+(p.amount||0),0),t:"n",s:sTotN};
+    ws[XLSXStyle.utils.encode_cell({r:totRow,c:9})]={f:`SUM(J2:J${tr-1})`,v:pols.reduce((s,p)=>s+(p.discount||0),0),t:"n",s:sTotN};
+    ws[XLSXStyle.utils.encode_cell({r:totRow,c:10})]={f:`SUM(K2:K${tr-1})`,v:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),t:"n",s:sTotN};
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:totRow,c:HEADERS.length-1}});
     ws["!cols"]=[{wch:26},{wch:17},{wch:10},{wch:16},{wch:12},{wch:17},{wch:14},{wch:18},{wch:10},{wch:10},{wch:12},{wch:15},{wch:30},{wch:18},{wch:22},{wch:30}];
     const wb=XLSXStyle.utils.book_new();
