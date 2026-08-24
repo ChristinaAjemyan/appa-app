@@ -6,6 +6,7 @@ const router = express.Router();
 // GET /api/calc-result-storage?prefix=xxx
 router.get('/', async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const { prefix } = req.query;
     const where = prefix ? { key: { [Op.like]: `${prefix}%` } } : {};
     const records = await db.CalcResultStorage.findAll({ where, attributes: ['key'] });
@@ -18,6 +19,7 @@ router.get('/', async (req, res) => {
 // GET /api/calc-result-storage/:key
 router.get('/:key', async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const record = await db.CalcResultStorage.findByPk(req.params.key);
     if (!record) {
       return res.status(404).json({ error: 'Key not found' });
