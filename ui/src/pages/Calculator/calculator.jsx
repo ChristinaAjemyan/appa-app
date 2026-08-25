@@ -3150,7 +3150,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",padding:20,maxWidth:1400,margin:"0 auto",color:"#1e293b",background:"#dde3ed",minHeight:"100vh"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <h2 style={{margin:0,fontSize:20}}>Your Garant LLC</h2>
+          <h2 style={{margin:0,fontSize:20}}>"Your Garant LLC"</h2>
           {isAdmin
             ?<><span style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#92400e"}}>🔑 Администратор</span></>
             :<><span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:600,color:"#166534"}}>👤 {currentEmployee?.name||"Сотрудник"}</span></>
