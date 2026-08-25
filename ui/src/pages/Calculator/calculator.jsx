@@ -937,6 +937,7 @@ export default function App(){
   const _employeesRef=useRef([]);
   const _adminPinRef=useRef("000000");
   const _officeStaffRef=useRef([]);
+  const _settingsLoadedRef=useRef(false);
   const[importPending,setImportPending]=useState(null);
   const[importPreview,setImportPreview]=useState(null);
   const DEFAULT_EMPLOYEES=[
@@ -1069,6 +1070,7 @@ export default function App(){
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
     try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin){_adminPinRef.current=p.adminPin;setAdminPin(p.adminPin);}if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length){_officeStaffRef.current=p.officeStaff;setOfficeStaff(p.officeStaff);}if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));const updates={};if(newTabs.length)updates.tabs=[...(emp.tabs||[]),...newTabs];if(def.cashMode&&!emp.cashMode)updates.cashMode=def.cashMode;if(def.restrictToVoluntary&&!emp.restrictToVoluntary)updates.restrictToVoluntary=def.restrictToVoluntary;return Object.keys(updates).length?{...emp,...updates}:emp;});const defNotInStored=DEFAULT_EMPLOYEES.filter(d=>!p.employees.find(e=>e.id===d.id));const finalList=[...merged,...defNotInStored];_employeesRef.current=finalList;setEmployees(finalList);}}}catch(err){console.error("appSettings load error:",err);showToast("⚠ Ошибка загрузки настроек приложения. Если сотрудники не могут войти — обновите страницу.","error");}
+    _settingsLoadedRef.current=true;
     try{const r=await calcStorage.get("mreoConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setMreoConfig(prev=>({...prev,...p}));}}catch{}
     try{const r=await calcStorage.get("managerConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.managerRates)setManagerConfig({...DEFAULT_MGR_RATES,...p,operatorUids:p.operatorUids||[],managerStartDate:p.managerStartDate||""});}}catch{}
     try{const r=await calcStorage.get("officeExpenses").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&typeof p==="object")setOfficeExpenses(p);}setOfficeExpLoaded(true);}catch{setOfficeExpLoaded(true);}
@@ -1119,6 +1121,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const allowedTabs=isAdmin?["commissions","policydb","officesales","cashbook","payroll","manager","income","search","bookmarks","tasks","renewals","renewals_mreo","amex"]:[...(currentEmployee?.tabs||[]),"search","bookmarks","tasks"];
 
   const saveAppSettings=(updates={})=>{
+    if(!_settingsLoadedRef.current)return;
     const s={adminPin:_adminPinRef.current,employees:_employeesRef.current,officeStaff:_officeStaffRef.current,...updates};
     calcStorage.set("appSettings",JSON.stringify(s)).catch(_saveErr("настройки приложения"));
   };
@@ -1290,9 +1293,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }catch{setCmpData(null);}
     setCmpLoading(false);
   };
-  const saveOfficeStaff=(list)=>{const prev=officeStaff;_officeStaffRef.current=list;setOfficeStaff(list);const s={adminPin:_adminPinRef.current,employees:_employeesRef.current,officeStaff:list};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{_officeStaffRef.current=prev;setOfficeStaff(prev);_saveErr("сотрудники офиса")(err);});};
+  const saveOfficeStaff=(list)=>{if(!_settingsLoadedRef.current)return;const prev=officeStaff;_officeStaffRef.current=list;setOfficeStaff(list);const s={adminPin:_adminPinRef.current,employees:_employeesRef.current,officeStaff:list};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{_officeStaffRef.current=prev;setOfficeStaff(prev);_saveErr("сотрудники офиса")(err);});};
   const saveReminders=(list)=>{const prev=reminders;setReminders(list);calcStorage.set("reminders",JSON.stringify(list)).catch(err=>{setReminders(prev);_saveErr("напоминания")(err);});};
-  const saveEmployees=(list)=>{const prev=employees;_employeesRef.current=list;setEmployees(list);const s={adminPin:_adminPinRef.current,employees:list,officeStaff:_officeStaffRef.current};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{_employeesRef.current=prev;setEmployees(prev);_saveErr("сотрудники")(err);});logAction("settings","Изменён список сотрудников","—");};
+  const saveEmployees=(list)=>{if(!_settingsLoadedRef.current)return;const prev=employees;_employeesRef.current=list;setEmployees(list);const s={adminPin:_adminPinRef.current,employees:list,officeStaff:_officeStaffRef.current};calcStorage.set("appSettings",JSON.stringify(s)).catch(err=>{_employeesRef.current=prev;setEmployees(prev);_saveErr("сотрудники")(err);});logAction("settings","Изменён список сотрудников","—");};
   const saveManagerConfig=cfg=>{const prev=managerConfig;setManagerConfig(cfg);calcStorage.set("managerConfig",JSON.stringify(cfg)).catch(err=>{setManagerConfig(prev);_saveErr("конфигурация менеджера")(err);});logAction("settings","Изменена конфигурация менеджера","—");};
   const saveOfficeExpenses=data=>{const prev=officeExpenses;setOfficeExpenses(data);calcStorage.set("officeExpenses",JSON.stringify(data)).catch(err=>{setOfficeExpenses(prev);_saveErr("расходы офиса")(err);});};
   const saveMreoConfig=cfg=>{const prev=mreoConfig;setMreoConfig(cfg);calcStorage.set("mreoConfig",JSON.stringify(cfg)).catch(err=>{setMreoConfig(prev);_saveErr("конфигурация МРЭО")(err);});logAction("settings","Изменена конфигурация МРЭО","—");};
