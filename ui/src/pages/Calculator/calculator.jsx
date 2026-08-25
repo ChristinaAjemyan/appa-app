@@ -917,6 +917,7 @@ export default function App(){
   const[activeAgent,setActiveAgent]=useState(null);
   const[selectedAgents,setSelectedAgents]=useState(new Set());
   const[dbSelectedAgents,setDbSelectedAgents]=useState(new Set());
+  const[dbAgentDropOpen,setDbAgentDropOpen]=useState(false);
   const[volOpen,setVolOpen]=useState(false);
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
@@ -3672,11 +3673,42 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </select>
             <button onClick={loadDB} style={btn()}>🔄 Обновить</button>
             {dbLoaded&&<span style={{fontSize:12,color:"#6b7280"}}>{filteredDB.length+" полисов"+(expiryF?" ("+fmtMonth(expiryF)+")":"")}</span>}
-            {dbLoaded&&filteredDB.length>0&&(
-              <button onClick={()=>{const ep=dbSelectedAgents.size>0?filteredDB.filter(p=>p._source==="office"?dbSelectedAgents.has("__office__"):dbSelectedAgents.has(p.agentUid)):filteredDB;exportRenewalsZip(ep,expiryF?fmtMonth(expiryF):"все");}} style={btn("#16a34a",undefined,{marginLeft:"auto"})}>{dbSelectedAgents.size>0?"⬇ Экспорт ("+dbSelectedAgents.size+" агент"+(dbSelectedAgents.size===1?"а":"ов")+")":"⬇ Экспорт по агентам (ZIP)"}</button>
-            )}
+            {dbLoaded&&filteredDB.length>0&&(()=>{
+              const _da=[];const _s=new Set();
+              filteredDB.forEach(p=>{if(p._source==="office"){if(!_s.has("__office__")){_s.add("__office__");_da.push({uid:"__office__",name:"🏢 Офис",ic:"zzz"});}}else{const uid=p.agentUid||"__unknown__";if(!_s.has(uid)){_s.add(uid);const ag=agentDir[uid];const ic=(ag&&ag.internalCode)||"";const name=ag?(ag.name+" "+ag.surname).trim():(getName(uid)||p.agentCode||"Неизвестно");_da.push({uid,name,ic});}}});
+              _da.sort((a,b)=>{const na=parseInt((a.ic||"").replace(/\D/g,""))||9999;const nb=parseInt((b.ic||"").replace(/\D/g,""))||9999;return na-nb;});
+              const _nSel=_da.filter(a=>dbSelectedAgents.has(a.uid)).length;
+              const _allSel=_da.length>0&&_da.every(a=>dbSelectedAgents.has(a.uid));
+              const _exportBtn=<button onClick={()=>{const ep=dbSelectedAgents.size>0?filteredDB.filter(p=>p._source==="office"?dbSelectedAgents.has("__office__"):dbSelectedAgents.has(p.agentUid)):filteredDB;exportRenewalsZip(ep,expiryF?fmtMonth(expiryF):"все");}} style={btn("#16a34a")}>{dbSelectedAgents.size>0?"⬇ Экспорт ("+dbSelectedAgents.size+" агент"+(dbSelectedAgents.size===1?"а":"ов")+")":"⬇ Экспорт по агентам (ZIP)"}</button>;
+              if(_da.length<=1)return <div style={{marginLeft:"auto"}}>{_exportBtn}</div>;
+              return(
+                <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+                  {dbAgentDropOpen&&<div onClick={()=>setDbAgentDropOpen(false)} style={{position:"fixed",inset:0,zIndex:98}}/>}
+                  <div style={{position:"relative",zIndex:99}}>
+                    <button onClick={()=>setDbAgentDropOpen(o=>!o)} style={{...btn("#f1f5f9","#374151",{border:"1px solid #cbd5e1"}),fontWeight:600}}>
+                      {_nSel>0?_nSel+" из "+_da.length+" агентов ▾":"Все агенты ▾"}
+                    </button>
+                    {dbAgentDropOpen&&(
+                      <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"white",border:"1px solid #e2e8f0",borderRadius:8,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",minWidth:250,maxHeight:320,overflowY:"auto",zIndex:99}}>
+                        <label style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"2px solid #e5e7eb",cursor:"pointer",fontWeight:700,fontSize:13,background:"#f8fafc",borderRadius:"8px 8px 0 0"}}>
+                          <input type="checkbox" checked={_allSel} onChange={e=>{setDbSelectedAgents(e.target.checked?new Set(_da.map(a=>a.uid)):new Set());}}/>
+                          Выбрать всех
+                        </label>
+                        {_da.map(({uid,name,ic})=>{const sel=dbSelectedAgents.has(uid);return(
+                          <label key={uid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",background:sel?"#f0fdf4":"white",fontSize:13,borderTop:"1px solid #f1f5f9",transition:"background 0.1s"}}>
+                            <input type="checkbox" checked={sel} onChange={e=>{const s=new Set(dbSelectedAgents);if(e.target.checked)s.add(uid);else s.delete(uid);setDbSelectedAgents(s);}}/>
+                            {ic&&ic!=="zzz"&&<span style={{color:"#6366f1",fontWeight:700,fontSize:11,minWidth:50,flexShrink:0}}>{ic}</span>}
+                            <span>{name}</span>
+                          </label>
+                        );})}
+                      </div>
+                    )}
+                  </div>
+                  {_exportBtn}
+                </div>
+              );
+            })()}
           </div>
-          {dbLoaded&&filteredDB.length>0&&(()=>{const _da=[];const _s=new Set();filteredDB.forEach(p=>{if(p._source==="office"){if(!_s.has("__office__")){_s.add("__office__");_da.push({uid:"__office__",name:"🏢 Офис",ic:"zzz"});}}else{const uid=p.agentUid||"__unknown__";if(!_s.has(uid)){_s.add(uid);const ag=agentDir[uid];const ic=(ag&&ag.internalCode)||"";const name=ag?(ag.name+" "+ag.surname).trim():(getName(uid)||p.agentCode||"Неизвестно");_da.push({uid,name,ic});}}});_da.sort((a,b)=>{const na=parseInt((a.ic||"").replace(/\D/g,""))||9999;const nb=parseInt((b.ic||"").replace(/\D/g,""))||9999;return na-nb;});if(_da.length<=1)return null;return(<div style={{marginBottom:12,padding:"10px 14px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}><span style={{fontSize:12,color:"#64748b",fontWeight:600,marginRight:4,whiteSpace:"nowrap"}}>Агенты:</span>{_da.map(({uid,name,ic})=>{const sel=dbSelectedAgents.has(uid);return(<button key={uid} onClick={()=>{const s=new Set(dbSelectedAgents);if(sel)s.delete(uid);else s.add(uid);setDbSelectedAgents(s);}} style={{padding:"3px 10px",fontSize:12,fontWeight:600,borderRadius:16,border:"2px solid "+(sel?"#0f766e":"#cbd5e1"),background:sel?"#ccfbf1":"#f1f5f9",color:sel?"#0f766e":"#475569",cursor:"pointer",transition:"all 0.12s"}}>{ic&&ic!=="zzz"?ic+" · ":""}{name}{sel?" ✓":""}</button>);})}<div style={{marginLeft:"auto",display:"flex",gap:6,flexShrink:0}}><button onClick={()=>setDbSelectedAgents(new Set(_da.map(a=>a.uid)))} style={{padding:"3px 10px",fontSize:11,borderRadius:16,border:"1px solid #94a3b8",background:"white",color:"#374151",cursor:"pointer"}}>Все</button><button onClick={()=>setDbSelectedAgents(new Set())} style={{padding:"3px 10px",fontSize:11,borderRadius:16,border:"1px solid #94a3b8",background:"white",color:"#374151",cursor:"pointer"}}>Снять</button></div></div>);})()}
           {!dbLoaded&&<div style={{padding:30,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
           {dbLoaded&&filteredDB.length===0&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>{dbPols.length===0?"База пуста. Загрузите файлы и нажмите «💾 Сохранить месяц».":"Нет полисов с окончанием в "+fmtMonth(expiryF)+"."}</div>}
           {dbLoaded&&filteredDB.length>0&&(
