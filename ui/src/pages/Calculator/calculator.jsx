@@ -1951,11 +1951,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const tr=await calcStorage.get("amexTopups").catch(()=>null);
       setAmexTopups(tr?.value?JSON.parse(tr.value):[]);
       const keysR=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
-      const allPols=[];
-      for(const key of(keysR.keys||[])){
-        const r=await calcStorage.get(key).catch(()=>null);
-        if(r?.value){JSON.parse(r.value).forEach(p=>{if(p.paid_from_amex&&p.polType==="osago")allPols.push(p);});}
-      }
+      const results=await Promise.all((keysR.keys||[]).map(key=>calcStorage.get(key).catch(()=>null)));
+      const allPols=results.flatMap(r=>r?.value?JSON.parse(r.value).filter(p=>p.paid_from_amex&&p.polType==="osago"):[]);
       setAmexAllPols(allPols);
     }finally{setAmexLoaded(true);}
   };
