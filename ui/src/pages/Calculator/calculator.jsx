@@ -915,6 +915,7 @@ export default function App(){
   const[dbLoaded,setDbLoaded]=useState(false);
   const[expiryF,setExpiryF]=useState(getThisMonth);
   const[activeAgent,setActiveAgent]=useState(null);
+  const[selectedAgents,setSelectedAgents]=useState(new Set());
   const[volOpen,setVolOpen]=useState(false);
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
@@ -1075,7 +1076,7 @@ export default function App(){
   })();},[]);
 
   useEffect(()=>{
-    setUploadedFiles([]);setVolSession([]);setActiveAgent(null);setOfficeCodes([]);setNewOfficeCode("");
+    setUploadedFiles([]);setVolSession([]);setActiveAgent(null);setSelectedAgents(new Set());setOfficeCodes([]);setNewOfficeCode("");
     (async()=>{
       try{const r=await calcStorage.get("month:"+selMonth).catch(()=>null);if(r&&r.value){const d=JSON.parse(r.value);setStoredPols(d.policies||[]);setStoredVol(d.voluntary||[]);}else{setStoredPols([]);setStoredVol([]);}}catch{setStoredPols([]);setStoredVol([]);}
 try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&&r.value)setOfficeCodes(JSON.parse(r.value));else setOfficeCodes([]);}catch{setOfficeCodes([]);}
@@ -3167,6 +3168,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             </button>
           ))}
           {isAdmin&&hasData&&<button onClick={()=>exportToExcel(agentData,effVol,agentDir,totals,exceptions)} style={btn("#16a34a")}>⬇ Excel</button>}
+          {isAdmin&&selectedAgents.size>0&&<button onClick={()=>{const sel=agentData.filter(a=>selectedAgents.has(a.uid));const selVol=effVol.filter(v=>selectedAgents.has(v.agentUid));const selTotals={office:sel.reduce((s,a)=>s+a.totalOffice,0),agent:sel.reduce((s,a)=>s+a.totalAgent,0),profit:sel.reduce((s,a)=>s+a.profit,0)+selVol.reduce((s,v)=>s+v.officeComm-v.agentComm,0)};exportToExcel(sel,selVol,agentDir,selTotals,exceptions);}} style={{...btn("#0891b2"),position:"relative"}}>⬇ Выбранные ({selectedAgents.size})</button>}
           {isAdmin&&<button onClick={()=>setShowAudit(p=>!p)} style={{...btn(showAudit?"#0f172a":"#f1f5f9",showAudit?"#fff":"#1e293b",{fontSize:12}),border:"2px solid "+(showAudit?"#0f172a":"#94a3b8")}}>📋 Журнал</button>}
           {isAdmin&&<button onClick={()=>setShowBackup(p=>!p)} style={btn("#7c3aed")}>💾 Резерв</button>}
           {isAdmin&&<button onClick={()=>backRef.current.click()} style={btn("#f3f4f6","#374151",{border:"1px solid #d1d5db"})}>📂 Восстановить</button>}
@@ -3543,14 +3545,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {agentData.length>0&&(
                 <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
                   <table style={{width:"100%",borderCollapse:"collapse"}}>
-                    <thead><tr>{["Агент","768-код","Полисов всего","Не зачтено","Зачётные полисы","Всего продаж","Зачётные продажи","Выплачено агенту","Доход офиса","Прибыль офиса",""].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                    <thead><tr>
+                      <th style={{...th,width:36,textAlign:"center",paddingLeft:8}}><input type="checkbox" title="Выбрать всех" checked={agentData.length>0&&agentData.every(a=>selectedAgents.has(a.uid))} onChange={e=>{if(e.target.checked)setSelectedAgents(new Set(agentData.map(a=>a.uid)));else setSelectedAgents(new Set());}}/></th>
+                      {["Агент","768-код","Полисов всего","Не зачтено","Зачётные полисы","Всего продаж","Зачётные продажи","Выплачено агенту","Доход офиса","Прибыль офиса",""].map(h=><th key={h} style={th}>{h}</th>)}
+                    </tr></thead>
                     <tbody>{[...agentData].sort((a,b)=>{const na=parseInt(((agentDir[a.uid]&&agentDir[a.uid].internalCode)||"").replace(/\D/g,""))||9999;const nb=parseInt(((agentDir[b.uid]&&agentDir[b.uid].internalCode)||"").replace(/\D/g,""))||9999;return na-nb;}).map(a=>{
                       const hasOv=!!(rates.agentOverrides&&rates.agentOverrides[a.uid]);
                       const excCnt=a.policies.filter(p=>p.exception).length;
                       const validCnt=a.policies.length-excCnt;
                       const intCode=(agentDir[a.uid]&&agentDir[a.uid].internalCode)||"";
                       return(
-                        <tr key={a.uid} style={{background:activeAgent===a.uid?"#eff6ff":"white"}}>
+                        <tr key={a.uid} style={{background:activeAgent===a.uid?"#eff6ff":selectedAgents.has(a.uid)?"#f0fdf4":"white"}}>
+                          <td style={{...td,textAlign:"center",width:36,paddingLeft:8}}><input type="checkbox" checked={selectedAgents.has(a.uid)} onChange={e=>{const s=new Set(selectedAgents);if(e.target.checked)s.add(a.uid);else s.delete(a.uid);setSelectedAgents(s);}}/></td>
                           <td style={{...td,fontWeight:600}}>{agName(a)}{hasOv&&<span style={{marginLeft:5,fontSize:10,background:"#f5f3ff",color:"#7c3aed",borderRadius:10,padding:"1px 5px"}}>инд.</span>}</td>
                           <td style={{...td,color:"#6366f1",fontWeight:600,fontSize:12}}>{intCode||"—"}</td>
                           <td style={{...td,textAlign:"center"}}>{a.policies.length}</td>
