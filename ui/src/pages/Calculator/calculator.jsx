@@ -916,6 +916,7 @@ export default function App(){
   const[expiryF,setExpiryF]=useState(getThisMonth);
   const[activeAgent,setActiveAgent]=useState(null);
   const[selectedAgents,setSelectedAgents]=useState(new Set());
+  const[dbSelectedAgents,setDbSelectedAgents]=useState(new Set());
   const[volOpen,setVolOpen]=useState(false);
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
@@ -3665,16 +3666,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         <div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
             <div style={{fontWeight:600,fontSize:14}}>Полисы с окончанием в:</div>
-            <select value={expiryF} onChange={e=>setExpiryF(e.target.value)} style={{...inp,padding:"5px 10px",fontSize:13}}>
+            <select value={expiryF} onChange={e=>{setExpiryF(e.target.value);setDbSelectedAgents(new Set());}} style={{...inp,padding:"5px 10px",fontSize:13}}>
               <option value="">— Все —</option>
               {EXPIRY_OPTIONS.map(mo=><option key={mo} value={mo}>{fmtMonth(mo)}</option>)}
             </select>
             <button onClick={loadDB} style={btn()}>🔄 Обновить</button>
             {dbLoaded&&<span style={{fontSize:12,color:"#6b7280"}}>{filteredDB.length+" полисов"+(expiryF?" ("+fmtMonth(expiryF)+")":"")}</span>}
             {dbLoaded&&filteredDB.length>0&&(
-              <button onClick={()=>exportRenewalsZip(filteredDB,expiryF?fmtMonth(expiryF):"все")} style={btn("#16a34a",undefined,{marginLeft:"auto"})}>⬇ Экспорт по агентам (ZIP)</button>
+              <button onClick={()=>{const ep=dbSelectedAgents.size>0?filteredDB.filter(p=>p._source==="office"?dbSelectedAgents.has("__office__"):dbSelectedAgents.has(p.agentUid)):filteredDB;exportRenewalsZip(ep,expiryF?fmtMonth(expiryF):"все");}} style={btn("#16a34a",undefined,{marginLeft:"auto"})}>{dbSelectedAgents.size>0?"⬇ Экспорт ("+dbSelectedAgents.size+" агент"+(dbSelectedAgents.size===1?"а":"ов")+")":"⬇ Экспорт по агентам (ZIP)"}</button>
             )}
           </div>
+          {dbLoaded&&filteredDB.length>0&&(()=>{const _da=[];const _s=new Set();filteredDB.forEach(p=>{if(p._source==="office"){if(!_s.has("__office__")){_s.add("__office__");_da.push({uid:"__office__",name:"🏢 Офис",ic:"zzz"});}}else{const uid=p.agentUid||"__unknown__";if(!_s.has(uid)){_s.add(uid);const ag=agentDir[uid];const ic=(ag&&ag.internalCode)||"";const name=ag?(ag.name+" "+ag.surname).trim():(getName(uid)||p.agentCode||"Неизвестно");_da.push({uid,name,ic});}}});_da.sort((a,b)=>{const na=parseInt((a.ic||"").replace(/\D/g,""))||9999;const nb=parseInt((b.ic||"").replace(/\D/g,""))||9999;return na-nb;});if(_da.length<=1)return null;return(<div style={{marginBottom:12,padding:"10px 14px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}><span style={{fontSize:12,color:"#64748b",fontWeight:600,marginRight:4,whiteSpace:"nowrap"}}>Агенты:</span>{_da.map(({uid,name,ic})=>{const sel=dbSelectedAgents.has(uid);return(<button key={uid} onClick={()=>{const s=new Set(dbSelectedAgents);if(sel)s.delete(uid);else s.add(uid);setDbSelectedAgents(s);}} style={{padding:"3px 10px",fontSize:12,fontWeight:600,borderRadius:16,border:"2px solid "+(sel?"#0f766e":"#cbd5e1"),background:sel?"#ccfbf1":"#f1f5f9",color:sel?"#0f766e":"#475569",cursor:"pointer",transition:"all 0.12s"}}>{ic&&ic!=="zzz"?ic+" · ":""}{name}{sel?" ✓":""}</button>);})}<div style={{marginLeft:"auto",display:"flex",gap:6,flexShrink:0}}><button onClick={()=>setDbSelectedAgents(new Set(_da.map(a=>a.uid)))} style={{padding:"3px 10px",fontSize:11,borderRadius:16,border:"1px solid #94a3b8",background:"white",color:"#374151",cursor:"pointer"}}>Все</button><button onClick={()=>setDbSelectedAgents(new Set())} style={{padding:"3px 10px",fontSize:11,borderRadius:16,border:"1px solid #94a3b8",background:"white",color:"#374151",cursor:"pointer"}}>Снять</button></div></div>);})()}
           {!dbLoaded&&<div style={{padding:30,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
           {dbLoaded&&filteredDB.length===0&&<div style={{padding:40,textAlign:"center",color:"#9ca3af",fontSize:14}}>{dbPols.length===0?"База пуста. Загрузите файлы и нажмите «💾 Сохранить месяц».":"Нет полисов с окончанием в "+fmtMonth(expiryF)+"."}</div>}
           {dbLoaded&&filteredDB.length>0&&(
