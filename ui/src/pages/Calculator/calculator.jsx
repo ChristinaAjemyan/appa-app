@@ -1049,6 +1049,7 @@ export default function App(){
   const[amexLoaded,setAmexLoaded]=useState(false);
   const[amexNewTopup,setAmexNewTopup]=useState({date:"",amount:"",comment:""});
   const[amexShowOld,setAmexShowOld]=useState(false);
+  const[amexSubTab,setAmexSubTab]=useState("summary");
   const[mreoConfig,setMreoConfig]=useState(DEFAULT_MREO_CONFIG);
   const[mreoCashDays,setMreoCashDays]=useState({});
   const[mreoCashLoaded,setMreoCashLoaded]=useState(false);
@@ -1945,7 +1946,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
     logAction("delete_policy",(pol.polType==="osago"?"ОСАГО":"Добровольный")+": "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(pol.amount||0)+" ֏",pol._monthKey);
   };
-  const loadAmexData=async()=>{
+  const loadAmexData=async(force=false)=>{
+    if(!force && amexLoaded) return;
     setAmexLoaded(false);
     try{
       const tr=await calcStorage.get("amexTopups").catch(()=>null);
@@ -6943,9 +6945,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const cutoff=new Date(Date.now()-30*24*60*60*1000).toISOString().slice(0,10);
         const recentTopups=amexTopups.filter(t=>t.date>=cutoff);
         const olderTopups=amexTopups.filter(t=>t.date<cutoff);
-        const recentPols=amexAllPols.filter(p=>(p.date||"")>=cutoff);
-        const olderPols=amexAllPols.filter(p=>(p.date||"")<cutoff);
-        const recentSpent=recentPols.reduce((s,p)=>s+(p.amount||0),0);
+        const recentSpent=amexAllPols.filter(p=>(p.date||"")>=cutoff).reduce((s,p)=>s+(p.amount||0),0);
         const recentTopupsSum=recentTopups.reduce((s,t)=>s+t.amount,0);
         const sortDesc=(arr,key)=>[...arr].sort((a,b)=>{const av=a[key]||"";const bv=b[key]||"";return bv>av?1:bv<av?-1:0;});
         const fmtD=s=>s?new Date(s+"T00:00:00").toLocaleDateString("ru-RU"):"—";
@@ -6955,18 +6955,39 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Комментарий</th>
           <th style={{width:40}}></th>
         </tr></thead>;
-        const polHead=<thead><tr style={{background:"#f1f5f9"}}>
-          <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Дата</th>
-          <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Клиент</th>
-          <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Компания</th>
-          <th style={{textAlign:"right",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Потрачено</th>
-          <th style={{textAlign:"right",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>К оплате</th>
-        </tr></thead>;
+        // Build chronological running balance for policies sub-tab
+        const allEvents=[
+          ...amexTopups.map(t=>({type:"topup",date:t.date,amount:t.amount,id:t.id})),
+          ...amexAllPols.map(p=>({type:"pol",date:p.date||"",amount:p.amount||0,id:p._id,pol:p}))
+        ].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==="topup"?-1:1));
+        let _rb=0;
+        const polsWithBal=[];
+        allEvents.forEach(ev=>{
+          const before=_rb;
+          if(ev.type==="topup") _rb+=ev.amount;
+          else{_rb-=ev.amount;polsWithBal.push({...ev.pol,balBefore:before,balAfter:_rb});}
+        });
+        polsWithBal.reverse();
         return(
-          <div style={{maxWidth:900}}>
+          <div style={{maxWidth:980}}>
+            {/* Подвкладки */}
+            <div style={{display:"flex",gap:2,marginBottom:20,background:"#f1f5f9",borderRadius:10,padding:4,width:"fit-content"}}>
+              {[["summary","💳 Расчёты Amex"],["policies","📋 Полисы"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setAmexSubTab(id)}
+                  style={{padding:"7px 20px",borderRadius:8,border:"none",fontWeight:amexSubTab===id?700:400,
+                    background:amexSubTab===id?"white":"transparent",
+                    color:amexSubTab===id?"#1d4ed8":"#64748b",
+                    boxShadow:amexSubTab===id?"0 1px 4px rgba(0,0,0,.1)":"none",
+                    cursor:"pointer",fontSize:13}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {!amexLoaded
               ?<div style={{textAlign:"center",padding:"60px 20px",color:"#94a3b8",fontSize:14}}>⏳ Загрузка...</div>
-              :<>
+              :amexSubTab==="summary"
+              ?<>
                 {/* Сводка баланса */}
                 <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
                   <div style={{flex:1,minWidth:180,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 18px"}}>
@@ -7032,81 +7053,85 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 )}
 
-                {sortDesc(recentPols,"date").length>0&&(
-                  <div style={{background:"white",border:"1px solid #fca5a5",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
-                    <div style={{background:"#fff1f2",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#991b1b",borderBottom:"1px solid #fca5a5"}}>Полисы ОСАГО оплачены с Amex</div>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                      {polHead}
-                      <tbody>
-                        {sortDesc(recentPols,"date").map(p=>(
-                          <tr key={p._id} style={{borderTop:"1px solid #f1f5f9"}}>
-                            <td style={{padding:"8px 12px",color:"#374151"}}>{fmtD(p.date)}</td>
-                            <td style={{padding:"8px 12px",fontWeight:600,color:"#1e293b"}}>{p.insuredName||"—"}</td>
-                            <td style={{padding:"8px 12px",color:"#6b7280"}}>{p.company||"—"}</td>
-                            <td style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"#dc2626"}}>−{fmt(p.amount||0)}</td>
-                            <td style={{padding:"8px 12px",textAlign:"right",color:"#15803d",fontWeight:600}}>{fmt((p.amount||0)-(p.discount||0))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {recentTopups.length===0&&recentPols.length===0&&(
+                {recentTopups.length===0&&(
                   <div style={{textAlign:"center",color:"#94a3b8",padding:"30px 20px",background:"white",borderRadius:10,border:"1px solid #e5e7eb",marginBottom:14,fontSize:13}}>
-                    Нет операций за последние 30 дней
+                    Нет пополнений за последние 30 дней
                   </div>
                 )}
 
-                {/* История */}
-                {(olderTopups.length>0||olderPols.length>0)&&(
+                {/* История пополнений */}
+                {olderTopups.length>0&&(
                   <div style={{marginTop:8}}>
                     <button onClick={()=>setAmexShowOld(p=>!p)} style={{...btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12}),marginBottom:10}}>
-                      {amexShowOld?"▼":"▶"} История ({olderTopups.length+olderPols.length} записей)
+                      {amexShowOld?"▼":"▶"} История пополнений ({olderTopups.length} записей)
                     </button>
                     {amexShowOld&&(
-                      <>
-                        {sortDesc(olderTopups,"date").length>0&&(
-                          <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,marginBottom:10,overflow:"hidden",opacity:.85}}>
-                            <div style={{background:"#f8fafc",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#374151",borderBottom:"1px solid #e5e7eb"}}>Пополнения (ранние)</div>
-                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                              {tblHead}
-                              <tbody>
-                                {sortDesc(olderTopups,"date").map(t=>(
-                                  <tr key={t.id} style={{borderTop:"1px solid #f1f5f9"}}>
-                                    <td style={{padding:"7px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
-                                    <td style={{padding:"7px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
-                                    <td style={{padding:"7px 12px",color:"#6b7280"}}>{t.comment||"—"}</td>
-                                    <td style={{padding:"4px 6px"}}>{isAdmin&&<button aria-label="Удалить пополнение" onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                        {sortDesc(olderPols,"date").length>0&&(
-                          <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden",opacity:.85}}>
-                            <div style={{background:"#fff1f2",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#991b1b",borderBottom:"1px solid #fca5a5"}}>Полисы ОСАГО (ранние)</div>
-                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                              {polHead}
-                              <tbody>
-                                {sortDesc(olderPols,"date").map(p=>(
-                                  <tr key={p._id} style={{borderTop:"1px solid #f1f5f9"}}>
-                                    <td style={{padding:"7px 12px",color:"#374151"}}>{fmtD(p.date)}</td>
-                                    <td style={{padding:"7px 12px",fontWeight:600,color:"#1e293b"}}>{p.insuredName||"—"}</td>
-                                    <td style={{padding:"7px 12px",color:"#6b7280"}}>{p.company||"—"}</td>
-                                    <td style={{padding:"7px 12px",textAlign:"right",fontWeight:700,color:"#dc2626"}}>−{fmt(p.amount||0)}</td>
-                                    <td style={{padding:"7px 12px",textAlign:"right",color:"#15803d",fontWeight:600}}>{fmt((p.amount||0)-(p.discount||0))}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </>
+                      <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,marginBottom:10,overflow:"hidden",opacity:.85}}>
+                        <div style={{background:"#f8fafc",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#374151",borderBottom:"1px solid #e5e7eb"}}>Пополнения (ранние)</div>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                          {tblHead}
+                          <tbody>
+                            {sortDesc(olderTopups,"date").map(t=>(
+                              <tr key={t.id} style={{borderTop:"1px solid #f1f5f9"}}>
+                                <td style={{padding:"7px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
+                                <td style={{padding:"7px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
+                                <td style={{padding:"7px 12px",color:"#6b7280"}}>{t.comment||"—"}</td>
+                                <td style={{padding:"4px 6px"}}>{isAdmin&&<button aria-label="Удалить пополнение" onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 )}
+
+                <div style={{marginTop:16,textAlign:"right"}}>
+                  <button onClick={()=>loadAmexData(true)} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12})}>🔄 Обновить данные</button>
+                </div>
+              </>
+              :<>
+                {/* Подвкладка: Полисы */}
+                <div style={{marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <div style={{fontSize:13,color:"#64748b"}}>
+                    Всего полисов: <b style={{color:"#1e293b"}}>{polsWithBal.length}</b>
+                    {" · "}Потрачено: <b style={{color:"#dc2626"}}>{fmt(totalSpent)}</b>
+                  </div>
+                  <button onClick={()=>loadAmexData(true)} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12})}>🔄 Обновить</button>
+                </div>
+                {polsWithBal.length===0
+                  ?<div style={{textAlign:"center",color:"#94a3b8",padding:"40px 20px",background:"white",borderRadius:10,border:"1px solid #e5e7eb",fontSize:13}}>
+                    Нет полисов, оплаченных с Amex
+                  </div>
+                  :<div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                        <thead><tr style={{background:"#f1f5f9"}}>
+                          <th style={{textAlign:"left",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Дата</th>
+                          <th style={{textAlign:"left",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>№ полиса</th>
+                          <th style={{textAlign:"left",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Страхователь</th>
+                          <th style={{textAlign:"left",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Госномер</th>
+                          <th style={{textAlign:"right",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Потрачено</th>
+                          <th style={{textAlign:"right",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Баланс до</th>
+                          <th style={{textAlign:"right",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Баланс после</th>
+                        </tr></thead>
+                        <tbody>
+                          {polsWithBal.map((p,i)=>(
+                            <tr key={p._id||i} style={{borderTop:"1px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}}>
+                              <td style={{padding:"8px 12px",color:"#374151",whiteSpace:"nowrap"}}>{fmtD(p.date)}</td>
+                              <td style={{padding:"8px 12px",color:"#1d4ed8",fontFamily:"monospace",fontSize:12}}>{p.policyNum||"—"}</td>
+                              <td style={{padding:"8px 12px",fontWeight:600,color:"#1e293b"}}>{p.insuredName||"—"}</td>
+                              <td style={{padding:"8px 12px",color:"#6b7280",fontFamily:"monospace",fontSize:12}}>{p.carPlate||"—"}</td>
+                              <td style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"#dc2626",whiteSpace:"nowrap"}}>−{fmt(p.amount||0)}</td>
+                              <td style={{padding:"8px 12px",textAlign:"right",color:"#64748b",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmt(p.balBefore)}</td>
+                              <td style={{padding:"8px 12px",textAlign:"right",fontWeight:600,color:p.balAfter>=0?"#15803d":"#dc2626",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmt(p.balAfter)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                }
               </>
             }
           </div>
