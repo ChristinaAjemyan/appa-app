@@ -1050,6 +1050,9 @@ export default function App(){
   const[amexNewTopup,setAmexNewTopup]=useState({date:"",amount:"",comment:""});
   const[amexShowOld,setAmexShowOld]=useState(false);
   const[amexSubTab,setAmexSubTab]=useState("summary");
+  const[amexViewMonth,setAmexViewMonth]=useState(()=>new Date().toISOString().slice(0,7));
+  const[amexSearch,setAmexSearch]=useState("");
+  const[amexSortBy,setAmexSortBy]=useState("date-desc");
   const[mreoConfig,setMreoConfig]=useState(DEFAULT_MREO_CONFIG);
   const[mreoCashDays,setMreoCashDays]=useState({});
   const[mreoCashLoaded,setMreoCashLoaded]=useState(false);
@@ -6939,71 +6942,136 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       })()}
 
       {tab==="amex"&&(()=>{
+        const MONTHS_RU=["","Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+        const curMonth=new Date().toISOString().slice(0,7);
+        const fmtD=s=>s?new Date(s+"T00:00:00").toLocaleDateString("ru-RU"):"—";
+        const monthLabel=m=>{const[y,mo]=m.split("-").map(Number);return MONTHS_RU[mo]+" "+y;};
+        const prevMo=m=>{const[y,mo]=m.split("-").map(Number);return mo===1?`${y-1}-12`:`${y}-${String(mo-1).padStart(2,"0")}`;};
+        const nextMo=m=>{const[y,mo]=m.split("-").map(Number);return mo===12?`${y+1}-01`:`${y}-${String(mo+1).padStart(2,"0")}`;};
+        const vm=amexViewMonth;
+        const vmStart=vm+"-01";
+
+        // Running balance across ALL history (chronological order) — used for opening balance and export
+        const allEventsChron=[
+          ...amexTopups.map(t=>({type:"topup",date:t.date,amount:t.amount,id:t.id})),
+          ...amexAllPols.map(p=>({type:"pol",date:p.date||"",amount:p.amount||0,id:p._id,pol:p}))
+        ].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==="topup"?-1:1));
+        let _rb=0;
+        const allPolsWithBal=[];
+        allEventsChron.forEach(ev=>{
+          const before=_rb;
+          if(ev.type==="topup") _rb+=ev.amount;
+          else{_rb-=ev.amount;allPolsWithBal.push({...ev.pol,balBefore:before,balAfter:_rb});}
+        });
+
+        // Opening balance for viewed month = balance at start of that month
+        const openingBalance=amexTopups.filter(t=>t.date<vmStart).reduce((s,t)=>s+t.amount,0)
+          -amexAllPols.filter(p=>(p.date||"")<vmStart).reduce((s,p)=>s+(p.amount||0),0);
+
+        // Viewed month data
+        const vmTopups=amexTopups.filter(t=>t.date.startsWith(vm)).sort((a,b)=>b.date.localeCompare(a.date));
+        const vmPols=allPolsWithBal.filter(p=>(p.date||"").startsWith(vm));
+        const vmTopupsSum=vmTopups.reduce((s,t)=>s+t.amount,0);
+        const vmSpent=vmPols.reduce((s,p)=>s+(p.amount||0),0);
+        const closingBalance=openingBalance+vmTopupsSum-vmSpent;
+
+        // Totals for all-time (for header cards)
         const totalTopups=amexTopups.reduce((s,t)=>s+t.amount,0);
         const totalSpent=amexAllPols.reduce((s,p)=>s+(p.amount||0),0);
-        const balance=totalTopups-totalSpent;
-        const cutoff=new Date(Date.now()-30*24*60*60*1000).toISOString().slice(0,10);
-        const recentTopups=amexTopups.filter(t=>t.date>=cutoff);
-        const olderTopups=amexTopups.filter(t=>t.date<cutoff);
-        const recentSpent=amexAllPols.filter(p=>(p.date||"")>=cutoff).reduce((s,p)=>s+(p.amount||0),0);
-        const recentTopupsSum=recentTopups.reduce((s,t)=>s+t.amount,0);
-        const sortDesc=(arr,key)=>[...arr].sort((a,b)=>{const av=a[key]||"";const bv=b[key]||"";return bv>av?1:bv<av?-1:0;});
-        const fmtD=s=>s?new Date(s+"T00:00:00").toLocaleDateString("ru-RU"):"—";
+        const totalBalance=totalTopups-totalSpent;
+
+        // Policy search + sort for policies sub-tab
+        const srch=amexSearch.trim().toLowerCase();
+        let displayPols=[...vmPols];
+        if(srch) displayPols=displayPols.filter(p=>(p.policyNum||"").toLowerCase().includes(srch)||(p.carPlate||"").toLowerCase().includes(srch)||(p.insuredName||"").toLowerCase().includes(srch));
+        if(amexSortBy==="date-desc") displayPols.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+        else if(amexSortBy==="date-asc") displayPols.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+        else if(amexSortBy==="amount-desc") displayPols.sort((a,b)=>(b.amount||0)-(a.amount||0));
+        else if(amexSortBy==="amount-asc") displayPols.sort((a,b)=>(a.amount||0)-(b.amount||0));
+
+        const exportCSV=()=>{
+          const hdr=["Дата","№ полиса","Страхователь","Госномер","Потрачено","Баланс до","Баланс после"];
+          const rows=[hdr,...[...allPolsWithBal].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>[p.date||"",p.policyNum||"",p.insuredName||"",p.carPlate||"",p.amount||0,p.balBefore,p.balAfter])];
+          const csv="﻿"+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+          const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="amex_polisy.csv";a.click();
+        };
+
         const tblHead=<thead><tr style={{background:"#f1f5f9"}}>
           <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Дата</th>
           <th style={{textAlign:"right",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Сумма</th>
           <th style={{textAlign:"left",padding:"7px 12px",color:"#6b7280",fontWeight:600,fontSize:12}}>Комментарий</th>
           <th style={{width:40}}></th>
         </tr></thead>;
-        // Build chronological running balance for policies sub-tab
-        const allEvents=[
-          ...amexTopups.map(t=>({type:"topup",date:t.date,amount:t.amount,id:t.id})),
-          ...amexAllPols.map(p=>({type:"pol",date:p.date||"",amount:p.amount||0,id:p._id,pol:p}))
-        ].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==="topup"?-1:1));
-        let _rb=0;
-        const polsWithBal=[];
-        allEvents.forEach(ev=>{
-          const before=_rb;
-          if(ev.type==="topup") _rb+=ev.amount;
-          else{_rb-=ev.amount;polsWithBal.push({...ev.pol,balBefore:before,balAfter:_rb});}
-        });
-        polsWithBal.reverse();
+
         return(
           <div style={{maxWidth:980}}>
-            {/* Подвкладки */}
-            <div style={{display:"flex",gap:2,marginBottom:20,background:"#f1f5f9",borderRadius:10,padding:4,width:"fit-content"}}>
-              {[["summary","💳 Расчёты Amex"],["policies","📋 Полисы"]].map(([id,label])=>(
-                <button key={id} onClick={()=>setAmexSubTab(id)}
-                  style={{padding:"7px 20px",borderRadius:8,border:"none",fontWeight:amexSubTab===id?700:400,
-                    background:amexSubTab===id?"white":"transparent",
-                    color:amexSubTab===id?"#1d4ed8":"#64748b",
-                    boxShadow:amexSubTab===id?"0 1px 4px rgba(0,0,0,.1)":"none",
-                    cursor:"pointer",fontSize:13}}>
-                  {label}
-                </button>
-              ))}
+            {/* Навигация по месяцам + подвкладки */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <button onClick={()=>setAmexViewMonth(prevMo(vm))} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"6px 12px"})}>◀</button>
+                <div style={{fontWeight:700,fontSize:15,color:"#1e293b",minWidth:160,textAlign:"center"}}>{monthLabel(vm)}</div>
+                <button onClick={()=>setAmexViewMonth(nextMo(vm))} disabled={vm>=curMonth} style={btn(vm>=curMonth?"#f9fafb":"#f1f5f9",vm>=curMonth?"#d1d5db":"#374151",{border:"1px solid #d1d5db",fontSize:13,padding:"6px 12px"})}>▶</button>
+                {vm!==curMonth&&<button onClick={()=>setAmexViewMonth(curMonth)} style={btn("#eff6ff","#1d4ed8",{border:"1px solid #bfdbfe",fontSize:11,padding:"4px 10px"})}>Текущий</button>}
+              </div>
+              <div style={{display:"flex",gap:2,background:"#f1f5f9",borderRadius:10,padding:4}}>
+                {[["summary","💳 Расчёты"],["policies","📋 Полисы"]].map(([id,label])=>(
+                  <button key={id} onClick={()=>setAmexSubTab(id)}
+                    style={{padding:"6px 18px",borderRadius:8,border:"none",fontWeight:amexSubTab===id?700:400,
+                      background:amexSubTab===id?"white":"transparent",
+                      color:amexSubTab===id?"#1d4ed8":"#64748b",
+                      boxShadow:amexSubTab===id?"0 1px 4px rgba(0,0,0,.1)":"none",
+                      cursor:"pointer",fontSize:13}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {!amexLoaded
               ?<div style={{textAlign:"center",padding:"60px 20px",color:"#94a3b8",fontSize:14}}>⏳ Загрузка...</div>
               :amexSubTab==="summary"
               ?<>
-                {/* Сводка баланса */}
-                <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-                  <div style={{flex:1,minWidth:180,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 18px"}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Пополнено (всего)</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#1d4ed8"}}>{fmt(totalTopups)}</div>
+                {/* Сводка месяца */}
+                <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:160,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"12px 16px"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Баланс на начало</div>
+                    <div style={{fontSize:18,fontWeight:800,color:"#475569"}}>{fmt(openingBalance)}</div>
                   </div>
-                  <div style={{flex:1,minWidth:180,background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:12,padding:"14px 18px"}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Потрачено с Amex (всего)</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>−{fmt(totalSpent)}</div>
+                  <div style={{flex:1,minWidth:160,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"12px 16px"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#93c5fd",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Пополнено за месяц</div>
+                    <div style={{fontSize:18,fontWeight:800,color:"#1d4ed8"}}>+{fmt(vmTopupsSum)}</div>
                   </div>
-                  <div style={{flex:1,minWidth:180,background:balance>=0?"#f0fdf4":"#fff1f2",border:"1px solid "+(balance>=0?"#86efac":"#fca5a5"),borderRadius:12,padding:"14px 18px"}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Остаток на карте</div>
-                    <div style={{fontSize:22,fontWeight:800,color:balance>=0?"#15803d":"#dc2626"}}>{balance>=0?"":"-"}{fmt(Math.abs(balance))}</div>
-                    {balance<0&&<div style={{fontSize:11,color:"#dc2626",fontWeight:700,marginTop:4}}>⚠ Карта в минусе!</div>}
+                  <div style={{flex:1,minWidth:160,background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px 16px"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#fca5a5",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Потрачено за месяц</div>
+                    <div style={{fontSize:18,fontWeight:800,color:"#dc2626"}}>−{fmt(vmSpent)}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:160,background:closingBalance>=0?"#f0fdf4":"#fff1f2",border:"1px solid "+(closingBalance>=0?"#86efac":"#fca5a5"),borderRadius:10,padding:"12px 16px"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:closingBalance>=0?"#86efac":"#fca5a5",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>{vm===curMonth?"Остаток сейчас":"Остаток на конец"}</div>
+                    <div style={{fontSize:18,fontWeight:800,color:closingBalance>=0?"#15803d":"#dc2626"}}>{closingBalance>=0?"":"-"}{fmt(Math.abs(closingBalance))}</div>
+                    {closingBalance<0&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginTop:2}}>⚠ Карта в минусе!</div>}
                   </div>
                 </div>
+
+                {/* Итоги за всё время (свёрнуто) */}
+                <details style={{marginBottom:14}}>
+                  <summary style={{cursor:"pointer",fontSize:12,color:"#64748b",userSelect:"none",padding:"6px 0"}}>
+                    Итоги за всё время: пополнено {fmt(totalTopups)} · потрачено {fmt(totalSpent)} · остаток {fmt(totalBalance)}
+                  </summary>
+                  <div style={{display:"flex",gap:10,marginTop:8,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:140,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"10px 14px"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>Пополнено всего</div>
+                      <div style={{fontSize:16,fontWeight:800,color:"#1d4ed8"}}>{fmt(totalTopups)}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:140,background:"#fff1f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 14px"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>Потрачено всего</div>
+                      <div style={{fontSize:16,fontWeight:800,color:"#dc2626"}}>−{fmt(totalSpent)}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:140,background:totalBalance>=0?"#f0fdf4":"#fff1f2",border:"1px solid "+(totalBalance>=0?"#86efac":"#fca5a5"),borderRadius:8,padding:"10px 14px"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:2}}>Текущий остаток</div>
+                      <div style={{fontSize:16,fontWeight:800,color:totalBalance>=0?"#15803d":"#dc2626"}}>{totalBalance>=0?"":"-"}{fmt(Math.abs(totalBalance))}</div>
+                    </div>
+                  </div>
+                </details>
 
                 {/* Форма добавления пополнения */}
                 <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
@@ -7025,22 +7093,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 </div>
 
-                {/* Последние 30 дней */}
-                <div style={{fontWeight:700,fontSize:14,color:"#1e293b",marginBottom:10}}>
-                  За последние 30 дней
-                  <span style={{marginLeft:8,fontSize:12,fontWeight:400,color:"#64748b"}}>
-                    Потрачено: <b style={{color:"#dc2626"}}>{fmt(recentSpent)}</b> · Пополнено: <b style={{color:"#1d4ed8"}}>{fmt(recentTopupsSum)}</b>
-                    {recentSpent>0&&<> · Разница: <b style={{color:recentTopupsSum-recentSpent>=0?"#15803d":"#dc2626"}}>{recentTopupsSum-recentSpent>=0?"+":""}{fmt(recentTopupsSum-recentSpent)}</b></>}
-                  </span>
-                </div>
-
-                {sortDesc(recentTopups,"date").length>0&&(
-                  <div style={{background:"white",border:"1px solid #bfdbfe",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
-                    <div style={{background:"#eff6ff",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#1d4ed8",borderBottom:"1px solid #bfdbfe"}}>Пополнения</div>
+                {/* Пополнения за выбранный месяц */}
+                {vmTopups.length>0
+                  ?<div style={{background:"white",border:"1px solid #bfdbfe",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+                    <div style={{background:"#eff6ff",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#1d4ed8",borderBottom:"1px solid #bfdbfe"}}>Пополнения — {monthLabel(vm)}</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                       {tblHead}
                       <tbody>
-                        {sortDesc(recentTopups,"date").map(t=>(
+                        {vmTopups.map(t=>(
                           <tr key={t.id} style={{borderTop:"1px solid #f1f5f9"}}>
                             <td style={{padding:"8px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
                             <td style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
@@ -7051,57 +7111,35 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                       </tbody>
                     </table>
                   </div>
-                )}
-
-                {recentTopups.length===0&&(
-                  <div style={{textAlign:"center",color:"#94a3b8",padding:"30px 20px",background:"white",borderRadius:10,border:"1px solid #e5e7eb",marginBottom:14,fontSize:13}}>
-                    Нет пополнений за последние 30 дней
+                  :<div style={{textAlign:"center",color:"#94a3b8",padding:"20px",background:"white",borderRadius:10,border:"1px solid #e5e7eb",marginBottom:12,fontSize:13}}>
+                    Нет пополнений за {monthLabel(vm)}
                   </div>
-                )}
+                }
 
-                {/* История пополнений */}
-                {olderTopups.length>0&&(
-                  <div style={{marginTop:8}}>
-                    <button onClick={()=>setAmexShowOld(p=>!p)} style={{...btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12}),marginBottom:10}}>
-                      {amexShowOld?"▼":"▶"} История пополнений ({olderTopups.length} записей)
-                    </button>
-                    {amexShowOld&&(
-                      <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,marginBottom:10,overflow:"hidden",opacity:.85}}>
-                        <div style={{background:"#f8fafc",padding:"8px 14px",fontWeight:600,fontSize:12,color:"#374151",borderBottom:"1px solid #e5e7eb"}}>Пополнения (ранние)</div>
-                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                          {tblHead}
-                          <tbody>
-                            {sortDesc(olderTopups,"date").map(t=>(
-                              <tr key={t.id} style={{borderTop:"1px solid #f1f5f9"}}>
-                                <td style={{padding:"7px 12px",color:"#374151"}}>{fmtD(t.date)}</td>
-                                <td style={{padding:"7px 12px",textAlign:"right",fontWeight:700,color:"#1d4ed8"}}>+{fmt(t.amount)}</td>
-                                <td style={{padding:"7px 12px",color:"#6b7280"}}>{t.comment||"—"}</td>
-                                <td style={{padding:"4px 6px"}}>{isAdmin&&<button aria-label="Удалить пополнение" onClick={()=>deleteAmexTopup(t.id)} style={btn("#fff1f2","#dc2626",{fontSize:11,border:"1px solid #fca5a5",padding:"3px 8px"})}>✕</button>}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div style={{marginTop:16,textAlign:"right"}}>
+                <div style={{textAlign:"right"}}>
                   <button onClick={()=>loadAmexData(true)} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12})}>🔄 Обновить данные</button>
                 </div>
               </>
               :<>
                 {/* Подвкладка: Полисы */}
-                <div style={{marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-                  <div style={{fontSize:13,color:"#64748b"}}>
-                    Всего полисов: <b style={{color:"#1e293b"}}>{polsWithBal.length}</b>
-                    {" · "}Потрачено: <b style={{color:"#dc2626"}}>{fmt(totalSpent)}</b>
-                  </div>
-                  <button onClick={()=>loadAmexData(true)} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12})}>🔄 Обновить</button>
+                <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+                  <input value={amexSearch} onChange={e=>setAmexSearch(e.target.value)} placeholder="🔍 Поиск по № полиса, госномеру, имени..." style={{...inp,padding:"7px 11px",fontSize:13,flex:1,minWidth:200}}/>
+                  <select value={amexSortBy} onChange={e=>setAmexSortBy(e.target.value)} style={{...inp,padding:"7px 10px",fontSize:13}}>
+                    <option value="date-desc">Дата ↓</option>
+                    <option value="date-asc">Дата ↑</option>
+                    <option value="amount-desc">Сумма ↓</option>
+                    <option value="amount-asc">Сумма ↑</option>
+                  </select>
+                  <button onClick={exportCSV} style={btn("#f0fdf4","#15803d",{border:"1px solid #86efac",fontSize:12})}>⬇ Экспорт CSV</button>
+                  <button onClick={()=>loadAmexData(true)} style={btn("#f1f5f9","#374151",{border:"1px solid #d1d5db",fontSize:12})}>🔄</button>
                 </div>
-                {polsWithBal.length===0
+                <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>
+                  {monthLabel(vm)}: <b style={{color:"#1e293b"}}>{displayPols.length}</b> полисов · потрачено <b style={{color:"#dc2626"}}>{fmt(vmSpent)}</b>
+                  {srch&&<span style={{marginLeft:6,color:"#94a3b8"}}>· фильтр активен</span>}
+                </div>
+                {displayPols.length===0
                   ?<div style={{textAlign:"center",color:"#94a3b8",padding:"40px 20px",background:"white",borderRadius:10,border:"1px solid #e5e7eb",fontSize:13}}>
-                    Нет полисов, оплаченных с Amex
+                    {srch?"Ничего не найдено":"Нет полисов, оплаченных с Amex за "+monthLabel(vm)}
                   </div>
                   :<div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}>
                     <div style={{overflowX:"auto"}}>
@@ -7116,7 +7154,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <th style={{textAlign:"right",padding:"8px 12px",color:"#6b7280",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>Баланс после</th>
                         </tr></thead>
                         <tbody>
-                          {polsWithBal.map((p,i)=>(
+                          {displayPols.map((p,i)=>(
                             <tr key={p._id||i} style={{borderTop:"1px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}}>
                               <td style={{padding:"8px 12px",color:"#374151",whiteSpace:"nowrap"}}>{fmtD(p.date)}</td>
                               <td style={{padding:"8px 12px",color:"#1d4ed8",fontFamily:"monospace",fontSize:12}}>{p.policyNum||"—"}</td>
