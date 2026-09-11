@@ -1693,7 +1693,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     setOpLoaded(false);
     setOpPrevUnpaid([]);setOpPrevAll([]);setOpHistLoaded(false);setOpHistLoading(false);
     const mk=selMonth;
-    try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);}catch{setOpCurrentMonth([]);}
+    try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk})):[]);}catch{setOpCurrentMonth([]);}
     setOpLoaded(true);
     // load unpaid from previous months in background (lightweight: only unpaid)
     calcStorage.list("officePol:").catch(()=>({keys:[]})).then(async res=>{
@@ -1937,15 +1937,18 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         }
       }catch{showToast("⛔ Ошибка чтения кассового журнала.\n\nУдаление заблокировано для безопасности. Перезагрузите страницу и повторите попытку.");return;}
     }
-    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));}
-    else{
+    const _delMk=pol._monthKey||selMonth;
+    if(_delMk===selMonth){
+      saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));
+      setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
+    }else{
       const prevUnpaid=opPrevUnpaid;
       const prevAll=opPrevAll;
-      const r=await calcStorage.get("officePol:"+pol._monthKey).catch(()=>null);
+      const r=await calcStorage.get("officePol:"+_delMk).catch(()=>null);
       const pols=r&&r.value?JSON.parse(r.value):[];
       setOpPrevUnpaid(prev=>prev.filter(p=>p._id!==pol._id));
       setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
-      calcStorage.set("officePol:"+pol._monthKey,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(err=>{setOpPrevUnpaid(prevUnpaid);setOpPrevAll(prevAll);_saveErr("удаление полиса")(err);});
+      calcStorage.set("officePol:"+_delMk,JSON.stringify(pols.filter(p=>p._id!==pol._id))).catch(err=>{setOpPrevUnpaid(prevUnpaid);setOpPrevAll(prevAll);_saveErr("удаление полиса")(err);});
     }
     logAction("delete_policy",(pol.polType==="osago"?"ОСАГО":"Добровольный")+": "+(pol.insuredName||"—")+" / "+(pol.policyNum||"б/н")+" / "+fmt(pol.amount||0)+" ֏",pol._monthKey);
   };
