@@ -1701,12 +1701,11 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const loadOpUnpaid=async()=>{
     setOpUnpaidLoaded(false);
-    const mk=selMonth;
     try{
       const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
-      const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
-      if(!otherKeys.length){setOpUnpaidLoaded(true);return;}
-      const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const m=key.replace("officePol:","");return JSON.parse(r.value).filter(p=>!p.paid&&!p.insuredName?.includes("ПРИМЕР")).map(p=>({...p,_monthKey:p._monthKey||m}));}return[];}catch{return[];}}));
+      const keys=res.keys||[];
+      if(!keys.length){setOpUnpaidLoaded(true);return;}
+      const results=await Promise.all(keys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const m=key.replace("officePol:","");return JSON.parse(r.value).filter(p=>!p.paid&&!p.insuredName?.includes("ПРИМЕР")).map(p=>({...p,_monthKey:p._monthKey||m}));}return[];}catch{return[];}}));
       setOpPrevUnpaid(results.flat().sort((a,b)=>new Date(a.date)-new Date(b.date)));
     }catch{setOpPrevUnpaid([]);}
     setOpUnpaidLoaded(true);
@@ -3768,7 +3767,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const _opCurr=_isMreoEmployee?opCurrentMonth.filter(isMreoPol):opCurrentMonth.filter(p=>!isMreoPol(p));
         const _opPrevUnpaid=_isMreoEmployee?opPrevUnpaid.filter(isMreoPol):opPrevUnpaid.filter(p=>!isMreoPol(p));
         const _opPrevAll=_isMreoEmployee?opPrevAll.filter(isMreoPol):opPrevAll.filter(p=>!isMreoPol(p));
-        const allUnpaid=[..._opPrevUnpaid,..._opCurr.filter(p=>!p.paid)].sort((a,b)=>new Date(b.date)-new Date(a.date));
+        const allUnpaid=[..._opPrevUnpaid].sort((a,b)=>new Date(b.date)-new Date(a.date));
         const currentPaid=_opCurr.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
         const staffAgents=sortedAgents.filter(([,a])=>officeStaff.includes((a.internalCode||"").trim()));
         const tblH={...th,whiteSpace:"nowrap"};
@@ -3792,15 +3791,23 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
         const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all"||opSearch.trim()||opStatusFilter!=="all"||opProductFilter!=="osago";
         const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom(_today);setOpDateTo(_today);setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");setOpProductFilter("osago");setOpSearchTriggered(false);setOpHistLoaded(false);setOpPrevAll([]);setOpPrevUnpaid([]);setOpUnpaidLoaded(false);};
-        const handleOpSearch=()=>{setOpHistLoaded(false);setOpPrevAll([]);setOpSearchTriggered(true);};
-        const handleLoadUnpaid=()=>loadOpUnpaid();
-        // determine if filter spans months other than current
         const _curMo=selMonth;
         const _filterNeedsHistory=hasDateFilter&&((opDateFrom&&opDateFrom.slice(0,7)<_curMo)||(opDateTo&&opDateTo.slice(0,7)<_curMo)||(opEndFrom&&opEndFrom.slice(0,7)<_curMo)||(opEndTo&&opEndTo.slice(0,7)<_curMo));
         const _histFromKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a<b?a:b):_curMo;})();
         const _histToKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a>b?a:b):_curMo;})();
-        if(opSearchTriggered&&!opLoaded&&!opLoading)loadOfficeSales();
-        if(opSearchTriggered&&opLoaded&&!opHistLoaded&&!opHistLoading){if(opSearch.trim()||!hasDateFilter)loadOpHistory(MIN_MONTH,selMonth);else if(_filterNeedsHistory)loadOpHistory(_histFromKey,_histToKey);else setOpHistLoaded(true);}
+        const handleOpSearch=async()=>{
+          setOpHistLoaded(false);setOpPrevAll([]);setOpSearchTriggered(true);
+          await loadOfficeSales();
+          const _hdf=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
+          const _hnh=_hdf&&((opDateFrom&&opDateFrom.slice(0,7)<selMonth)||(opDateTo&&opDateTo.slice(0,7)<selMonth)||(opEndFrom&&opEndFrom.slice(0,7)<selMonth)||(opEndTo&&opEndTo.slice(0,7)<selMonth));
+          const _parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));
+          const _fk=_parts.length?_parts.reduce((a,b)=>a<b?a:b):selMonth;
+          const _tk=_parts.length?_parts.reduce((a,b)=>a>b?a:b):selMonth;
+          if(opSearch.trim()||!_hdf)await loadOpHistory(MIN_MONTH,selMonth);
+          else if(_hnh)await loadOpHistory(_fk,_tk);
+          else setOpHistLoaded(true);
+        };
+        const handleLoadUnpaid=()=>loadOpUnpaid();
         const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{
