@@ -3783,6 +3783,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           if(opEndTo&&e&&e>opEndTo)return false;
           return true;
         };
+        const normPolType=t=>{const v=(t||"").toLowerCase().trim();return v==="voluntary"?"voluntary":"osago";};
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
         const _mreoLockedUid=(_isMreoEmployee&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
         const matchesAgent=p=>_isMreoEmployee?true:(opAgentFilter==="all"||p.agentUid===opAgentFilter);
@@ -3819,7 +3820,6 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           }
           return _opCurr;
         })();
-        const normPolType=t=>{const v=(t||"").toLowerCase().trim();return v==="voluntary"?"voluntary":"osago";};
         const osagoList=basePols.filter(p=>normPolType(p.polType)==="osago");
         const volList=basePols.filter(p=>normPolType(p.polType)==="voluntary");
         const sortPols=list=>[...list].sort((a,b)=>{let av,bv;if(tableSortCol==="amount"){av=Number(a.amount||0);bv=Number(b.amount||0);}else if(tableSortCol==="net"){av=Number(a.amount||0)-Number(a.discount||0);bv=Number(b.amount||0)-Number(b.discount||0);}else if(tableSortCol==="date"){av=(a.date||"").slice(0,10);bv=(b.date||"").slice(0,10);}else{av=(a[tableSortCol]||"").toLowerCase();bv=(b[tableSortCol]||"").toLowerCase();}return tableSortDir==="asc"?(av<bv?-1:av>bv?1:0):(av<bv?1:av>bv?-1:0);});
