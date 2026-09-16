@@ -971,9 +971,12 @@ export default function App(){
   const[opUnpaidPage,setOpUnpaidPage]=useState(0);
   const[opOsagoPage,setOpOsagoPage]=useState(0);
   const _today=new Date().toISOString().slice(0,10);
-  const[opDateFrom,setOpDateFrom]=useState("");
-  const[opDateTo,setOpDateTo]=useState("");
+  const[opDateFrom,setOpDateFrom]=useState(_today);
+  const[opDateTo,setOpDateTo]=useState(_today);
   const[opSearchTriggered,setOpSearchTriggered]=useState(false);
+  const[opProductFilter,setOpProductFilter]=useState("osago");
+  const[opLoading,setOpLoading]=useState(false);
+  const[opUnpaidLoaded,setOpUnpaidLoaded]=useState(false);
   const[opEndFrom,setOpEndFrom]=useState("");
   const[opEndTo,setOpEndTo]=useState("");
   const[opCompanyFilter,setOpCompanyFilter]=useState("all");
@@ -1691,19 +1694,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const[opHistLoaded,setOpHistLoaded]=useState(false);
   const loadOfficeSales=async()=>{
     await migrateOfficePols();
-    setOpLoaded(false);
-    setOpPrevUnpaid([]);setOpHistLoading(false);
-    if(!opSearchTriggered){setOpPrevAll([]);setOpHistLoaded(false);}
+    setOpLoading(true);setOpLoaded(false);
     const mk=selMonth;
     try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk})):[]);}catch{setOpCurrentMonth([]);}
-    setOpLoaded(true);
-    // load unpaid from previous months in background (lightweight: only unpaid)
-    calcStorage.list("officePol:").catch(()=>({keys:[]})).then(async res=>{
+    setOpLoaded(true);setOpLoading(false);
+  };
+  const loadOpUnpaid=async()=>{
+    setOpUnpaidLoaded(false);
+    const mk=selMonth;
+    try{
+      const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
       const otherKeys=(res.keys||[]).filter(k=>k!=="officePol:"+mk);
-      if(!otherKeys.length)return;
+      if(!otherKeys.length){setOpUnpaidLoaded(true);return;}
       const results=await Promise.all(otherKeys.map(async key=>{try{const r=await calcStorage.get(key).catch(()=>null);if(r&&r.value){const m=key.replace("officePol:","");return JSON.parse(r.value).filter(p=>!p.paid&&!p.insuredName?.includes("ПРИМЕР")).map(p=>({...p,_monthKey:p._monthKey||m}));}return[];}catch{return[];}}));
       setOpPrevUnpaid(results.flat().sort((a,b)=>new Date(a.date)-new Date(b.date)));
-    });
+    }catch{setOpPrevUnpaid([]);}
+    setOpUnpaidLoaded(true);
   };
   const loadOpHistory=async(fromKey,toKey)=>{
     setOpHistLoading(true);
@@ -1716,9 +1722,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }catch{}
     setOpHistLoading(false);
   };
-  useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
-  useEffect(()=>{setOpOsagoPage(0);setOpUnpaidPage(0);},[opSearch,opStatusFilter,opDateFrom,opDateTo,opEndFrom,opEndTo,opCompanyFilter,opAgentFilter]);
-  useEffect(()=>{if(tab!=="officesales"||!opLoaded)return;if(!opSearchTriggered){setOpHistLoaded(false);setOpPrevAll([]);}},[tab,selMonth]);
+  useEffect(()=>{
+    if(tab==="officesales"){
+      setOpCurrentMonth([]);setOpLoaded(false);setOpLoading(false);
+      setOpPrevAll([]);setOpPrevUnpaid([]);setOpHistLoaded(false);setOpHistLoading(false);
+      setOpSearchTriggered(false);setOpUnpaidLoaded(false);
+      setOpUnpaidPage(0);setOpOsagoPage(0);
+    }else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}
+  },[tab,selMonth]);
+  useEffect(()=>{setOpOsagoPage(0);setOpUnpaidPage(0);},[opSearch,opStatusFilter,opDateFrom,opDateTo,opEndFrom,opEndTo,opCompanyFilter,opAgentFilter,opProductFilter]);
   useEffect(()=>{const uid=currentEmployee?.id||"admin";try{const s=localStorage.getItem("opSortPref:"+uid);if(s){const{col,dir}=JSON.parse(s);if(col)setTableSortCol(col);if(dir)setTableSortDir(dir);}}catch{}},[currentEmployee?.id]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
@@ -3775,20 +3787,24 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
         const _mreoLockedUid=(_isMreoEmployee&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
         const matchesAgent=p=>_isMreoEmployee?true:(opAgentFilter==="all"||p.agentUid===opAgentFilter);
-        const filterPol=p=>!opSearchTriggered||(matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p));
+        const matchesProduct=p=>opProductFilter==="all"||(normPolType(p.polType)===opProductFilter);
+        const filterPol=p=>!opSearchTriggered||(matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p)&&matchesProduct(p));
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
-        const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all"||opSearch.trim()||opStatusFilter!=="all";
-        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");setOpSearchTriggered(false);setOpHistLoaded(false);setOpPrevAll([]);};
+        const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all"||opSearch.trim()||opStatusFilter!=="all"||opProductFilter!=="osago";
+        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom(_today);setOpDateTo(_today);setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");setOpProductFilter("osago");setOpSearchTriggered(false);setOpHistLoaded(false);setOpPrevAll([]);setOpPrevUnpaid([]);setOpUnpaidLoaded(false);};
         const handleOpSearch=()=>{setOpHistLoaded(false);setOpPrevAll([]);setOpSearchTriggered(true);};
+        const handleLoadUnpaid=()=>loadOpUnpaid();
         // determine if filter spans months other than current
         const _curMo=selMonth;
         const _filterNeedsHistory=hasDateFilter&&((opDateFrom&&opDateFrom.slice(0,7)<_curMo)||(opDateTo&&opDateTo.slice(0,7)<_curMo)||(opEndFrom&&opEndFrom.slice(0,7)<_curMo)||(opEndTo&&opEndTo.slice(0,7)<_curMo));
         const _histFromKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a<b?a:b):_curMo;})();
         const _histToKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a>b?a:b):_curMo;})();
-        if(opSearchTriggered&&!opHistLoaded&&!opHistLoading){if(opSearch.trim())loadOpHistory(MIN_MONTH,selMonth);else if(_filterNeedsHistory)loadOpHistory(_histFromKey,_histToKey);}
+        if(opSearchTriggered&&!opLoaded&&!opLoading)loadOfficeSales();
+        if(opSearchTriggered&&opLoaded&&!opHistLoaded&&!opHistLoading){if(opSearch.trim()||!hasDateFilter)loadOpHistory(MIN_MONTH,selMonth);else if(_filterNeedsHistory)loadOpHistory(_histFromKey,_histToKey);else setOpHistLoaded(true);}
         const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{
+          if(!opSearchTriggered||!opLoaded)return[];
           if(!hasDateFilter)return _opCurr;
           if(_filterNeedsHistory){
             if(opHistLoading)return _opCurr;
@@ -3899,6 +3915,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             {/* Date filters */}
             <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 14px"}}>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Продукт</span>
+                <select value={opProductFilter} onChange={e=>{setOpProductFilter(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:130}}>
+                  <option value="osago">🚗 ОСАГО</option>
+                  <option value="voluntary">🛡 Добровольные</option>
+                  <option value="all">Все</option>
+                </select>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700,textAlign:"center"}}>Дата заключения</span>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <input type="date" value={opDateFrom} onChange={e=>{setOpDateFrom(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
@@ -3929,18 +3953,20 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 </select>
               </div>}
               <button onClick={handleOpSearch} style={btn("#6366f1","#fff",{fontSize:12,padding:"6px 14px"})}>🔍 Найти</button>
+              <button onClick={handleLoadUnpaid} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})} title="Загрузить все неоплаченные полисы из прошлых месяцев">📋 Неоплаченные</button>
               {(hasFilter||opSrch||opStatusFilter!=="all")&&(
-                <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить фильтры</button>
+                <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить</button>
               )}
-              {hasFilter&&(()=>{const fo=osagoList.filter(filterPol).length;const fv=volList.filter(filterPol).length;return<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Показано: {fo+fv}{fv>0?` (🚗 ${fo} + 🛡 ${fv})`:""}</span>;})()}
+              {opSearchTriggered&&(()=>{const fo=osagoList.filter(filterPol).length;const fv=volList.filter(filterPol).length;return<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Найдено: {fo+fv}{fo>0&&fv>0?` (🚗 ${fo} + 🛡 ${fv})`:""}</span>;})()}
             </div>
 
-            {!opLoaded&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
+            {opLoading&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
             {opLoaded&&opHistLoading&&<div style={{padding:"8px 14px",background:"#eff6ff",borderRadius:6,marginBottom:10,fontSize:12,color:"#1d4ed8"}}>⏳ Загружаются данные за выбранный период...</div>}
+            {!opSearchTriggered&&!opLoading&&<div style={{padding:"32px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>Задайте фильтры и нажмите <strong>🔍 Найти</strong></div>}
 
 
-            {/* Unified search results — shown instead of sections when search is active */}
-            {opLoaded&&opSrch&&opSearchTriggered&&(()=>{
+            {/* Unified search results — shown when text search is active */}
+            {opSearchTriggered&&opLoaded&&opSrch&&(()=>{
               if(opHistLoading)return<div style={{padding:32,textAlign:"center",color:"#1d4ed8",fontSize:13}}>⏳ Загружаются данные для поиска...</div>;
               const allPols=[...opPrevAll,...opCurrentMonth.map(p=>({...p,_monthKey:p._monthKey||selMonth}))];
               const seen=new Set();const unique=allPols.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
@@ -3986,7 +4012,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* Current month — ОСАГО */}
-            {opLoaded&&!opSrch&&(()=>{
+            {opSearchTriggered&&opLoaded&&!opSrch&&(()=>{
               const list=sortPols(osagoList.filter(filterPol));
               const t=calcTotals(list);
               const PAGE=10;const totalPages=Math.ceil(list.length/PAGE);
@@ -4048,7 +4074,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* Current month — Добровольные */}
-            {opLoaded&&!opSrch&&(()=>{
+            {opSearchTriggered&&opLoaded&&!opSrch&&(()=>{
               const list=sortPols(volList.filter(filterPol));
               const t=calcTotals(list);
               return(
@@ -4098,7 +4124,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* All unpaid section */}
-            {opLoaded&&!opSrch&&allUnpaid.length>0&&(()=>{
+            {opUnpaidLoaded&&allUnpaid.length>0&&(()=>{
               const PAGE=10;
               const totalPages=Math.ceil(allUnpaid.length/PAGE);
               const page=Math.min(opUnpaidPage,totalPages-1);
@@ -4150,10 +4176,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* Empty state */}
-            {opLoaded&&osagoList.length===0&&volList.length===0&&opPrevUnpaid.length===0&&(
+            {opSearchTriggered&&opLoaded&&!opHistLoading&&osagoList.length===0&&volList.length===0&&(
               <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
-                <div style={{fontSize:32,marginBottom:8}}>🏢</div>
-                <div>Нет полисов. Нажмите «+ Добавить полис» для начала работы.</div>
+                <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+                <div>Ничего не найдено по выбранным фильтрам.</div>
               </div>
             )}
 
