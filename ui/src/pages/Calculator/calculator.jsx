@@ -971,8 +971,9 @@ export default function App(){
   const[opUnpaidPage,setOpUnpaidPage]=useState(0);
   const[opOsagoPage,setOpOsagoPage]=useState(0);
   const _today=new Date().toISOString().slice(0,10);
-  const[opDateFrom,setOpDateFrom]=useState(_today);
-  const[opDateTo,setOpDateTo]=useState(_today);
+  const[opDateFrom,setOpDateFrom]=useState("");
+  const[opDateTo,setOpDateTo]=useState("");
+  const[opSearchTriggered,setOpSearchTriggered]=useState(false);
   const[opEndFrom,setOpEndFrom]=useState("");
   const[opEndTo,setOpEndTo]=useState("");
   const[opCompanyFilter,setOpCompanyFilter]=useState("all");
@@ -1716,7 +1717,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   useEffect(()=>{if(tab==="officesales"){loadOfficeSales();setOpUnpaidPage(0);setOpOsagoPage(0);}else if(tab==="income"){calcStorage.get("officePol:"+selMonth).catch(()=>null).then(r=>{setOpCurrentMonth(r&&r.value?JSON.parse(r.value):[]);});}},[tab,selMonth]);
   useEffect(()=>{setOpOsagoPage(0);setOpUnpaidPage(0);},[opSearch,opStatusFilter,opDateFrom,opDateTo,opEndFrom,opEndTo,opCompanyFilter,opAgentFilter]);
-  useEffect(()=>{if(tab==="officesales"&&opLoaded&&opSearch.trim()&&!opHistLoaded&&!opHistLoading){loadOpHistory(MIN_MONTH,selMonth);}},[opSearch,opLoaded]);
+  useEffect(()=>{if(tab!=="officesales"||!opLoaded)return;if(!opSearchTriggered){setOpHistLoaded(false);setOpPrevAll([]);}},[tab,selMonth]);
   useEffect(()=>{const uid=currentEmployee?.id||"admin";try{const s=localStorage.getItem("opSortPref:"+uid);if(s){const{col,dir}=JSON.parse(s);if(col)setTableSortCol(col);if(dir)setTableSortDir(dir);}}catch{}},[currentEmployee?.id]);
 
   const normPaidDate=s=>{if(!s)return s;const m=String(s).match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:s;};
@@ -3773,16 +3774,17 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const matchesCompany=p=>opCompanyFilter==="all"||(detectCo(p.company)||p.company)===opCompanyFilter;
         const _mreoLockedUid=(_isMreoEmployee&&mreoConfig.internalCode)?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||null:null;
         const matchesAgent=p=>_isMreoEmployee?true:(opAgentFilter==="all"||p.agentUid===opAgentFilter);
-        const filterPol=p=>matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p);
+        const filterPol=p=>!opSearchTriggered||(matchesText(p)&&matchesStatus(p)&&matchesDates(p)&&matchesCompany(p)&&matchesAgent(p));
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
-        const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all";
-        const resetFilters=()=>{const t=new Date().toISOString().slice(0,10);setOpSearch("");setOpStatusFilter("all");setOpDateFrom(t);setOpDateTo(t);setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");};
+        const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all"||opSearch.trim()||opStatusFilter!=="all";
+        const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom("");setOpDateTo("");setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");setOpSearchTriggered(false);setOpHistLoaded(false);setOpPrevAll([]);};
+        const handleOpSearch=()=>{setOpHistLoaded(false);setOpPrevAll([]);setOpSearchTriggered(true);};
         // determine if filter spans months other than current
         const _curMo=selMonth;
         const _filterNeedsHistory=hasDateFilter&&((opDateFrom&&opDateFrom.slice(0,7)<_curMo)||(opDateTo&&opDateTo.slice(0,7)<_curMo)||(opEndFrom&&opEndFrom.slice(0,7)<_curMo)||(opEndTo&&opEndTo.slice(0,7)<_curMo));
         const _histFromKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a<b?a:b):_curMo;})();
         const _histToKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a>b?a:b):_curMo;})();
-        if(_filterNeedsHistory&&!opHistLoaded&&!opHistLoading){loadOpHistory(_histFromKey,_histToKey);}
+        if(opSearchTriggered&&!opHistLoaded&&!opHistLoading){if(opSearch.trim())loadOpHistory(MIN_MONTH,selMonth);else if(_filterNeedsHistory)loadOpHistory(_histFromKey,_histToKey);}
         const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{
@@ -3807,7 +3809,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               <button onClick={()=>setSelMonth(prevMo(selMonth))} disabled={selMonth<=MIN_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth<=MIN_MONTH?0.4:1}}>‹</button>
               <span style={{fontWeight:700,fontSize:16,minWidth:160,textAlign:"center"}}>{fmtMonth(selMonth)}</span>
               <button onClick={()=>setSelMonth(nextMo(selMonth))} disabled={selMonth>=MAX_MONTH} style={{...btn("#fff","#374151",{border:"1px solid #d1d5db",fontSize:18,padding:"3px 10px"}),opacity:selMonth>=MAX_MONTH?0.4:1}}>›</button>
-              <select value={opStatusFilter} onChange={e=>setOpStatusFilter(e.target.value)} style={{...inp,padding:"6px 10px",fontSize:13,fontWeight:600,marginLeft:8}}>
+              <select value={opStatusFilter} onChange={e=>{setOpStatusFilter(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"6px 10px",fontSize:13,fontWeight:600,marginLeft:8}}>
                 <option value="all">Все</option>
                 <option value="unpaid">Неоплаченные</option>
                 <option value="paid">Оплаченные</option>
@@ -3889,7 +3891,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
             {/* Search */}
             <div style={{marginBottom:8,position:"relative"}}>
-              <input value={opSearch} onChange={e=>setOpSearch(e.target.value)} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 36px 7px 12px",boxSizing:"border-box"}}/>
+              <input value={opSearch} onChange={e=>{setOpSearch(e.target.value);setOpSearchTriggered(false);}} onKeyDown={e=>e.key==="Enter"&&handleOpSearch()} placeholder="🔍 Поиск по имени, телефону, № полиса, марке авто, рег. номеру..." style={{...inp,width:"100%",padding:"7px 36px 7px 12px",boxSizing:"border-box"}}/>
               {opSearch&&<button onClick={()=>setOpSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#9ca3af",lineHeight:1,padding:"0 4px"}} title="Очистить">×</button>}
             </div>
 
@@ -3898,33 +3900,34 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700,textAlign:"center"}}>Дата заключения</span>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <input type="date" value={opDateFrom} onChange={e=>setOpDateFrom(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
+                  <input type="date" value={opDateFrom} onChange={e=>{setOpDateFrom(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
                   <span style={{color:"#9ca3af",fontSize:13}}>—</span>
-                  <input type="date" value={opDateTo} onChange={e=>setOpDateTo(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
+                  <input type="date" value={opDateTo} onChange={e=>{setOpDateTo(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
                 </div>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700,textAlign:"center"}}>Дата окончания</span>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <input type="date" value={opEndFrom} onChange={e=>setOpEndFrom(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
+                  <input type="date" value={opEndFrom} onChange={e=>{setOpEndFrom(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="От"/>
                   <span style={{color:"#9ca3af",fontSize:13}}>—</span>
-                  <input type="date" value={opEndTo} onChange={e=>setOpEndTo(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
+                  <input type="date" value={opEndTo} onChange={e=>{setOpEndTo(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,width:140}} title="До"/>
                 </div>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Компания</span>
-                <select value={opCompanyFilter} onChange={e=>setOpCompanyFilter(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:120}}>
+                <select value={opCompanyFilter} onChange={e=>{setOpCompanyFilter(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:120}}>
                   <option value="all">Все</option>
                   {ALL_COMPANIES.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               {!_mreoLockedUid&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
                 <span style={{fontSize:13,color:"#111827",fontWeight:700}}>Оператор</span>
-                <select value={opAgentFilter} onChange={e=>setOpAgentFilter(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:140}}>
+                <select value={opAgentFilter} onChange={e=>{setOpAgentFilter(e.target.value);setOpSearchTriggered(false);}} style={{...inp,padding:"5px 8px",fontSize:12,minWidth:140}}>
                   <option value="all">Все</option>
                   {staffAgents.map(([uid,a])=><option key={uid} value={uid}>{(a.name+" "+a.surname).trim()||uid}</option>)}
                 </select>
               </div>}
+              <button onClick={handleOpSearch} style={btn("#6366f1","#fff",{fontSize:12,padding:"6px 14px"})}>🔍 Найти</button>
               {(hasFilter||opSrch||opStatusFilter!=="all")&&(
                 <button onClick={resetFilters} style={btn("#f3f4f6","#374151",{fontSize:12,padding:"6px 12px",border:"1px solid #d1d5db"})}>✕ Сбросить фильтры</button>
               )}
@@ -3936,7 +3939,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
 
             {/* Unified search results — shown instead of sections when search is active */}
-            {opLoaded&&opSrch&&(()=>{
+            {opLoaded&&opSrch&&opSearchTriggered&&(()=>{
               if(opHistLoading)return<div style={{padding:32,textAlign:"center",color:"#1d4ed8",fontSize:13}}>⏳ Загружаются данные для поиска...</div>;
               const allPols=[...opPrevAll,...opCurrentMonth.map(p=>({...p,_monthKey:p._monthKey||selMonth}))];
               const seen=new Set();const unique=allPols.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
