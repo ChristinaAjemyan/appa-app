@@ -1692,7 +1692,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const loadOfficeSales=async()=>{
     await migrateOfficePols();
     setOpLoaded(false);
-    setOpPrevUnpaid([]);setOpPrevAll([]);setOpHistLoaded(false);setOpHistLoading(false);
+    setOpPrevUnpaid([]);setOpHistLoading(false);
+    if(!opSearchTriggered){setOpPrevAll([]);setOpHistLoaded(false);}
     const mk=selMonth;
     try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk})):[]);}catch{setOpCurrentMonth([]);}
     setOpLoaded(true);
