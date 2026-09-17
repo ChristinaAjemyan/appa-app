@@ -1851,7 +1851,22 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
   };
 
-  const saveOpMonth=(pols)=>{const prev=opCurrentMonth;setOpCurrentMonth(pols);calcStorage.set("officePol:"+selMonth,JSON.stringify(pols)).catch(err=>{setOpCurrentMonth(prev);_saveErr("полисы офиса")(err);});setRnTabs(ts=>ts.map(t=>t.month===selMonth?{...t,results:null,cands:[]}:t));calcStorage.set(`renewalResult:office:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});calcStorage.set(`renewalResult:agents:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});};
+  const saveOpMonth=async(mutate)=>{
+    const prev=opCurrentMonth;
+    try{
+      const r=await calcStorage.get("officePol:"+selMonth).catch(()=>null);
+      const serverPols=r&&r.value?JSON.parse(r.value):[];
+      const pols=mutate(serverPols);
+      setOpCurrentMonth(pols);
+      await calcStorage.set("officePol:"+selMonth,JSON.stringify(pols));
+      setRnTabs(ts=>ts.map(t=>t.month===selMonth?{...t,results:null,cands:[]}:t));
+      calcStorage.set(`renewalResult:office:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});
+      calcStorage.set(`renewalResult:agents:${selMonth}`,JSON.stringify({results:null,checkedAt:null})).catch(()=>{});
+    }catch(err){
+      setOpCurrentMonth(prev);
+      _saveErr("полисы офиса")(err);
+    }
+  };
   const setTableSort=col=>{const uid=currentEmployee?.id||"admin";const nat=col==="date"||col==="amount"||col==="net"?"desc":"asc";const newDir=tableSortCol===col?(tableSortDir==="asc"?"desc":"asc"):nat;setTableSortCol(col);setTableSortDir(newDir);try{localStorage.setItem("opSortPref:"+uid,JSON.stringify({col,dir:newDir}));}catch{}};
   const initOpFD=()=>({polType:"osago",insuredName:"",phone:"",company:ALL_COMPANIES[0],policyNum:"",date:new Date().toISOString().slice(0,10),dateStart:"",dateEnd:"",car:"",carPlate:"",bm:"",region:"",power:"",term:"L",polStatus:"",amount:"",discount:"0",agentUid:"",comment:"",productName:"",payNow:false,paymentType:"",paid_from_amex:true,passportNum:"",bankAccount:"",email:""});
   const addOfficePol=(fd)=>{
@@ -1860,7 +1875,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const pol={_id:genUid(),_monthKey:policyMonth,...fd,...defaults,...((!isAdmin&&currentEmployee?.cashMode==="mreo")?{_mreo:true}:{})};
     const _src=fd.paid_from_amex?"\u{1F4B3} Amex":"\u{1F3E6} Другой";
     logAction("add_policy",(fd.polType==="osago"?"ОСАГО":"Добровольный")+": "+(fd.insuredName||"—")+" / "+(fd.policyNum||"б/н")+" / "+(fd.company||"—")+" / "+fmt(fd.amount||0)+" ֏ / "+_src);
-    if(policyMonth===selMonth){saveOpMonth([...opCurrentMonth,pol]);return;}
+    if(policyMonth===selMonth){saveOpMonth(pols=>[...pols,pol]);return;}
     const prevAll=opPrevAll;
     const prevUnpaid=opPrevUnpaid;
     setOpPrevAll(prev=>[...prev.filter(p=>p._id!==pol._id),pol]);
@@ -1874,7 +1889,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     });
   };
   const saveEditPol=async(pol,updates)=>{
-    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?{...p,...updates}:p));}
+    if(pol._monthKey===selMonth){saveOpMonth(pols=>pols.map(p=>p._id===pol._id?{...p,...updates}:p));}
     else{
       const updated={...pol,...updates};
       const prevUnpaid=opPrevUnpaid;
@@ -1889,7 +1904,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
   const acceptOpPayment=async(pol,payData)=>{
     const updated={...pol,...payData,paid:true,paidAt:new Date().toISOString()};
-    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
+    if(pol._monthKey===selMonth){saveOpMonth(pols=>pols.map(p=>p._id===pol._id?updated:p));}
     else{
       const prevUnpaid=opPrevUnpaid;
       const prevAll=opPrevAll;
@@ -1922,7 +1937,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
     if(!await showConfirm("Отменить оплату для «"+(pol.insuredName||"—")+"» / "+(pol.policyNum||"б/н")+"?\n\nПолис вернётся в статус «Не оплачен».",{danger:true,confirmText:"Отменить оплату"}))return;
     const updated={...pol,paid:false,paidAt:null,paidAmount:null,paymentType:null,paidDate:null};
-    if(pol._monthKey===selMonth){saveOpMonth(opCurrentMonth.map(p=>p._id===pol._id?updated:p));}
+    if(pol._monthKey===selMonth){saveOpMonth(pols=>pols.map(p=>p._id===pol._id?updated:p));}
     else{
       const prevUnpaid=opPrevUnpaid;
       const prevAll=opPrevAll;
@@ -1952,7 +1967,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     }
     const _delMk=pol._monthKey||selMonth;
     if(_delMk===selMonth){
-      saveOpMonth(opCurrentMonth.filter(p=>p._id!==pol._id));
+      saveOpMonth(pols=>pols.filter(p=>p._id!==pol._id));
       setOpPrevAll(prev=>prev.filter(p=>p._id!==pol._id));
     }else{
       const prevUnpaid=opPrevUnpaid;
@@ -2176,7 +2191,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     if(opCurrentMonth.length>0){
       setImportPending({pols:validPols,month:selMonth});
     }else{
-      saveOpMonth(validPols);
+      saveOpMonth(pols=>[...pols,...validPols]);
       logAction("import","Импорт: "+validPols.length+" полисов за "+fmtMonth(selMonth));
       showToast("✓ Импортировано "+validPols.length+" записей за "+fmtMonth(selMonth),"success");
     }
@@ -3898,8 +3913,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{fontWeight:700,fontSize:14,color:"#92400e"}}>⚠ Данные за {fmtMonth(importPending.month)} уже существуют ({opCurrentMonth.length} зап.)</div>
                 <div style={{fontSize:13,color:"#78350f"}}>Импортируется {importPending.pols.length} записей. Что сделать с существующими?</div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                  <button onClick={()=>{saveOpMonth(importPending.pols);logAction("import","Импорт (замена): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#dc2626",undefined,{fontSize:13,padding:"7px 18px"})}>Заменить полностью</button>
-                  <button onClick={()=>{saveOpMonth([...opCurrentMonth,...importPending.pols]);logAction("import","Импорт (добавление): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 18px"})}>Добавить к существующим</button>
+                  <button onClick={()=>{saveOpMonth(()=>importPending.pols);logAction("import","Импорт (замена): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#dc2626",undefined,{fontSize:13,padding:"7px 18px"})}>Заменить полностью</button>
+                  <button onClick={()=>{saveOpMonth(pols=>[...pols,...importPending.pols]);logAction("import","Импорт (добавление): "+importPending.pols.length+" полисов за "+fmtMonth(selMonth));setImportPending(null);}} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 18px"})}>Добавить к существующим</button>
                   <button onClick={()=>setImportPending(null)} style={btn("#6b7280",undefined,{fontSize:13,padding:"7px 18px"})}>Отмена</button>
                 </div>
               </div>
