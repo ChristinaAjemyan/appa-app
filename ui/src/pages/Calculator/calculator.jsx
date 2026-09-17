@@ -7,6 +7,8 @@ import {SEED_AGENTS} from './agents_seed.js';
 
 const COMPANIES=["Nairi","Ingo","Liga","Sil","Rego"];
 const ALL_COMPANIES=["Nairi","Ingo","Liga","Sil","Rego","Armenia"];
+const OSAGO_PREFIX_COMPANY={SY:"Nairi",ST:"Sil",SV:"Armenia",SX:"Rego",SW:"Liga",SS:"Ingo"};
+const guessCompanyFromPolicyNum=pn=>{const m=(pn||"").trim().toUpperCase().match(/^([A-Z]{2})\d{6}$/);return m?OSAGO_PREFIX_COMPANY[m[1]]||null:null;};
 const ARM_GROUPS=["1-9","10-14","15-25"];
 const MONTHS_RU=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const EXCEPTION_BRANDS=["opel","mercedes","mercedes-benz","bmw","nissan"];
@@ -964,6 +966,7 @@ export default function App(){
   const[opEditPol,setOpEditPol]=useState(null);
   const[opFD,setOpFD]=useState({});
   const[opFormErrors,setOpFormErrors]=useState([]);
+  const[opCompanyTouched,setOpCompanyTouched]=useState(false);
   const[opPayPol,setOpPayPol]=useState(null);
   const[opPayData,setOpPayData]=useState({});
   const[opSearch,setOpSearch]=useState("");
@@ -2043,9 +2046,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
       const mreoUid=mreoConfig.internalCode?Object.keys(agentDir).find(uid=>agentDir[uid]?.internalCode===mreoConfig.internalCode)||"":"";
       fd.agentUid=mreoUid;
     }
-    setOpEditPol(null);setOpFD(fd);setOpFormErrors([]);setOpFormOpen(true);
+    setOpEditPol(null);setOpFD(fd);setOpFormErrors([]);setOpCompanyTouched(false);setOpFormOpen(true);
   };
-  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false,passportNum:pol.passportNum||"",bankAccount:pol.bankAccount||"",email:pol.email||""});setOpFormErrors([]);setOpFormOpen(true);};
+  const openOpEdit=(pol)=>{setOpEditPol(pol);setOpFD({polType:pol.polType||"osago",insuredName:pol.insuredName||"",phone:pol.phone||"",company:pol.company||ALL_COMPANIES[0],policyNum:pol.policyNum||"",date:pol.date||new Date().toISOString().slice(0,10),dateStart:pol.dateStart||"",dateEnd:pol.dateEnd||"",car:pol.car||"",carPlate:pol.carPlate||"",bm:pol.bm||"",region:pol.region||"",power:pol.power||"",term:pol.term||"L",polStatus:pol.polStatus||"",amount:String(pol.amount||""),discount:String(pol.discount||0),agentUid:pol.agentUid||"",comment:pol.comment||"",productName:pol.productName||"",payNow:false,paymentType:pol.paymentType||"",paid_from_amex:pol.paid_from_amex||false,passportNum:pol.passportNum||"",bankAccount:pol.bankAccount||"",email:pol.email||""});setOpFormErrors([]);setOpCompanyTouched(true);setOpFormOpen(true);};
   const openOpPay=async(pol)=>{
     const today=new Date().toISOString().slice(0,10);
     try{
@@ -4239,7 +4242,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     </div>
                     <div>
                       <div style={flbl}>№ полиса{req}{(isLocked&&opEditPol||paidLock)&&<span style={{marginLeft:6,fontSize:10,color:"#dc2626"}}>🔒</span>}</div>
-                      <input aria-label="Номер полиса" value={opFD.policyNum||""} onChange={e=>setOpFD(p=>({...p,policyNum:_ld(e.target.value,9)}))} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock),...fe("policyNum")}}/>
+                      <input aria-label="Номер полиса" value={opFD.policyNum||""} onChange={e=>{
+                        const v=_ld(e.target.value,9);
+                        const expected=opFD.polType==="osago"?guessCompanyFromPolicyNum(v):null;
+                        if(opFD.polType==="osago"&&opCompanyTouched&&expected&&opFD.company&&expected!==opFD.company){
+                          showToast("⚠ Номер полиса начинается на "+v.slice(0,2).toUpperCase()+" — обычно это "+expected+", а выбрана компания "+opFD.company+".","warning");
+                        }
+                        setOpFD(p=>({...p,policyNum:v,...(expected&&!opCompanyTouched?{company:expected}:{})}));
+                      }} placeholder="Номер полиса" maxLength={9} disabled={isLocked&&!!opEditPol||effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(isLocked&&!!opEditPol||effectiveLock),...fe("policyNum")}}/>
                     </div>
                     <div>
                       <div style={flbl}>Телефон{req}</div>
@@ -4252,7 +4262,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                     <div>
                       <div style={flbl}>Компания{req}</div>
-                      <select value={opFD.company||""} onChange={e=>setOpFD(p=>({...p,company:e.target.value}))} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
+                      <select value={opFD.company||""} onChange={e=>{
+                        const newCompany=e.target.value;
+                        setOpCompanyTouched(true);
+                        const expected=guessCompanyFromPolicyNum(opFD.policyNum);
+                        if(expected&&expected!==newCompany){
+                          showToast("⚠ Номер полиса "+opFD.policyNum+" обычно означает компанию "+expected+", а выбрано "+newCompany+".","warning");
+                        }
+                        setOpFD(p=>({...p,company:newCompany}));
+                      }} disabled={effectiveLock} style={{...finp,width:"100%",boxSizing:"border-box",...lk(effectiveLock)}}>
                         {ALL_COMPANIES.map(c=><option key={c}>{c}</option>)}
                       </select>
                     </div>
