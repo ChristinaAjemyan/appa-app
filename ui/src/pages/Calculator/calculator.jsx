@@ -1670,30 +1670,54 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const migrateOfficePols=async()=>{
     try{
       const res=await calcStorage.list("officePol:").catch(()=>({keys:[]}));
-      const allKeys=res.keys||[];if(!allKeys.length)return;
+      const allKeys=res.keys||[];if(!allKeys.length)return 0;
       const buckets={};
       for(const key of allKeys){const r=await calcStorage.get(key).catch(()=>null);if(r?.value)buckets[key]=JSON.parse(r.value);}
-      let changed=false;
+      // read-only detection pass: figure out exactly what needs to move where
+      const removeIdsByKey={};
+      const addPolsByKey={};
+      let misplacedCount=0;
       for(const key of Object.keys(buckets)){
         const bucketMonth=key.replace("officePol:","");
         const misplaced=buckets[key].filter(p=>p.date&&p.date.slice(0,7)&&p.date.slice(0,7)!==bucketMonth);
         if(!misplaced.length)continue;
-        changed=true;
-        buckets[key]=buckets[key].filter(p=>!p.date||!p.date.slice(0,7)||p.date.slice(0,7)===bucketMonth);
+        misplacedCount+=misplaced.length;
+        removeIdsByKey[key]=new Set(misplaced.map(p=>p._id));
         for(const p of misplaced){
           const tm=p.date.slice(0,7);const tk="officePol:"+tm;
-          if(!buckets[tk])buckets[tk]=[];
-          if(!buckets[tk].find(ep=>ep._id===p._id))buckets[tk].push({...p,_monthKey:tm});
+          (addPolsByKey[tk]=addPolsByKey[tk]||[]).push({...p,_monthKey:tm});
         }
       }
-      if(!changed)return;
-      for(const key of Object.keys(buckets))await calcStorage.set(key,JSON.stringify(buckets[key])).catch(()=>{});
-    }catch{}
+      const touchedKeys=new Set([...Object.keys(removeIdsByKey),...Object.keys(addPolsByKey)]);
+      if(!touchedKeys.size)return 0;
+      // write pass: only the keys that actually change, each with a fresh read right before writing
+      for(const key of touchedKeys){
+        const r=await calcStorage.get(key).catch(()=>null);
+        let pols=r&&r.value?JSON.parse(r.value):[];
+        const removeIds=removeIdsByKey[key];
+        if(removeIds)pols=pols.filter(p=>!removeIds.has(p._id));
+        const toAdd=addPolsByKey[key];
+        if(toAdd)for(const p of toAdd)if(!pols.find(ep=>ep._id===p._id))pols.push(p);
+        await calcStorage.set(key,JSON.stringify(pols)).catch(()=>{});
+      }
+      return misplacedCount;
+    }catch{return 0;}
   };
   const[opHistLoading,setOpHistLoading]=useState(false);
   const[opHistLoaded,setOpHistLoaded]=useState(false);
+  const[opMigrating,setOpMigrating]=useState(false);
+  const handleFixMonths=async()=>{
+    setOpMigrating(true);
+    try{
+      const n=await migrateOfficePols();
+      showToast(n>0?("✓ Исправлено: "+n+" полис"+(n===1?"":n<5?"а":"ов")+" перемещены в правильный месяц."):"✓ Проблем с распределением по месяцам не найдено.","success");
+    }catch{
+      showToast("❌ Ошибка проверки месяцев. Попробуйте ещё раз.");
+    }finally{
+      setOpMigrating(false);
+    }
+  };
   const loadOfficeSales=async()=>{
-    await migrateOfficePols();
     setOpLoading(true);setOpLoaded(false);
     const mk=selMonth;
     try{const r=await calcStorage.get("officePol:"+mk).catch(()=>null);setOpCurrentMonth(r&&r.value?JSON.parse(r.value).map(p=>({...p,_monthKey:p._monthKey||mk})):[]);}catch{setOpCurrentMonth([]);}
@@ -3856,6 +3880,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <button onClick={downloadOfficeTemplate} style={btn("#0891b2",undefined,{fontSize:13,padding:"7px 16px"})}>📋 Шаблон Excel</button>
                 <button onClick={()=>importOfficeRef.current.click()} style={btn("#0f766e",undefined,{fontSize:13,padding:"7px 16px"})}>⬆ Импорт</button>
                 <input ref={importOfficeRef} type="file" accept=".xlsx,.xls" onChange={handleImportOfficeFile} style={{display:"none"}}/>
+                <button onClick={handleFixMonths} disabled={opMigrating} title="Найти полисы, попавшие не в тот месяц (по дате заключения), и переложить их в правильный. Делайте это изредка, не во время активной работы других сотрудников." style={{...btn("#f3f4f6","#374151",{fontSize:13,padding:"7px 16px",border:"1px solid #d1d5db"}),opacity:opMigrating?0.6:1}}>{opMigrating?"⏳ Проверка...":"🔧 Проверить месяцы"}</button>
                 <span title={"Как заполнять шаблон:\n\nСтрока 1 — технические имена полей (не менять)\nСтрока 2 — названия колонок\nСтрока 3 — подсказки: синие = обязательные, серые = необязательные\nСтрока 4 — ПРИМЕР (жёлтая, не удалять)\nСтрока 5 и ниже — ваши данные\n\nФормат дат: ДД.ММ.ГГГГ (например: 15.01.2024)\nОплачено: TRUE или FALSE\nСпособ оплаты: cash / acba / ineco\nСрок (term): L — годовой, SH — краткосрочный"} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:26,height:26,borderRadius:"50%",background:"#e0f2fe",color:"#0369a1",fontWeight:700,fontSize:13,cursor:"help",border:"1.5px solid #7dd3fc",userSelect:"none"}}>i</span>
               </>}
             </div>
