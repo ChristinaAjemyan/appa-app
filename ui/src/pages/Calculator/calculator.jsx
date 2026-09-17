@@ -860,7 +860,7 @@ const checkOsagoDates=(dateStart,dateEnd,term)=>{
   if(!ok)return{type:"warning",msg:`Нестандартный срок: ${days} дн. Стандартные сроки — целое число месяцев: 3, 4, 5, 6, 7, 8, 9, 10, 11 или 12.`};
   return null;
 };
-const _DRAG_KEY="opFormDrag";
+const _DRAG_KEY="opFormDrag_v2";
 function DraggableModal({open,onClose,title,titleRight,children}){
   const boxRef=useRef(null);
   const drag=useRef({active:false,mx:0,my:0,ex:0,ey:0});
@@ -3764,11 +3764,9 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           return (ma?parseInt(ma[1]):99999)-(mb?parseInt(mb[1]):99999);
         });
         const _isMreoEmployee=!isAdmin&&(currentEmployee?.restrictToVoluntary||currentEmployee?.cashMode==="mreo");
-        const _opCurr=_isMreoEmployee?opCurrentMonth.filter(isMreoPol):opCurrentMonth.filter(p=>!isMreoPol(p));
         const _opPrevUnpaid=_isMreoEmployee?opPrevUnpaid.filter(isMreoPol):opPrevUnpaid.filter(p=>!isMreoPol(p));
         const _opPrevAll=_isMreoEmployee?opPrevAll.filter(isMreoPol):opPrevAll.filter(p=>!isMreoPol(p));
         const allUnpaid=[..._opPrevUnpaid].sort((a,b)=>new Date(b.date)-new Date(a.date));
-        const currentPaid=_opCurr.filter(p=>p.paid).sort((a,b)=>new Date(a.paidAt||0)-new Date(b.paidAt||0));
         const staffAgents=sortedAgents.filter(([,a])=>officeStaff.includes((a.internalCode||"").trim()));
         const tblH={...th,whiteSpace:"nowrap"};
         const actBtn=(label,bg,col,onClick)=><button onClick={onClick} style={{...btn(bg,col,{fontSize:11,padding:"3px 8px"}),marginRight:3}}>{label}</button>;
@@ -3792,33 +3790,27 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const hasDateFilter=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
         const hasFilter=hasDateFilter||opAgentFilter!=="all"||opCompanyFilter!=="all"||opSearch.trim()||opStatusFilter!=="all"||opProductFilter!=="osago";
         const resetFilters=()=>{setOpSearch("");setOpStatusFilter("all");setOpDateFrom(_today);setOpDateTo(_today);setOpEndFrom("");setOpEndTo("");setOpCompanyFilter("all");setOpAgentFilter("all");setOpProductFilter("osago");setOpSearchTriggered(false);setOpHistLoaded(false);setOpPrevAll([]);setOpPrevUnpaid([]);setOpUnpaidLoaded(false);};
-        const _curMo=selMonth;
-        const _filterNeedsHistory=hasDateFilter&&((opDateFrom&&opDateFrom.slice(0,7)<_curMo)||(opDateTo&&opDateTo.slice(0,7)<_curMo)||(opEndFrom&&opEndFrom.slice(0,7)<_curMo)||(opEndTo&&opEndTo.slice(0,7)<_curMo));
-        const _histFromKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a<b?a:b):_curMo;})();
-        const _histToKey=(()=>{const parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));return parts.length?parts.reduce((a,b)=>a>b?a:b):_curMo;})();
-        const handleOpSearch=async()=>{
-          setOpHistLoaded(false);setOpPrevAll([]);setOpSearchTriggered(true);
-          await loadOfficeSales();
-          const _hdf=!!(opDateFrom||opDateTo||opEndFrom||opEndTo);
-          const _hnh=_hdf&&((opDateFrom&&opDateFrom.slice(0,7)<selMonth)||(opDateTo&&opDateTo.slice(0,7)<selMonth)||(opEndFrom&&opEndFrom.slice(0,7)<selMonth)||(opEndTo&&opEndTo.slice(0,7)<selMonth));
+        const _thisRealMonth=getThisMonth();
+        const _periodLabel=(()=>{
+          if(opDateFrom&&opDateTo)return opDateFrom===opDateTo?fmtPolDate(opDateFrom):`${fmtPolDate(opDateFrom)} – ${fmtPolDate(opDateTo)}`;
+          if(opDateFrom)return"с "+fmtPolDate(opDateFrom);
+          if(opDateTo)return"по "+fmtPolDate(opDateTo);
+          return fmtMonth(_thisRealMonth);
+        })();
+        const handleOpSearch=()=>{
+          setOpSearchTriggered(true);
+          loadOfficeSales();
+          const _txt=!!opSearch.trim();
           const _parts=[opDateFrom,opDateTo,opEndFrom,opEndTo].filter(Boolean).map(d=>d.slice(0,7));
-          const _fk=_parts.length?_parts.reduce((a,b)=>a<b?a:b):selMonth;
-          const _tk=_parts.length?_parts.reduce((a,b)=>a>b?a:b):selMonth;
-          if(opSearch.trim()||!_hdf)await loadOpHistory(MIN_MONTH,selMonth);
-          else if(_hnh)await loadOpHistory(_fk,_tk);
-          else setOpHistLoaded(true);
+          const _fk=_txt?MIN_MONTH:(_parts.length?_parts.reduce((a,b)=>a<b?a:b):_thisRealMonth);
+          const _tk=_txt?_thisRealMonth:(_parts.length?_parts.reduce((a,b)=>a>b?a:b):_thisRealMonth);
+          loadOpHistory(_fk,_tk);
         };
         const handleLoadUnpaid=()=>loadOpUnpaid();
-        const allFiltered=[..._opPrevUnpaid,..._opCurr].filter(filterPol).sort((a,b)=>new Date(a.date)-new Date(b.date));
         const calcTotals=pols=>({count:pols.length,paid:pols.filter(p=>p.paid).length,unpaid:pols.filter(p=>!p.paid).length,totalAmount:pols.reduce((s,p)=>s+(p.amount||0),0),totalNet:pols.reduce((s,p)=>s+(p.amount||0)-(p.discount||0),0),totalPaidAmt:pols.filter(p=>p.paid).reduce((s,p)=>s+(p.paidAmount||0),0)});
         const basePols=(()=>{
-          if(!opSearchTriggered||!opLoaded)return[];
-          if(!hasDateFilter)return _opCurr;
-          if(_filterNeedsHistory){
-            if(opHistLoading)return _opCurr;
-            const seen=new Set();return[..._opPrevAll,..._opCurr].filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
-          }
-          return _opCurr;
+          if(!opSearchTriggered||!opHistLoaded||opHistLoading)return[];
+          const seen=new Set();return _opPrevAll.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
         })();
         const osagoList=basePols.filter(p=>normPolType(p.polType)==="osago");
         const volList=basePols.filter(p=>normPolType(p.polType)==="voluntary");
@@ -3967,17 +3959,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               {opSearchTriggered&&(()=>{const fo=osagoList.filter(filterPol).length;const fv=volList.filter(filterPol).length;return<span style={{fontSize:12,color:"#6366f1",fontWeight:600,alignSelf:"flex-end"}}>Найдено: {fo+fv}{fo>0&&fv>0?` (🚗 ${fo} + 🛡 ${fv})`:""}</span>;})()}
             </div>
 
-            {opLoading&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Загрузка...</div>}
-            {opLoaded&&opHistLoading&&<div style={{padding:"8px 14px",background:"#eff6ff",borderRadius:6,marginBottom:10,fontSize:12,color:"#1d4ed8"}}>⏳ Загружаются данные за выбранный период...</div>}
-            {!opSearchTriggered&&!opLoading&&<div style={{padding:"32px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>Задайте фильтры и нажмите <strong>🔍 Найти</strong></div>}
-
+            {opHistLoading&&<div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>⏳ Идёт поиск...</div>}
+            {!opSearchTriggered&&!opHistLoading&&<div style={{padding:"32px 0",textAlign:"center",color:"#9ca3af",fontSize:13}}>Задайте фильтры и нажмите <strong>🔍 Найти</strong></div>}
 
             {/* Unified search results — shown when text search is active */}
-            {opSearchTriggered&&opLoaded&&opSrch&&(()=>{
-              if(opHistLoading)return<div style={{padding:32,textAlign:"center",color:"#1d4ed8",fontSize:13}}>⏳ Загружаются данные для поиска...</div>;
-              const allPols=[...opPrevAll,...opCurrentMonth.map(p=>({...p,_monthKey:p._monthKey||selMonth}))];
-              const seen=new Set();const unique=allPols.filter(p=>{if(seen.has(p._id))return false;seen.add(p._id);return true;});
-              const results=unique.filter(filterPol).sort((a,b)=>new Date(b.date)-new Date(a.date));
+            {opSearchTriggered&&opHistLoaded&&!opHistLoading&&opSrch&&(()=>{
+              const results=[...basePols].filter(filterPol).sort((a,b)=>new Date(b.date)-new Date(a.date));
               if(!results.length)return <div style={{padding:32,textAlign:"center",color:"#9ca3af",fontSize:13}}>Ничего не найдено</div>;
               return(
               <div style={{border:"1px solid #a5b4fc",borderRadius:8,overflow:"hidden",marginBottom:16}}>
@@ -3987,7 +3974,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                 <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead><tr style={{background:"#e0e7ff"}}>{["Статус","Тип","Дата","Месяц","Страхователь","Телефон","Компания","Авто / Продукт","Рег.номер","№ полиса","Сумма","К оплате","Оплачено","Тип оплаты",""].map(h=><th key={h} style={tblH}>{h}</th>)}</tr></thead>
                   <tbody>{results.map((pol,i)=>{
-                    const isCur=pol._monthKey===selMonth;
+                    const isCur=pol._monthKey===_thisRealMonth;
                     return(
                     <tr key={pol._id} style={{background:pol.paid?(i%2===0?"#f0fdf4":"#dcfce7"):(i%2===0?"white":"#fafafa"),borderBottom:"1px solid #e5e7eb"}}>
                       <td style={{...td,whiteSpace:"nowrap"}}>{pol.paid?<span style={{background:"#dcfce7",color:"#166534",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>✓ Оплачен</span>:<span style={{background:"#fef9c3",color:"#92400e",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>⏳ Ожидает</span>}</td>
@@ -4018,8 +4005,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               );
             })()}
 
-            {/* Current month — ОСАГО */}
-            {opSearchTriggered&&opLoaded&&!opSrch&&(()=>{
+            {/* ОСАГО — результаты поиска */}
+            {opSearchTriggered&&opHistLoaded&&!opHistLoading&&!opSrch&&(()=>{
               const list=sortPols(osagoList.filter(filterPol));
               const t=calcTotals(list);
               const PAGE=10;const totalPages=Math.ceil(list.length/PAGE);
@@ -4028,7 +4015,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               return(
               <div style={{border:"1px solid #dbeafe",borderRadius:8,overflow:"hidden",marginBottom:16}}>
                 <div style={{background:"#eff6ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-                  <span style={{fontWeight:700,fontSize:14,color:"#1e40af"}}>🚗 ОСАГО — {fmtMonth(selMonth)}</span>
+                  <span style={{fontWeight:700,fontSize:14,color:"#1e40af"}}>🚗 ОСАГО — {_periodLabel}</span>
                   <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap"}}>
                     <span style={{color:"#374151"}}>Полисов: <strong>{t.count}</strong></span>
                     <span style={{color:"#374151"}}>Сумма: <strong>{fmt(t.totalAmount)}</strong></span>
@@ -4038,7 +4025,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 </div>
                 {osagoList.length===0
-                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет полисов ОСАГО за {fmtMonth(selMonth)}</div>
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет полисов ОСАГО за {_periodLabel}</div>
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
                   :<><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -4080,14 +4067,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               );
             })()}
 
-            {/* Current month — Добровольные */}
-            {opSearchTriggered&&opLoaded&&!opSrch&&(()=>{
+            {/* Добровольные — результаты поиска */}
+            {opSearchTriggered&&opHistLoaded&&!opHistLoading&&!opSrch&&(()=>{
               const list=sortPols(volList.filter(filterPol));
               const t=calcTotals(list);
               return(
               <div style={{border:"1px solid #e9d5ff",borderRadius:8,overflow:"hidden",marginBottom:20}}>
                 <div style={{background:"#f5f3ff",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-                  <span style={{fontWeight:700,fontSize:14,color:"#6d28d9"}}>🛡 Добровольные — {fmtMonth(selMonth)}</span>
+                  <span style={{fontWeight:700,fontSize:14,color:"#6d28d9"}}>🛡 Добровольные — {_periodLabel}</span>
                   <div style={{display:"flex",gap:16,fontSize:12,flexWrap:"wrap"}}>
                     <span style={{color:"#374151"}}>Полисов: <strong>{t.count}</strong></span>
                     <span style={{color:"#374151"}}>Сумма: <strong>{fmt(t.totalAmount)}</strong></span>
@@ -4097,7 +4084,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   </div>
                 </div>
                 {volList.length===0
-                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет добровольных полисов за {fmtMonth(selMonth)}</div>
+                  ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет добровольных полисов за {_periodLabel}</div>
                   :list.length===0
                   ?<div style={{padding:24,textAlign:"center",color:"#9ca3af",fontSize:13}}>Нет совпадений по фильтру</div>
                   :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -4183,7 +4170,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
             })()}
 
             {/* Empty state */}
-            {opSearchTriggered&&opLoaded&&!opHistLoading&&osagoList.length===0&&volList.length===0&&(
+            {opSearchTriggered&&opHistLoaded&&!opHistLoading&&!opSrch&&osagoList.length===0&&volList.length===0&&(
               <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
                 <div style={{fontSize:32,marginBottom:8}}>🔍</div>
                 <div>Ничего не найдено по выбранным фильтрам.</div>
