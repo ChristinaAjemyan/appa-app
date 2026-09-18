@@ -30,6 +30,7 @@ const DEFAULT_RATES={
   agentOverrides:{},
 };
 const DEFAULT_VOL_RATES={rates:[]};
+const DEFAULT_MGR_VOL_RATES={rates:[],tierThresholds:[0,100000,300000]};
 const DEFAULT_MGR_RATES={
   managerRates:{Nairi:16,Ingo:7,Liga:5,Sil:10,Rego:5},
   armeniaManager:{"1-9":11,"10-14":10,"15-25":7},
@@ -268,6 +269,8 @@ const excReason=(p,excepts,agentUid)=>{
 
 const getArmGroup=bm=>{const n=Number(bm);if(n>=1&&n<=9)return"1-9";if(n>=10&&n<=14)return"10-14";return"15-25";};
 const getTierMgr=(sales,thresholds)=>{let t=1;for(let i=1;i<thresholds.length;i++)if(sales>=thresholds[i])t=i+1;return t;};
+const getMgrVolRate=(productName,mvr)=>{const r=(mvr.rates||[]).find(x=>x.name===productName);return r?(r.managerRate||0):null;};
+const getOpVolRate=(productName,tier,mvr)=>{const r=(mvr.rates||[]).find(x=>x.name===productName);return r?(r["opTier"+tier]||0):null;};
 const getMgrPolicyRate=(p,cfg)=>{
   const co=detectCo(p.company)||p.company;
   if(co==="Armenia"){const isShort=p.term==="SH"||(p.days!=null&&p.days<=87);if(isShort)return(cfg.armeniaShortManager!=null?cfg.armeniaShortManager:20);return(cfg.armeniaManager&&cfg.armeniaManager[getArmGroup(p.bm)])||0;}
@@ -603,6 +606,62 @@ function VolRatesPanel({volRates,onSave}){
   );
 }
 
+function MgrVolRatesPanel({mgrVolRates,volRates,onSave}){
+  const[local,setLocal]=useState(()=>JSON.parse(JSON.stringify(mgrVolRates)));
+  const[newProd,setNewProd]=useState("");
+  const knownNames=(volRates.rates||[]).map(r=>r.name).filter(Boolean);
+  const availableToAdd=knownNames.filter(n=>!local.rates.some(r=>r.name===n));
+  const add=name=>{if(!name)return;if(local.rates.some(r=>r.name===name))return;setLocal(p=>({...p,rates:[...p.rates,{id:genUid(),name,managerRate:25,opTier1:10,opTier2:15,opTier3:20}]}));setNewProd("");};
+  const rm=id=>setLocal(p=>({...p,rates:p.rates.filter(r=>r.id!==id)}));
+  const upd=(id,f,v)=>setLocal(p=>({...p,rates:p.rates.map(r=>r.id===id?{...r,[f]:v}:r)}));
+  const updThr=(i,v)=>setLocal(p=>{const thr=[...(p.tierThresholds||DEFAULT_MGR_VOL_RATES.tierThresholds)];thr[i]=parseFloat(v)||0;return{...p,tierThresholds:thr};});
+  const numInp=(v,cb,w)=><input type="text" value={v} onChange={e=>cb(parseFloat(_dig(e.target.value,3))||0)} maxLength={3} style={{...inp,width:w||55,textAlign:"center"}}/>;
+  return(
+    <div style={{fontSize:13}}>
+      <p style={{margin:"0 0 10px",fontSize:12,color:"#6b7280"}}>Продукт учитывается в системе менеджера только если он явно добавлен в этот список — свои ставки менеджера и оператора по ступеням.</p>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,fontWeight:600,color:"#92400e"}}>Пороги ступеней оператора (AMD, за месяц, сумма по всем продуктам этой таблицы):</span>
+        {(local.tierThresholds||DEFAULT_MGR_VOL_RATES.tierThresholds).map((v,i)=>(
+          <label key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:"#92400e"}}>{"Ст."+(i+1)+" от"}<input type="text" value={v} onChange={e=>updThr(i,e.target.value)} style={{...inp,width:80,textAlign:"center"}}/></label>
+        ))}
+      </div>
+      {local.rates.length===0&&<p style={{color:"#9ca3af"}}>Нет продуктов.</p>}
+      {local.rates.length>0&&(
+        <div style={{overflowX:"auto",marginBottom:10}}>
+          <table style={{borderCollapse:"collapse"}}>
+            <thead><tr><th style={th}>Продукт</th><th style={th}>Ставка мен. %</th><th style={th}>Опер. Ст.1 %</th><th style={th}>Опер. Ст.2 %</th><th style={th}>Опер. Ст.3 %</th><th style={th}></th></tr></thead>
+            <tbody>{local.rates.map(r=>{
+              const warn=Math.max(r.opTier1||0,r.opTier2||0,r.opTier3||0)>=(r.managerRate||0);
+              return(
+                <tr key={r.id} style={warn?{background:"#fef2f2"}:undefined}>
+                  <td style={{...td,fontWeight:600}}>{r.name}{warn&&<span title="Максимальная ставка оператора ≥ ставки менеджера — менеджер может уйти в минус по этому продукту" style={{marginLeft:6,color:"#dc2626"}}>⚠</span>}</td>
+                  <td style={td}>{numInp(r.managerRate,v=>upd(r.id,"managerRate",v))}</td>
+                  <td style={td}>{numInp(r.opTier1,v=>upd(r.id,"opTier1",v))}</td>
+                  <td style={td}>{numInp(r.opTier2,v=>upd(r.id,"opTier2",v))}</td>
+                  <td style={td}>{numInp(r.opTier3,v=>upd(r.id,"opTier3",v))}</td>
+                  <td style={td}><button aria-label="Удалить продукт" onClick={()=>rm(r.id)} style={btn("#fff1f2","#dc2626",{border:"1px solid #fca5a5"})}>✕</button></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      )}
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        {availableToAdd.length>0?(
+          <>
+            <select value={newProd} onChange={e=>setNewProd(e.target.value)} style={{...inp,padding:"4px 8px",fontSize:12,minWidth:200}}>
+              <option value="">Выберите продукт...</option>
+              {availableToAdd.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+            <button onClick={()=>add(newProd)} disabled={!newProd} style={btn("#6366f1")}>+ Добавить продукт</button>
+          </>
+        ):<span style={{fontSize:12,color:"#9ca3af"}}>Все продукты из «Доброволь.» уже добавлены.</span>}
+        <button onClick={()=>onSave(local)} style={btn("#1d4ed8")}>💾 Сохранить</button>
+      </div>
+    </div>
+  );
+}
+
 function ExceptionsPanel({exceptions,onSave,agentDir}){
   const[local,setLocal]=useState(()=>JSON.parse(JSON.stringify(exceptions)));
   const[expanded,setExpanded]=useState(null);
@@ -739,6 +798,7 @@ const valR=r=>{try{return r&&r.officeRates&&r.agentRates;}catch{return false;}};
 const valE=e=>{try{return Array.isArray(e)&&e.every(x=>x.id&&x.company&&typeof x.enabled==="boolean"&&Array.isArray(x.conditions));}catch{return false;}};
 const valD=d=>{try{return d&&typeof d==="object"&&!Array.isArray(d);}catch{return false;}};
 const valV=v=>{try{return v&&Array.isArray(v.rates);}catch{return false;}};
+const valMV=v=>{try{return v&&Array.isArray(v.rates)&&Array.isArray(v.tierThresholds);}catch{return false;}};
 
 function RnPolModal({p,onClose,rnTabs,rnActiveId,parseAnyDate,getName}){
   const rntm=rnTabs.find(t=>t.id===rnActiveId)||rnTabs[0];
@@ -924,6 +984,8 @@ export default function App(){
   const[agentDir,setAgentDir]=useState({});
   const[rates,setRates]=useState(DEFAULT_RATES);
   const[volRates,setVolRates]=useState(DEFAULT_VOL_RATES);
+  const[mgrVolRates,setMgrVolRates]=useState(DEFAULT_MGR_VOL_RATES);
+  const[mgrView,setMgrView]=useState("osago");
   const[exceptions,setExceptions]=useState(DEFAULT_EXCEPTIONS);
   const[panel,setPanel]=useState(null);
   const[showBackup,setShowBackup]=useState(false);
@@ -1081,6 +1143,7 @@ export default function App(){
     try{const r=await calcStorage.get("agentDirectory").catch(()=>"__err__");if(r&&r!=="__err__"&&r.value){const p=JSON.parse(r.value);if(valD(p))setAgentDir(p);else{setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}}else if(!r||r===null){setAgentDir(SEED_AGENTS);calcStorage.set("agentDirectory",JSON.stringify(SEED_AGENTS)).catch(()=>{});}else{setAgentDir(SEED_AGENTS);}}catch{setAgentDir(SEED_AGENTS);}
     try{const r=await calcStorage.get("ratesConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valR(p))setRates(p);}}catch{}
     try{const r=await calcStorage.get("volRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valV(p))setVolRates(p);}}catch{}
+    try{const r=await calcStorage.get("mgrVolRates").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valMV(p))setMgrVolRates(p);}}catch{}
     try{const r=await calcStorage.get("exceptionsConfig").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(valE(p))setExceptions(p);}}catch{}
     try{const r=await calcStorage.get("appSettings").catch(()=>null);if(r&&r.value){const p=JSON.parse(r.value);if(p&&p.adminPin){_adminPinRef.current=p.adminPin;setAdminPin(p.adminPin);}if(p&&Array.isArray(p.officeStaff)&&p.officeStaff.length){_officeStaffRef.current=p.officeStaff;setOfficeStaff(p.officeStaff);}if(p&&Array.isArray(p.employees)&&p.employees.length){const merged=p.employees.map(emp=>{const def=DEFAULT_EMPLOYEES.find(d=>d.id===emp.id);if(!def)return emp;const newTabs=(def.tabs||[]).filter(t=>!(emp.tabs||[]).includes(t));const updates={};if(newTabs.length)updates.tabs=[...(emp.tabs||[]),...newTabs];if(def.cashMode&&!emp.cashMode)updates.cashMode=def.cashMode;if(def.restrictToVoluntary&&!emp.restrictToVoluntary)updates.restrictToVoluntary=def.restrictToVoluntary;return Object.keys(updates).length?{...emp,...updates}:emp;});const defNotInStored=DEFAULT_EMPLOYEES.filter(d=>!p.employees.find(e=>e.id===d.id));const finalList=[...merged,...defNotInStored];_employeesRef.current=finalList;setEmployees(finalList);}}}catch(err){console.error("appSettings load error:",err);showToast("⚠ Ошибка загрузки настроек приложения. Если сотрудники не могут войти — обновите страницу.","error");}
     _settingsLoadedRef.current=true;
@@ -1126,6 +1189,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const removeOfficeCode=idx=>saveOfficeCodes(officeCodes.filter((_,i)=>i!==idx));
   const saveRates=r=>{const prev=rates;setRates(r);calcStorage.set("ratesConfig",JSON.stringify(r)).catch(err=>{setRates(prev);_saveErr("ставки комиссий")(err);});};
   const saveVR=r=>{const prev=volRates;setVolRates(r);calcStorage.set("volRates",JSON.stringify(r)).catch(err=>{setVolRates(prev);_saveErr("ставки добровольных")(err);});};
+  const saveMVR=r=>{const prev=mgrVolRates;setMgrVolRates(r);calcStorage.set("mgrVolRates",JSON.stringify(r)).catch(err=>{setMgrVolRates(prev);_saveErr("ставки добров. менеджера")(err);});};
   const saveExcs=e=>{const prev=exceptions;setExceptions(e);calcStorage.set("exceptionsConfig",JSON.stringify(e)).catch(err=>{setExceptions(prev);_saveErr("исключения")(err);});};
   const isAdmin=role==="admin";
   const isViewOnly=!isAdmin&&currentEmployee?.viewOnly===true;
@@ -1462,6 +1526,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const isLocked=lockedMonths[selMonth]===true;
   const effRates=isLocked&&monthSnapshot?monthSnapshot.rates:rates;
   const effVolRates=isLocked&&monthSnapshot?monthSnapshot.volRates:volRates;
+  const effMgrVolRates=isLocked&&monthSnapshot?(monthSnapshot.mgrVolRates||DEFAULT_MGR_VOL_RATES):mgrVolRates;
   const effExceptions=isLocked&&monthSnapshot?monthSnapshot.exceptions:exceptions;
   const effAgentDir=isLocked&&monthSnapshot?monthSnapshot.agentDir:agentDir;
 
@@ -1601,7 +1666,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const saveMonth=()=>{
     const pols=agentData.flatMap(a=>a.policies);
     const vols=[...effVol];
-    const snap={rates,volRates,exceptions,agentDir,managerConfig};
+    const snap={rates,volRates,mgrVolRates,exceptions,agentDir,managerConfig};
     calcStorage.set("month:"+selMonth,JSON.stringify({policies:pols,voluntary:vols})).catch(_saveErr("сохранение месяца"));
     calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(_saveErr("снимок ставок"));
     setStoredPols(pols);
@@ -1635,7 +1700,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const lockMonth=async()=>{
     if(!await showConfirm("Закрыть "+fmtMonth(selMonth)+"?\nПосле закрытия ставки будут зафиксированы, а добавление/удаление полисов будет недоступно сотрудникам.",{danger:true,confirmText:"Закрыть месяц"}))return;
-    const snap={rates,volRates,exceptions,agentDir,managerConfig};
+    const snap={rates,volRates,mgrVolRates,exceptions,agentDir,managerConfig};
     await calcStorage.set("monthSnapshot:"+selMonth,JSON.stringify(snap)).catch(_saveErr("снимок месяца"));
     const updated={...lockedMonths,[selMonth]:true};
     setLockedMonths(updated);setMonthSnapshot(snap);
@@ -2151,7 +2216,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const importBackup=e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(d.agentDir&&valD(d.agentDir))saveDir(d.agentDir);if(d.rates&&valR(d.rates))saveRates(d.rates);if(d.volRates&&valV(d.volRates))saveVR(d.volRates);if(d.exceptions&&valE(d.exceptions))saveExcs(d.exceptions);showToast("✓ Восстановлено.","success");}catch{showToast("Ошибка файла.");}};
+    r.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(d.agentDir&&valD(d.agentDir))saveDir(d.agentDir);if(d.rates&&valR(d.rates))saveRates(d.rates);if(d.volRates&&valV(d.volRates))saveVR(d.volRates);if(d.mgrVolRates&&valMV(d.mgrVolRates))saveMVR(d.mgrVolRates);if(d.exceptions&&valE(d.exceptions))saveExcs(d.exceptions);showToast("✓ Восстановлено.","success");}catch{showToast("Ошибка файла.");}};
     r.readAsText(f);e.target.value="";
   };
 
@@ -2776,9 +2841,10 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   const buildAllPayrollRows=(agentData,effVol,agentDir,excludeCodes=[])=>{
     const icNum=ic=>{const m=(ic||"").match(/(\d+)$/);return m?parseInt(m[1]):99999;};
     const excSet=new Set(excludeCodes.map(c=>c.trim().toLowerCase()));
+    const _opUids=new Set(managerConfig?.operatorUids||[]);
     const allUids=new Set([
-      ...agentData.filter(a=>a.policies.length>0).map(a=>a.uid),
-      ...effVol.filter(v=>v.agentUid).map(v=>v.agentUid),
+      ...agentData.filter(a=>a.policies.length>0&&!_opUids.has(a.uid)).map(a=>a.uid),
+      ...effVol.filter(v=>v.agentUid&&!_opUids.has(v.agentUid)).map(v=>v.agentUid),
     ]);
     return [...allUids].map(uid=>{
       const agData=agentData.find(a=>a.uid===uid);
@@ -2843,7 +2909,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
   };
 
   // Shared helper: build one operator worksheet. showMgr=true includes manager income columns.
-  const _buildOpSheet=(r,cfg,agentDir,month,excepts,showMgr)=>{
+  const _buildOpSheet=(r,cfg,agentDir,month,excepts,showMgr,volR)=>{
     const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
     const sDark=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"left",wrapText:true}});
     const sLight=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:al||"center",wrapText:true}});
@@ -2914,6 +2980,36 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
           :[p.policyNum||"",p.company||"",p.insuredName||"",p.car||"",p.carPlate||"",p.region||"",p.bm||0,p.power||0,p.term||"",p.amount||0,"—","—",reason];
         vals.forEach((v,c)=>ac(ws,rw,c,v,typeof v==="number"?sN(bg):sC(bg)));rw++;
       });
+    }
+    // Добровольные (канал менеджера) — тот же лист, отдельным блоком под ОСАГО
+    if(volR&&(volR.policies.length>0||volR.unmatched.length>0)){
+      rw++;
+      const VVHDRS=showMgr
+        ?["№ полиса","Продукт","Компания","Страхователь","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер.","Долг офису"]
+        :["№ полиса","Продукт","Компания","Страхователь","Сумма","% Опер.","Выплата опер."];
+      ac(ws,rw,0,"ДОБРОВОЛЬНЫЕ ПОЛИСЫ ("+volR.policies.length+") — Ступень С"+volR.tier,sDark("1D4ED8","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+      VVHDRS.forEach((h,c)=>ac(ws,rw,c,h,sLight("DBEAFE")));rw++;
+      volR.policies.forEach((v,i)=>{
+        const bg=i%2===0?"FFFFFF":"EFF6FF";
+        const vals=showMgr
+          ?[v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0,v.mgrRate,v.mgrComm,v.opRate,v.opComm,v.debtToOffice]
+          :[v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0,v.opRate,v.opComm];
+        vals.forEach((val,c)=>ac(ws,rw,c,val,typeof val==="number"?sN(bg):sC(bg)));rw++;
+      });
+      const totVolAmt=volR.policies.reduce((s,v)=>s+v.amount,0);
+      const totRow=showMgr
+        ?["ИТОГО","","","",totVolAmt,"",volR.mi,"",volR.oi,volR.debt]
+        :["ИТОГО","","","",totVolAmt,"",volR.oi];
+      totRow.forEach((val,c)=>ac(ws,rw,c,val,typeof val==="number"?sN("E5E7EB",true):sC("E5E7EB",true)));rw++;
+      if(volR.unmatched.length>0){
+        rw++;
+        ac(ws,rw,0,"⚠ Продукт не найден в справочнике ставок ("+volR.unmatched.length+")",sDark("991B1B","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:nc}});rw++;
+        volR.unmatched.forEach((v,i)=>{
+          const bg=i%2===0?"FFFFFF":"FFF7ED";
+          [v.policyNum||"",v.productName||"",v.company||"",v.insuredName||"",v.amount||0].forEach((val,c)=>ac(ws,rw,c,val,typeof val==="number"?sN(bg):sC(bg)));
+          rw++;
+        });
+      }
     }
     ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:nc}});
     ws["!cols"]=showMgr
@@ -2996,7 +3092,30 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     return{uid:op.uid,totalSales:op.totalSales,validSales:op.validSales,tier,fix,mi,oi,profit:mi-oi-fix,policies:op.policies};
   });
 
-  const exportManagerXlsx=(agentData,cfg,agentDir,month,excepts)=>{
+  // Добровольные полисы менеджерского канала: тариф оператора считается по ступени (объём — только продукты,
+  // явно прописанные в mgrVolRates, по всем таким продуктам вместе), ставка менеджера/оператора берётся из
+  // mgrVolRates для каждого конкретного продукта. Долг менеджера офису = сумма полиса − доход менеджера.
+  const _computeOpVolR=(effVol,mvr,cfg)=>(cfg.operatorUids||[]).map(uid=>{
+    const pols=effVol.filter(v=>v.agentUid===uid);
+    const isKnown=v=>(mvr.rates||[]).some(r=>r.name===v.productName);
+    const matched=pols.filter(isKnown);
+    const unmatched=pols.filter(v=>!isKnown(v));
+    const totalVolSales=matched.reduce((s,v)=>s+v.amount,0);
+    const tier=getTierMgr(totalVolSales,mvr.tierThresholds||DEFAULT_MGR_VOL_RATES.tierThresholds);
+    let mi=0,oi=0,debt=0;
+    const policies=matched.map(v=>{
+      const mRate=getMgrVolRate(v.productName,mvr)||0;
+      const oRate=getOpVolRate(v.productName,tier,mvr)||0;
+      const mComm=Math.round(v.amount*mRate/100);
+      const oComm=Math.round(v.amount*oRate/100);
+      const debtToOffice=v.amount-mComm;
+      mi+=mComm;oi+=oComm;debt+=debtToOffice;
+      return{...v,mgrRate:mRate,opRate:oRate,mgrComm:mComm,opComm:oComm,debtToOffice};
+    });
+    return{uid,totalVolSales,tier,mi,oi,debt,profit:mi-oi,policies,unmatched};
+  });
+
+  const exportManagerXlsx=(agentData,cfg,agentDir,month,excepts,effVolArg,mvrArg)=>{
     const br={style:"thin",color:{rgb:"D1D5DB"}};const borders={top:br,bottom:br,left:br,right:br};
     const sDark=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"1E293B"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"left",wrapText:true}});
     const sLight=(rgb,al)=>({fill:{patternType:"solid",fgColor:{rgb:rgb||"E5E7EB"}},font:{bold:true,sz:10},border:borders,alignment:{horizontal:al||"center",wrapText:true}});
@@ -3007,6 +3126,12 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
     const opR=(!cfg.managerStartDate||month>=cfg.managerStartDate)?_computeOpR(agentData,cfg):[];
     const totMgr=opR.reduce((s,r)=>s+r.mi,0);const totOp=opR.reduce((s,r)=>s+r.oi,0);const totFix=opR.reduce((s,r)=>s+r.fix,0);const totProfit=opR.reduce((s,r)=>s+r.profit,0);
+    const opVolR=_computeOpVolR(effVolArg||[],mvrArg||DEFAULT_MGR_VOL_RATES,cfg);
+    const totVolMi=opVolR.reduce((s,r)=>s+r.mi,0);const totVolOi=opVolR.reduce((s,r)=>s+r.oi,0);const totVolDebt=opVolR.reduce((s,r)=>s+r.debt,0);
+    const findVolR=uid=>opVolR.find(r=>r.uid===uid);
+    // Операторы без ОСАГО-продаж в этом месяце, но с добровольными — тоже получают лист
+    const emptyOsagoRow=uid=>({uid,totalSales:0,validSales:0,tier:1,fix:0,mi:0,oi:0,profit:0,policies:[]});
+    const volOnlyUids=opVolR.filter(vr=>(vr.policies.length>0||vr.unmatched.length>0)&&!opR.some(r=>r.uid===vr.uid)).map(vr=>vr.uid);
     const sT=(al)=>({fill:{patternType:"solid",fgColor:{rgb:"111827"}},font:{bold:true,sz:10,color:{rgb:"FFFFFF"}},border:borders,alignment:{horizontal:al||"right"}});
     const mkSummary=(showMgr)=>{
       const ws={};let rw=0;const mg=[];
@@ -3036,6 +3161,31 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         ac(ws,rw,0,"Офис должен менеджеру:",sLight("FDE68A","left"));
         ac(ws,rw,1,totMgr,{fill:{patternType:"solid",fgColor:{rgb:"FDE68A"}},font:{bold:true,sz:12},border:borders,alignment:{horizontal:"right"}});
         mg.push({s:{r:rw,c:0},e:{r:rw,c:0}});
+        rw++;
+      }
+      if(opVolR.some(r=>r.policies.length>0)){
+        rw++;
+        ac(ws,rw,0,"Добровольные (канал менеджера) — "+fmtMonth(month),sDark("1D4ED8","center"));mg.push({s:{r:rw,c:0},e:{r:rw,c:ncols}});rw++;
+        const vhdrs=showMgr
+          ?["Оператор","Код","Объём (зачёт.)","Ступень","Доход мен. (AMD)","Выплата опер. (AMD)","Долг офису (AMD)"]
+          :["Оператор","Код","Объём (зачёт.)","Ступень","Выплата опер. (AMD)"];
+        vhdrs.forEach((h,c)=>ac(ws,rw,c,h,sDark("1E3A8A","center")));rw++;
+        opVolR.filter(r=>r.policies.length>0).forEach((r,i)=>{
+          const bg=i%2===0?"FFFFFF":"EFF6FF";
+          const row=showMgr
+            ?[gn(r.uid),gc(r.uid),r.totalVolSales,"С"+r.tier,r.mi,r.oi,r.debt]
+            :[gn(r.uid),gc(r.uid),r.totalVolSales,"С"+r.tier,r.oi];
+          row.forEach((v,c)=>ac(ws,rw,c,v,c>=2?sN(bg,c>=4):sC(bg,false,c===0?"left":"center")));rw++;
+        });
+        const vTotRow=showMgr
+          ?["ИТОГО","",opVolR.reduce((s,r)=>s+r.totalVolSales,0),"",totVolMi,totVolOi,totVolDebt]
+          :["ИТОГО","",opVolR.reduce((s,r)=>s+r.totalVolSales,0),"",totVolOi];
+        vTotRow.forEach((v,c)=>ac(ws,rw,c,v,sT(c===0?"left":"right")));rw+=2;
+        if(showMgr){
+          ac(ws,rw,0,"Менеджер должен офису:",sLight("FCA5A5","left"));
+          ac(ws,rw,1,totVolDebt,{fill:{patternType:"solid",fgColor:{rgb:"FCA5A5"}},font:{bold:true,sz:12},border:borders,alignment:{horizontal:"right"}});
+          mg.push({s:{r:rw,c:0},e:{r:rw,c:0}});
+        }
       }
       ws["!ref"]=XLSXStyle.utils.encode_range({s:{r:0,c:0},e:{r:rw,c:ncols}});
       ws["!cols"]=showMgr?[{wch:28},{wch:12},{wch:16},{wch:16},{wch:10},{wch:14},{wch:18},{wch:18},{wch:16}]:[{wch:28},{wch:12},{wch:16},{wch:16},{wch:10},{wch:14},{wch:16},{wch:16}];
@@ -3045,31 +3195,33 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
     // File 1: manager (with mgr income/profit)
     const wb1=XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb1,mkSummary(true),"Сводка");
-    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb1,_buildOpSheet(r,cfg,agentDir,month,excepts,true),sn);});
+    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb1,_buildOpSheet(r,cfg,agentDir,month,excepts,true,findVolR(r.uid)),sn);});
+    volOnlyUids.forEach(uid=>{const sn=(gc(uid)||gn(uid)).slice(0,31)||("Op"+uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb1,_buildOpSheet(emptyOsagoRow(uid),cfg,agentDir,month,excepts,true,findVolR(uid)),sn);});
     _dlXlsx(wb1,"Менеджер_"+month+".xlsx");
     // File 2: operators (without mgr income/profit)
     const wb2=XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb2,mkSummary(false),"Сводка");
-    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb2,_buildOpSheet(r,cfg,agentDir,month,excepts,false),sn);});
+    opR.forEach(r=>{const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb2,_buildOpSheet(r,cfg,agentDir,month,excepts,false,findVolR(r.uid)),sn);});
+    volOnlyUids.forEach(uid=>{const sn=(gc(uid)||gn(uid)).slice(0,31)||("Op"+uid.slice(0,28));XLSXStyle.utils.book_append_sheet(wb2,_buildOpSheet(emptyOsagoRow(uid),cfg,agentDir,month,excepts,false,findVolR(uid)),sn);});
     setTimeout(()=>_dlXlsx(wb2,"Операторы_"+month+".xlsx"),300);
   };
 
-  const exportSingleOpXlsx=(r,cfg,agentDir,month,excepts)=>{
+  const exportSingleOpXlsx=(r,cfg,agentDir,month,excepts,volR)=>{
     const wb=XLSXStyle.utils.book_new();
     const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
     const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
     const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));
-    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,false),sn);
+    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,false,volR),sn);
     const name=gn(r.uid)||gc(r.uid)||r.uid;
     _dlXlsx(wb,name.slice(0,30)+"_"+month+".xlsx");
   };
 
-  const exportSingleOpXlsxMgr=(r,cfg,agentDir,month,excepts)=>{
+  const exportSingleOpXlsxMgr=(r,cfg,agentDir,month,excepts,volR)=>{
     const wb=XLSXStyle.utils.book_new();
     const gn=uid=>{const a=agentDir[uid];return a?(a.name+" "+a.surname).trim():uid||"";};
     const gc=uid=>{const a=agentDir[uid];return(a&&a.internalCode)||"";};
     const sn=(gc(r.uid)||gn(r.uid)).slice(0,31)||("Op"+r.uid.slice(0,28));
-    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,true),sn);
+    XLSXStyle.utils.book_append_sheet(wb,_buildOpSheet(r,cfg,agentDir,month,excepts,true,volR),sn);
     const name=gn(r.uid)||gc(r.uid)||r.uid;
     _dlXlsx(wb,name.slice(0,30)+"_mgr_"+month+".xlsx");
   };
@@ -3181,7 +3333,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
 
   const hasData=agentData.length>0||effVol.length>0;
   const panels=isAdmin?[["agents","👤 Агенты",Object.keys(agentDir).length],["rates","⚙️ Ставки",null],["volrates","📦 Доброволь.",volRates.rates.length],["exceptions","🚫 Исключения",exceptions.filter(e=>e.enabled).length],["access","🔐 Доступ",null]]:[];
-  const backupJson=JSON.stringify({version:6,agentDir,rates,volRates,exceptions},null,2);
+  const backupJson=JSON.stringify({version:6,agentDir,rates,volRates,mgrVolRates,exceptions},null,2);
 
   if(role===null){
     return(
@@ -5291,6 +5443,15 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
         const detailResult=mgrDetail?opResults.find(r=>r.uid===mgrDetail):null;
         const detailOp=mgrDetail?agentData.find(a=>a.uid===mgrDetail):null;
         const agentsNotOp=Object.entries(agentDir).filter(([id])=>!(cfg.operatorUids||[]).includes(id));
+        const opVolResults=mgrActive?_computeOpVolR(effVol,effMgrVolRates,cfg):[];
+        const totVolMi=opVolResults.reduce((s,r)=>s+r.mi,0);
+        const totVolOi=opVolResults.reduce((s,r)=>s+r.oi,0);
+        const totVolDebt=opVolResults.reduce((s,r)=>s+r.debt,0);
+        const totVolSalesAll=opVolResults.reduce((s,r)=>s+r.totalVolSales,0);
+        const totVolProfit=totVolMi-totVolOi;
+        const detailVolResult=mgrDetail?opVolResults.find(r=>r.uid===mgrDetail):null;
+        const findVolR=uid=>opVolResults.find(r=>r.uid===uid);
+        const osagoRowFor=uid=>opResults.find(x=>x.uid===uid)||{uid,totalSales:0,validSales:0,tier:1,fix:0,mi:0,oi:0,profit:0,policies:[]};
         return(
           <div>
             {/* Month nav */}
@@ -5304,9 +5465,14 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                   ?<button onClick={unlockMonth} style={btn("#dc2626",undefined,{fontSize:11})}>🔒 Открыть месяц</button>
                   :<button onClick={lockMonth} style={btn("#92400e",undefined,{fontSize:11})}>🔓 Закрыть месяц</button>
                 )}
-                {opResults.length>0&&<button onClick={()=>exportManagerXlsx(agentData,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
+                {(opResults.length>0||opVolResults.some(r=>r.policies.length>0||r.unmatched.length>0))&&<button onClick={()=>exportManagerXlsx(agentData,cfg,effAgentDir,selMonth,effExceptions,effVol,effMgrVolRates)} style={btn("#16a34a",undefined,{fontSize:12})}>⬇ Excel</button>}
                 <button onClick={()=>setShowMgrSettings(v=>!v)} style={{...btn(showMgrSettings?"#7c3aed":"#f3f4f6",showMgrSettings?"#fff":"#374151",{border:"1px solid #d1d5db"}),fontSize:12}}>⚙️ Настройки</button>
               </div>
+            </div>
+            {/* View switch */}
+            <div style={{display:"inline-flex",gap:4,background:"#e2e8f0",borderRadius:8,padding:3,marginBottom:16}}>
+              <button onClick={()=>setMgrView("osago")} style={{...btn(mgrView==="osago"?"#be185d":"transparent",mgrView==="osago"?"#fff":"#374151",{fontSize:12,padding:"6px 14px",fontWeight:700}),border:"none"}}>🚗 ОСАГО</button>
+              <button onClick={()=>setMgrView("voluntary")} style={{...btn(mgrView==="voluntary"?"#be185d":"transparent",mgrView==="voluntary"?"#fff":"#374151",{fontSize:12,padding:"6px 14px",fontWeight:700}),border:"none"}}>🛡 Добровольные</button>
             </div>
             {/* Settings panel */}
             {showMgrSettings&&(
@@ -5343,9 +5509,13 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                     <button onClick={()=>{if(!mgrNewOp)return;saveManagerConfig({...cfg,operatorUids:[...(cfg.operatorUids||[]),mgrNewOp]});setMgrNewOp("");}} disabled={!mgrNewOp} style={btn("#7c3aed")}>+ Добавить</button>
                   </div>
                 </div>
-                <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14}}>
-                  <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>Ставки</div>
+                <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14,marginBottom:14}}>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>Ставки ОСАГО</div>
                   <MgrRatesPanel cfg={cfg} onSave={nc=>saveManagerConfig({...nc,operatorUids:cfg.operatorUids||[]})}/>
+                </div>
+                <div style={{borderTop:"1px solid #e5e7eb",paddingTop:14}}>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:"#374151"}}>Ставки добровольных (по продуктам)</div>
+                  <MgrVolRatesPanel mgrVolRates={effMgrVolRates} volRates={effVolRates} onSave={saveMVR}/>
                 </div>
               </div>
             )}
@@ -5356,9 +5526,19 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               </div>
             )}
             {/* Summary cards */}
-            {opResults.length>0&&(
+            {mgrView==="osago"&&opResults.length>0&&(
               <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
                 {[["Доход менеджера",totMgr,"#6d28d9","#f5f3ff","#ede9fe"],["Выплачено операторам",totOp,"#1d4ed8","#eff6ff","#dbeafe"],["Фикс. расходы",totFix,"#b45309","#fffbeb","#fde68a"],["Прибыль",totProfit,totProfit>=0?"#15803d":"#dc2626",totProfit>=0?"#f0fdf4":"#fff1f2",totProfit>=0?"#bbf7d0":"#fecaca"]].map(([l,v,col,bg,border])=>(
+                  <div key={l} style={{background:bg,border:"1px solid "+border,borderRadius:10,padding:"12px 18px",minWidth:150}}>
+                    <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:17,fontWeight:700,color:col}}>{fmt(v)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {mgrView==="voluntary"&&opVolResults.some(r=>r.policies.length>0)&&(
+              <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+                {[["Доход менеджера (добров.)",totVolMi,"#6d28d9","#f5f3ff","#ede9fe"],["Выплачено операторам",totVolOi,"#1d4ed8","#eff6ff","#dbeafe"],["Долг офису",totVolDebt,"#b45309","#fffbeb","#fde68a"],["Прибыль менеджера",totVolProfit,totVolProfit>=0?"#15803d":"#dc2626",totVolProfit>=0?"#f0fdf4":"#fff1f2",totVolProfit>=0?"#bbf7d0":"#fecaca"]].map(([l,v,col,bg,border])=>(
                   <div key={l} style={{background:bg,border:"1px solid "+border,borderRadius:10,padding:"12px 18px",minWidth:150}}>
                     <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>{l}</div>
                     <div style={{fontSize:17,fontWeight:700,color:col}}>{fmt(v)}</div>
@@ -5374,7 +5554,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               </div>
             )}
             {/* Operators table */}
-            {opResults.length>0&&(
+            {mgrView==="osago"&&opResults.length>0&&(
               <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{background:"#1e293b",color:"#fff"}}>
@@ -5397,8 +5577,8 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                           <td style={{...td,textAlign:"right",fontWeight:700,color:r.profit>=0?"#16a34a":"#dc2626"}}>{fmt(r.profit)}</td>
                           <td style={{...td,color:"#6b7280",fontSize:11}}>{mgrDetail===r.uid?"▲":"▼"}</td>
                           <td style={td} onClick={e=>e.stopPropagation()}>
-                            <button onClick={()=>exportSingleOpXlsx(r,cfg,effAgentDir,selMonth,effExceptions)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"}),marginRight:4}} title="Excel для оператора">⬇ Опер.</button>
-                            <button onClick={()=>exportSingleOpXlsxMgr(r,cfg,effAgentDir,selMonth,effExceptions)} style={btn("#7c3aed",undefined,{fontSize:11,padding:"3px 8px"})} title="Excel для менеджера">⬇ Мен.</button>
+                            <button onClick={()=>exportSingleOpXlsx(r,cfg,effAgentDir,selMonth,effExceptions,findVolR(r.uid))} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"}),marginRight:4}} title="Excel для оператора">⬇ Опер.</button>
+                            <button onClick={()=>exportSingleOpXlsxMgr(r,cfg,effAgentDir,selMonth,effExceptions,findVolR(r.uid))} style={btn("#7c3aed",undefined,{fontSize:11,padding:"3px 8px"})} title="Excel для менеджера">⬇ Мен.</button>
                           </td>
                         </tr>
                       );
@@ -5422,7 +5602,7 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
               </div>
             )}
             {/* Detail view */}
-            {detailResult&&detailOp&&(()=>{
+            {mgrView==="osago"&&detailResult&&detailOp&&(()=>{
               const _dov=(cfg.operatorOverrides||{})[detailOp.uid]||{};
               const thrs=_dov.tierThresholds||cfg.tierThresholds||DEFAULT_MGR_RATES.tierThresholds;
               const tier=detailResult.tier;
@@ -5493,6 +5673,121 @@ try{const r=await calcStorage.get("officeCodes:"+selMonth).catch(()=>null);if(r&
                             <td style={{...td,textAlign:"center"}}>{p.term||"—"}</td>
                             <td style={{...td,textAlign:"right"}}>{fmt(p.amount)}</td>
                             <td style={{...td,fontSize:11,color:"#dc2626"}}>{excReason(p,effExceptions,detailOp.uid)}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* No voluntary data message */}
+            {mgrView==="voluntary"&&(cfg.operatorUids||[]).length>0&&!opVolResults.some(r=>r.policies.length>0||r.unmatched.length>0)&&(
+              <div style={{padding:48,textAlign:"center",color:"#9ca3af",fontSize:14,border:"2px dashed #e5e7eb",borderRadius:8}}>
+                <div style={{fontSize:32,marginBottom:8}}>🛡</div>
+                <div>Нет добровольных продаж операторов за {fmtMonth(selMonth)}</div>
+              </div>
+            )}
+            {/* Voluntary operators table */}
+            {mgrView==="voluntary"&&opVolResults.some(r=>r.policies.length>0||r.unmatched.length>0)&&(
+              <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead><tr style={{background:"#1e293b",color:"#fff"}}>
+                    {["Оператор","Код","Объём (зачёт.)","Ступень","Доход мен.","Выплата опер.","Долг офису","Прибыль мен.","",""].map(h=><th key={h} style={{...th,color:"#fff",background:"#1e293b",whiteSpace:"nowrap"}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {opVolResults.filter(r=>r.policies.length>0||r.unmatched.length>0).map((r,i)=>{
+                      const a=agentDir[r.uid];const nm=a?(a.name+" "+a.surname).trim():r.uid;const ic=a&&a.internalCode||"";
+                      const profit=r.mi-r.oi;
+                      return(
+                        <tr key={r.uid} style={{background:i%2===0?"white":"#f8fafc",cursor:"pointer"}} onClick={()=>setMgrDetail(mgrDetail===r.uid?null:r.uid)}>
+                          <td style={{...td,fontWeight:600,color:"#374151"}}>{nm}{r.unmatched.length>0&&<span title={r.unmatched.length+" полис(ов) с неизвестным продуктом"} style={{marginLeft:6,color:"#dc2626"}}>⚠</span>}</td>
+                          <td style={{...td,color:"#6366f1",fontSize:12,fontWeight:600}}>{ic||"—"}</td>
+                          <td style={{...td,textAlign:"right",color:"#16a34a",fontWeight:600}}>{fmt(r.totalVolSales)}</td>
+                          <td style={{...td,textAlign:"center"}}><span style={{background:"#dbeafe",color:"#1e3a8a",borderRadius:12,padding:"2px 8px",fontSize:12,fontWeight:700}}>{"С"+r.tier}</span></td>
+                          <td style={{...td,textAlign:"right",color:"#7c3aed",fontWeight:600}}>{fmt(r.mi)}</td>
+                          <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(r.oi)}</td>
+                          <td style={{...td,textAlign:"right",color:"#b45309",fontWeight:600}}>{fmt(r.debt)}</td>
+                          <td style={{...td,textAlign:"right",fontWeight:700,color:profit>=0?"#16a34a":"#dc2626"}}>{fmt(profit)}</td>
+                          <td style={{...td,color:"#6b7280",fontSize:11}}>{mgrDetail===r.uid?"▲":"▼"}</td>
+                          <td style={td} onClick={e=>e.stopPropagation()}>
+                            <button onClick={()=>exportSingleOpXlsx(osagoRowFor(r.uid),cfg,effAgentDir,selMonth,effExceptions,r)} style={{...btn("#16a34a",undefined,{fontSize:11,padding:"3px 8px"}),marginRight:4}} title="Excel для оператора">⬇ Опер.</button>
+                            <button onClick={()=>exportSingleOpXlsxMgr(osagoRowFor(r.uid),cfg,effAgentDir,selMonth,effExceptions,r)} style={btn("#7c3aed",undefined,{fontSize:11,padding:"3px 8px"})} title="Excel для менеджера">⬇ Мен.</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{background:"#111827",color:"#fff"}}>
+                      <td style={{...td,fontWeight:700,color:"#fff",borderTop:"2px solid #374151"}}>ИТОГО</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:"#4ade80",borderTop:"2px solid #374151"}}>{fmt(totVolSalesAll)}</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,textAlign:"right",color:"#c4b5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totVolMi)}</td>
+                      <td style={{...td,textAlign:"right",color:"#93c5fd",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totVolOi)}</td>
+                      <td style={{...td,textAlign:"right",color:"#fbbf24",fontWeight:700,borderTop:"2px solid #374151"}}>{fmt(totVolDebt)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,color:totVolProfit>=0?"#4ade80":"#f87171",borderTop:"2px solid #374151"}}>{fmt(totVolProfit)}</td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                      <td style={{...td,borderTop:"2px solid #374151"}}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {/* Voluntary detail view */}
+            {mgrView==="voluntary"&&detailVolResult&&(detailVolResult.policies.length>0||detailVolResult.unmatched.length>0)&&(()=>{
+              const profit=detailVolResult.mi-detailVolResult.oi;
+              return(
+                <div style={{border:"1px solid #93c5fd",borderRadius:8,marginBottom:16,overflow:"hidden"}}>
+                  <div style={{background:"#1e3a8a",color:"#fff",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                    <span style={{fontWeight:700,fontSize:14}}>{getName(detailVolResult.uid)||detailVolResult.uid}</span>
+                    <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:12,opacity:.9}}>
+                      <span>{"Ступень "+detailVolResult.tier+" (объём "+fmt(detailVolResult.totalVolSales)+")"}</span>
+                      <span>{"Долг офису: "+fmt(detailVolResult.debt)}</span>
+                      <span>{"Прибыль мен.: "+fmt(profit)}</span>
+                    </div>
+                    <button onClick={()=>setMgrDetail(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#fff",fontSize:18,padding:0}}>×</button>
+                  </div>
+                  <div style={{overflowX:"auto",padding:0}}>
+                    <div style={{background:"#1d4ed8",color:"#fff",padding:"6px 14px",fontSize:12,fontWeight:600}}>{"✓ Учтённые полисы ("+detailVolResult.policies.length+")"}</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead><tr style={{background:"#eff6ff"}}>{["№ полиса","Продукт","Компания","Страхователь","Сумма","% Мен.","Доход мен.","% Опер.","Выплата опер.","Долг офису"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{detailVolResult.policies.map((v,i)=>(
+                        <tr key={i} style={{background:i%2===0?"white":"#eff6ff",borderBottom:"1px solid #bfdbfe"}}>
+                          <td style={{...td,fontSize:11}}>{v.policyNum||"—"}</td>
+                          <td style={{...td,color:"#6d28d9",fontWeight:600}}>{v.productName||"—"}</td>
+                          <td style={td}>{v.company}</td>
+                          <td style={td}>{v.insuredName}</td>
+                          <td style={{...td,textAlign:"right"}}>{fmt(v.amount)}</td>
+                          <td style={{...td,textAlign:"center",color:"#7c3aed"}}>{v.mgrRate+"%"}</td>
+                          <td style={{...td,textAlign:"right",color:"#7c3aed",fontWeight:600}}>{fmt(v.mgrComm)}</td>
+                          <td style={{...td,textAlign:"center",color:"#1d4ed8"}}>{v.opRate+"%"}</td>
+                          <td style={{...td,textAlign:"right",color:"#1d4ed8"}}>{fmt(v.opComm)}</td>
+                          <td style={{...td,textAlign:"right",color:"#b45309"}}>{fmt(v.debtToOffice)}</td>
+                        </tr>
+                      ))}</tbody>
+                      <tfoot><tr style={{background:"#dbeafe",fontWeight:700}}>
+                        <td colSpan={4} style={{...td,borderTop:"2px solid #93c5fd"}}>ИТОГО</td>
+                        <td style={{...td,textAlign:"right",borderTop:"2px solid #93c5fd"}}>{fmt(detailVolResult.policies.reduce((s,v)=>s+v.amount,0))}</td>
+                        <td style={{...td,borderTop:"2px solid #93c5fd"}}></td>
+                        <td style={{...td,textAlign:"right",color:"#7c3aed",borderTop:"2px solid #93c5fd"}}>{fmt(detailVolResult.mi)}</td>
+                        <td style={{...td,borderTop:"2px solid #93c5fd"}}></td>
+                        <td style={{...td,textAlign:"right",color:"#1d4ed8",borderTop:"2px solid #93c5fd"}}>{fmt(detailVolResult.oi)}</td>
+                        <td style={{...td,textAlign:"right",color:"#b45309",borderTop:"2px solid #93c5fd"}}>{fmt(detailVolResult.debt)}</td>
+                      </tr></tfoot>
+                    </table>
+                  </div>
+                  {detailVolResult.unmatched.length>0&&(
+                    <div style={{overflowX:"auto"}}>
+                      <div style={{background:"#991b1b",color:"#fff",padding:"6px 14px",fontSize:12,fontWeight:600}}>{"⚠ Продукт не найден в справочнике ставок ("+detailVolResult.unmatched.length+")"}</div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead><tr style={{background:"#fee2e2"}}>{["№ полиса","Продукт","Компания","Страхователь","Сумма"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>{detailVolResult.unmatched.map((v,i)=>(
+                          <tr key={i} style={{background:i%2===0?"white":"#fff7ed",borderBottom:"1px solid #fed7aa"}}>
+                            <td style={{...td,fontSize:11}}>{v.policyNum||"—"}</td>
+                            <td style={td}>{v.productName||"—"}</td>
+                            <td style={td}>{v.company}</td>
+                            <td style={td}>{v.insuredName}</td>
+                            <td style={{...td,textAlign:"right"}}>{fmt(v.amount)}</td>
                           </tr>
                         ))}</tbody>
                       </table>
